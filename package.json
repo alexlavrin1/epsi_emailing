@@ -1,12 +1,12 @@
 {
   "name": "epsi-fund-email",
   "version": "1.0.0",
-  "description": "Cold outreach system for EPSI Fund — one-time Apollo import, no warmup",
+  "description": "Cold outreach system for EPSI Fund — Yandex SMTP, Supabase, Vercel cron",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "auth": "node src/auth/index.js",
+    "setup:mailbox": "node scripts/setup_mailbox.js",
     "import:prospects": "node scripts/import_prospects.js",
     "import:prospects:dry": "node scripts/import_prospects.js --dry-run",
     "enroll:prospects": "node scripts/enroll_prospects.js",
@@ -16,8 +16,8 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "node-cron": "^3.0.2",
-    "googleapis": "^118.0.0",
+    "node-cron": "^4.5.0",
+    "nodemailer": "^9.0.1",
     "@supabase/supabase-js": "^2.38.0",
     "dotenv": "^16.3.1",
     "axios": "^1.6.0"

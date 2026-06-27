@@ -12,8 +12,8 @@ function isWeekend() {
   return day === 'Sat' || day === 'Sun';
 }
 
-function isBeforeBusinessHours() {
-  const hour = parseInt(
+function getLocalHour() {
+  return parseInt(
     new Intl.DateTimeFormat('en-US', {
       timeZone: config.sendTimezone,
       hour: 'numeric',
@@ -21,7 +21,14 @@ function isBeforeBusinessHours() {
     }).format(new Date()),
     10
   );
-  return hour < 7;
+}
+
+function isBeforeBusinessHours() {
+  return getLocalHour() < 8;
+}
+
+function isAfterBusinessHours() {
+  return getLocalHour() >= 18;
 }
 
 /**
@@ -39,7 +46,11 @@ async function runOutreachCycle() {
     return;
   }
   if (isBeforeBusinessHours()) {
-    logger.info('Outreach cycle skipped — before 7am');
+    logger.info('Outreach cycle skipped — before 8am IST');
+    return;
+  }
+  if (isAfterBusinessHours()) {
+    logger.info('Outreach cycle skipped — after 6pm IST');
     return;
   }
 
@@ -141,7 +152,9 @@ async function processSend(send, mailbox) {
 }
 
 async function checkForReplies() {
-  const sentSends = await db.getOutreachSendsForReplyCheck();
+  // Reply detection requires IMAP polling — not yet implemented.
+  return;
+  const sentSends = await db.getOutreachSendsForReplyCheck(); // eslint-disable-line no-unreachable
   if (!sentSends.length) return;
 
   logger.info(`Reply check: scanning ${sentSends.length} active thread(s)`);

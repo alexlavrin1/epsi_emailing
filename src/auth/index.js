@@ -1,10 +1,3 @@
-const { startAuthServer } = require('./server');
-const logger = require('../utils/logger');
-
-logger.info('Starting OAuth auth server — EPSI Fund');
-logger.info('This server is only for connecting mailboxes. Run "npm start" separately to begin sending.');
-
-startAuthServer();
-
-process.on('SIGTERM', () => process.exit(0));
-process.on('SIGINT',  () => process.exit(0));
+console.error('Gmail OAuth is no longer used. Yandex SMTP is configured via YANDEX_EMAIL + YANDEX_PASSWORD in .env');
+console.error('To register your mailbox in the database run: npm run setup:mailbox');
+process.exit(1);
