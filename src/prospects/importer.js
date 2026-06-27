@@ -9,33 +9,21 @@ const logger = require('../utils/logger');
 // No other files need to change.
 const IMPORT_CONFIG = {
   apollo: {
-    personTitles: [
-      'CEO',
-      'Founder',
-      'Co-Founder',
-      'Managing Director',
-      'General Partner',
-      'Investment Manager',
-      'Fund Manager',
-      'Portfolio Manager',
-      'CFO',
-      'CIO',
-    ],
-    organizationLocations: ['Netherlands'],
-    // '1,10', '11,50', '51,200', '201,500', '501,1000'
-    organizationNumEmployeesRanges: ['1,10', '11,50', '51,200'],
-    // Industry keywords — empty = no filter
-    organizationKeywordTags: [],
+    organizationLocations: ['India'],
+    // Ranges: 'min,max' — adjust to match Apollo's buckets
+    organizationNumEmployeesRanges: ['1,10', '11,20', '21,50', '51,100', '101,200'],
+    // Keyword tags on the organization in Apollo
+    organizationKeywordTags: ['shopify development'],
     contactEmailStatus: ['verified'],
-    maxResults: 500,
+    maxResults: 100,
     perPage: 25,
     delayBetweenPagesMs: 1200,
     enrichBatchSize: 10,
     delayBetweenEnrichMs: 500,
   },
   kvk: {
+    // KVK is a Dutch business registry — not used for India. Leave KVK_API_KEY blank.
     requireActive: true,
-    // SBI codes to allow — empty = any industry
     allowedSbiCodes: [],
     minEmployees: 1,
     maxEmployees: 1000,
@@ -52,7 +40,6 @@ async function fetchApolloPage(page, apolloConfig) {
     {
       page,
       per_page: apolloConfig.perPage,
-      person_titles: apolloConfig.personTitles,
       organization_locations: apolloConfig.organizationLocations,
       ...(apolloConfig.organizationNumEmployeesRanges.length && {
         organization_num_employees_ranges: apolloConfig.organizationNumEmployeesRanges,
@@ -313,6 +300,7 @@ async function runImportCycle({ dryRun = false, filters = {} } = {}) {
         company:      match.organization?.name || null,
         title:        match.title         || null,
         linkedin_url: match.linkedin_url  || null,
+        website_url:  match.organization?.website_url || match.organization?.primary_domain || null,
       };
       try {
         await upsertProspect(prospect);
