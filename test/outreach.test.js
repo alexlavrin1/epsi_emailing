@@ -9,7 +9,7 @@ const { SUBJECT, STEPS, UNSUBSCRIBE_COPY } = require('../scripts/setup_campaign_
 test('renders the approved lead and sender variables', () => {
   const vars = buildVars(
     { email: 'lead@example.com', first_name: 'Priya', company: 'Example App' },
-    { display_name: 'Alexander Lavrin', signature: 'Alex\nEpsiFlow' }
+    { display_name: 'Alex Lavrin', signature: 'Alex\nEpsiFlow' }
   );
   assert.equal(
     render('Hi {{firstName}} at {{companyName}}\n\n{{signature}}', vars),
