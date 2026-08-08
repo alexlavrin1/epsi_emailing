@@ -13,7 +13,7 @@
  *   node scripts/enroll_prospects.js "EPSI Fund Outreach"
  */
 
-require('dotenv').config();
+require('../src/env');
 const { runImportCycle } = require('../src/prospects/importer');
 
 const dryRun = process.argv.includes('--dry-run');

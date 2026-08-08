@@ -7,20 +7,27 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "setup:mailbox": "node scripts/setup_mailbox.js",
+    "setup:campaign": "node scripts/setup_campaign_steps.js",
+    "sync:instantly": "node scripts/sync_instantly_leads.js",
+    "sync:instantly:dry": "node scripts/sync_instantly_leads.js --dry-run",
+    "preflight": "node scripts/preflight.js",
     "import:prospects": "node scripts/import_prospects.js",
     "import:prospects:dry": "node scripts/import_prospects.js --dry-run",
     "enroll:prospects": "node scripts/enroll_prospects.js",
-    "test:email": "node scripts/send_test_email.js"
+    "test:email": "node scripts/send_test_email.js",
+    "test": "node --test"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "node-cron": "^4.5.0",
-    "nodemailer": "^9.0.1",
     "@supabase/supabase-js": "^2.38.0",
+    "axios": "^1.6.0",
     "dotenv": "^16.3.1",
-    "axios": "^1.6.0"
+    "imapflow": "^1.6.6",
+    "mailparser": "^3.9.15",
+    "node-cron": "^4.5.0",
+    "nodemailer": "^9.0.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

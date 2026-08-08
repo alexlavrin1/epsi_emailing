@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('../../src/env');
 const { runOutreachCycle } = require('../../src/outreach/engine');
 const logger = require('../../src/utils/logger');
 

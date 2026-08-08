@@ -1,6 +1,6 @@
 const db = require('../db/supabase');
 const gmail = require('./gmail');
-const { render, buildVars } = require('./templates');
+const { render, buildVars, pickSubject } = require('./templates');
 const config = require('../config');
 const logger = require('../utils/logger');
 
@@ -24,39 +24,54 @@ function getLocalHour() {
 }
 
 function isBeforeBusinessHours() {
-  return getLocalHour() < 8;
+  return getLocalHour() < config.sendStartHour;
 }
 
 function isAfterBusinessHours() {
-  return getLocalHour() >= 18;
+  return getLocalHour() >= config.sendEndHour;
 }
 
 /**
- * Main outreach cycle — runs every hour.
+ * Main outreach cycle — normally runs every 15 minutes.
  *
  * 1. Check for replies so any prospect who responded gets their sequence stopped.
  * 2. Fetch all due sends.
- * 3. Per mailbox, enforce the daily cap (DAILY_SEND_LIMIT env var, default 50).
- * 4. Step 1 → new Gmail thread; step 2+ → threaded reply.
+ * 3. Per mailbox, enforce total, new-lead, and per-cycle caps.
+ * 4. Step 1 → new email thread; step 2+ → threaded reply.
  * 5. After sending: mark sent, schedule the next step.
  */
 async function runOutreachCycle() {
+  logger.info('Starting outreach cycle...');
+
+  if (!config.supabase.isServerKey) {
+    if (config.outreachEnabled) {
+      throw new Error('Sending requires SUPABASE_SERVICE_ROLE_KEY; refusing to use an anon/publishable key');
+    }
+    logger.warn('Outreach cycle skipped — SUPABASE_SERVICE_ROLE_KEY is not configured');
+    return;
+  }
+
+  // Replies, unsubscribes, and bounces are processed even when sending is
+  // disabled or outside business hours.
+  await checkForReplies();
+
+  if (!config.outreachEnabled) {
+    logger.info('Sending skipped — OUTREACH_ENABLED is not true');
+    return;
+  }
+
   if (isWeekend()) {
     logger.info('Outreach cycle skipped — weekend');
     return;
   }
   if (isBeforeBusinessHours()) {
-    logger.info('Outreach cycle skipped — before 8am IST');
+    logger.info(`Outreach cycle skipped — before ${config.sendStartHour}:00 ${config.sendTimezone}`);
     return;
   }
   if (isAfterBusinessHours()) {
-    logger.info('Outreach cycle skipped — after 6pm IST');
+    logger.info(`Outreach cycle skipped — after ${config.sendEndHour}:00 ${config.sendTimezone}`);
     return;
   }
-
-  logger.info('Starting outreach cycle...');
-
-  await checkForReplies();
 
   const dueSends = await db.getDueOutreachSends();
   if (!dueSends.length) {
@@ -75,17 +90,30 @@ async function runOutreachCycle() {
   for (const { mailbox, sends } of Object.values(byMailbox)) {
     const campaignIds   = [...new Set(sends.map(s => s.campaign_id))];
     const sentToday     = await db.getOutreachSendsCountToday(campaignIds);
+    const newLeadsToday = await db.getOutreachSendsCountToday(campaignIds, 1);
     const dailyLimit    = config.dailySendLimit;
     let sentThisCycle   = 0;
+    let newLeadsThisCycle = 0;
 
     for (const send of sends) {
+      if (sentThisCycle >= config.sendsPerCycle) {
+        logger.info(`Per-cycle cap ${config.sendsPerCycle} reached; remaining sends stay queued`);
+        break;
+      }
       if (sentToday + sentThisCycle >= dailyLimit) {
         logger.warn(`Daily cap ${dailyLimit} reached for ${mailbox.email}, skipping remaining sends`);
         break;
       }
+      if (
+        send.step_number === 1 &&
+        newLeadsToday + newLeadsThisCycle >= config.dailyNewLeadLimit
+      ) {
+        continue;
+      }
       try {
         await processSend(send, mailbox);
         sentThisCycle++;
+        if (send.step_number === 1) newLeadsThisCycle++;
       } catch (err) {
         logger.error(`Outreach send failed [id=${send.id}]: ${err.message}`);
       }
@@ -100,7 +128,7 @@ async function processSend(send, mailbox) {
   const step = await db.getCampaignStep(send.campaign_id, send.step_number);
   const vars = buildVars(prospect, mailbox);
 
-  const subject = render(step.subject_template, vars);
+  const subject = render(pickSubject(step.subject_template, prospect.id), vars);
   const body    = render(step.body_template, vars);
 
   let gmailThreadId, gmailMessageId;
@@ -111,14 +139,15 @@ async function processSend(send, mailbox) {
       mailbox.email,
       prospect.email,
       subject,
-      body
+      body,
+      { displayName: mailbox.display_name }
     );
     gmailThreadId  = result.threadId;
     gmailMessageId = result.rfcMessageId;
   } else {
     const step1     = await db.getStep1Send(send.campaign_id, send.prospect_id);
     const step1Def  = await db.getCampaignStep(send.campaign_id, 1);
-    const step1Subj = render(step1Def.subject_template, vars);
+    const step1Subj = render(pickSubject(step1Def.subject_template, prospect.id), vars);
 
     await gmail.sendReply(
       mailbox.oauth_token,
@@ -127,14 +156,15 @@ async function processSend(send, mailbox) {
       send.gmail_thread_id,
       step1.gmail_message_id,
       step1Subj,
-      body
+      body,
+      { displayName: mailbox.display_name }
     );
     gmailThreadId  = send.gmail_thread_id;
     gmailMessageId = null;
   }
 
   await db.markOutreachSent(send.id, gmailThreadId, gmailMessageId);
-  logger.info(`Step ${send.step_number} sent → ${prospect.email} (${prospect.company || ''})`);
+  logger.info(`Step ${send.step_number} sent for prospect ${prospect.id}`);
 
   const nextStep = await db.getNextCampaignStep(send.campaign_id, send.step_number);
   if (nextStep) {
@@ -145,68 +175,63 @@ async function processSend(send, mailbox) {
       nextStep.delay_days,
       gmailThreadId
     );
-    logger.info(`Scheduled step ${nextStep.step_number} for ${prospect.email} in ${nextStep.delay_days}d`);
+    logger.info(`Scheduled step ${nextStep.step_number} for prospect ${prospect.id} in ${nextStep.delay_days}d`);
   } else {
     logger.info(`Sequence complete for ${prospect.email}`);
   }
 }
 
 async function checkForReplies() {
-  // Reply detection requires IMAP polling — not yet implemented.
-  return;
-  const sentSends = await db.getOutreachSendsForReplyCheck(); // eslint-disable-line no-unreachable
+  const sentSends = await db.getOutreachSendsForReplyCheck();
   if (!sentSends.length) return;
 
-  logger.info(`Reply check: scanning ${sentSends.length} active thread(s)`);
-
+  const byMailbox = new Map();
   for (const send of sentSends) {
-    if (!send.gmail_thread_id) continue;
+    const email = send.campaign?.mailbox?.email;
+    if (!email) continue;
+    if (!byMailbox.has(email)) byMailbox.set(email, []);
+    byMailbox.get(email).push(send);
+  }
+
+  const since = new Date(Date.now() - config.replyLookbackDays * 24 * 60 * 60 * 1000);
+  for (const [mailboxEmail, sends] of byMailbox) {
     try {
-      const mailbox  = send.campaign.mailbox;
-      const hasReply = await threadHasProspectReply(
-        mailbox.oauth_token,
-        send.gmail_thread_id,
-        send.prospect.email
+      const sendByProspect = new Map(
+        sends.map(send => [send.prospect.email.toLowerCase(), send])
       );
+      const messages = await gmail.findRecentInboundMessages([...sendByProspect.keys()], since);
+      for (const message of messages) {
+        const send = sendByProspect.get(message.prospectEmail);
+        if (!send) continue;
 
-      if (hasReply) {
-        logger.info(`Reply detected from ${send.prospect.email} — stopping sequence`);
-        await db.markOutreachReplied(send.id);
-        await db.stopProspectSequence(send.campaign_id, send.prospect_id);
-
-        const allMessages = await gmail.getThreadMessages(mailbox.oauth_token, send.gmail_thread_id);
-        const prospectLower = send.prospect.email.toLowerCase();
-        const replyMessages = allMessages.filter(msg => {
-          const from = msg.payload?.headers?.find(h => h.name === 'From')?.value || '';
-          return from.toLowerCase().includes(prospectLower);
-        });
-        for (const msg of replyMessages) {
-          const { subject, body, receivedAt } = await gmail.getMessageBody(mailbox.oauth_token, msg.id);
-          await db.saveProspectReply({
-            outreach_send_id: send.id,
-            campaign_id:      send.campaign_id,
-            prospect_id:      send.prospect_id,
-            gmail_message_id: msg.id,
-            subject,
-            body,
-            received_at:      receivedAt,
-          });
+        if (message.type === 'bounce') {
+          logger.warn(`Bounce detected for prospect ${send.prospect_id}`);
+          await db.updateProspectStatus(send.prospect_id, 'bounced');
+          await db.stopAllProspectSequences(send.prospect_id);
+          continue;
         }
+
+        logger.info(`${message.type} detected for prospect ${send.prospect_id}; stopping sequence`);
+        await db.markProspectCampaignReplied(send.campaign_id, send.prospect_id);
+        await db.stopProspectSequence(send.campaign_id, send.prospect_id);
+        if (message.type === 'unsubscribe') {
+          await db.updateProspectStatus(send.prospect_id, 'unsubscribed');
+          await db.stopAllProspectSequences(send.prospect_id);
+        }
+        await db.saveProspectReply({
+          outreach_send_id: send.id,
+          campaign_id: send.campaign_id,
+          prospect_id: send.prospect_id,
+          gmail_message_id: message.messageId,
+          subject: message.subject,
+          body: message.text,
+          received_at: message.receivedAt,
+        });
       }
     } catch (err) {
-      logger.error(`Reply check failed for send ${send.id}: ${err.message}`);
+      logger.error(`Reply check failed for mailbox ${mailboxEmail}: ${err.message}`);
     }
   }
-}
-
-async function threadHasProspectReply(refreshToken, threadId, prospectEmail) {
-  const messages = await gmail.getThreadMessages(refreshToken, threadId);
-  if (messages.length <= 1) return false;
-  const prospectLower = prospectEmail.toLowerCase();
-  return messages.some(msg => {
-    const from = msg.payload?.headers?.find(h => h.name === 'From')?.value || '';
-    return from.toLowerCase().includes(prospectLower);
-  });
 }
 
 module.exports = { runOutreachCycle };

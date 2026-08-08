@@ -2,7 +2,7 @@
 -- Run this once in your Supabase SQL editor before starting.
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- mailboxes — sending Gmail accounts
+-- mailboxes — sending email accounts (currently Yandex SMTP/IMAP)
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS mailboxes (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS mailboxes (
 );
 
 ALTER TABLE mailboxes ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all access" ON mailboxes FOR ALL USING (true);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- prospects — the people you're reaching out to
@@ -39,7 +38,6 @@ CREATE INDEX IF NOT EXISTS idx_prospects_email  ON prospects(email);
 CREATE INDEX IF NOT EXISTS idx_prospects_status ON prospects(status);
 
 ALTER TABLE prospects ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all access" ON prospects FOR ALL USING (true);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- campaigns — a named outreach campaign linked to a sending mailbox
@@ -55,13 +53,14 @@ CREATE TABLE IF NOT EXISTS campaigns (
 );
 
 ALTER TABLE campaigns ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all access" ON campaigns FOR ALL USING (true);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- campaign_steps — the email sequence (step 1 = initial, step 2+ = follow-ups)
 -- ─────────────────────────────────────────────────────────────────────────────
 -- delay_days: days after the PREVIOUS step to send (step 1 delay_days is ignored).
--- Templates support: {{firstName}}, {{lastName}}, {{company}}, {{senderName}}, {{signature}}
+-- Templates support: {{firstName}}, {{lastName}}, {{company}}, {{companyName}}, {{senderName}}, {{signature}}
+-- subject_template may be a plain string or a JSON array of strings to split-test
+-- multiple subject lines — one is picked per prospect (see src/outreach/templates.js pickSubject).
 CREATE TABLE IF NOT EXISTS campaign_steps (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   campaign_id      UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
@@ -76,7 +75,6 @@ CREATE TABLE IF NOT EXISTS campaign_steps (
 CREATE INDEX IF NOT EXISTS idx_campaign_steps_campaign ON campaign_steps(campaign_id);
 
 ALTER TABLE campaign_steps ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all access" ON campaign_steps FOR ALL USING (true);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- outreach_sends — one row per prospect × campaign × step
@@ -103,7 +101,6 @@ CREATE INDEX IF NOT EXISTS idx_outreach_sends_thread   ON outreach_sends(gmail_t
 CREATE INDEX IF NOT EXISTS idx_outreach_sends_prospect ON outreach_sends(prospect_id);
 
 ALTER TABLE outreach_sends ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all access" ON outreach_sends FOR ALL USING (true);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- prospect_replies — stores reply content when a prospect responds
@@ -121,7 +118,6 @@ CREATE TABLE IF NOT EXISTS prospect_replies (
 );
 
 ALTER TABLE prospect_replies ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all access" ON prospect_replies FOR ALL USING (true);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- skipped_apollo_ids — Apollo contacts we already tried and skipped
@@ -134,4 +130,3 @@ CREATE TABLE IF NOT EXISTS skipped_apollo_ids (
 );
 
 ALTER TABLE skipped_apollo_ids ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all access" ON skipped_apollo_ids FOR ALL USING (true);

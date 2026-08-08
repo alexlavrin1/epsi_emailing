@@ -153,15 +153,12 @@ async function scheduleNextStep(campaignId, prospectId, stepNumber, delayDays, g
 /**
  * Count how many outreach emails have been sent today across a set of campaign IDs.
  */
-async function getOutreachSendsCountToday(campaignIds) {
+async function getOutreachSendsCountToday(campaignIds, stepNumber = null) {
   if (!campaignIds.length) return 0;
 
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date();
-  endOfDay.setHours(23, 59, 59, 999);
+  const { startOfDay, endOfDay } = getDayBounds(new Date(), config.sendTimezone);
 
-  const { count, error } = await supabase
+  let query = supabase
     .from('outreach_sends')
     .select('id', { count: 'exact', head: true })
     .in('campaign_id', campaignIds)
@@ -169,8 +166,52 @@ async function getOutreachSendsCountToday(campaignIds) {
     .gte('sent_at', startOfDay.toISOString())
     .lte('sent_at', endOfDay.toISOString());
 
+  if (stepNumber !== null) query = query.eq('step_number', stepNumber);
+  const { count, error } = await query;
+
   if (error) throw error;
   return count || 0;
+}
+
+function getDayBounds(now, timeZone) {
+  const dateParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const part = type => Number(dateParts.find(item => item.type === type)?.value);
+  const year = part('year');
+  const month = part('month');
+  const day = part('day');
+
+  const zonedMidnightToUtc = (y, m, d) => {
+    const guess = Date.UTC(y, m - 1, d, 0, 0, 0, 0);
+    const localParts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date(guess));
+    const value = type => Number(localParts.find(item => item.type === type)?.value);
+    const representedAsUtc = Date.UTC(
+      value('year'), value('month') - 1, value('day'),
+      value('hour'), value('minute'), value('second')
+    );
+    return new Date(guess - (representedAsUtc - guess));
+  };
+
+  const startOfDay = zonedMidnightToUtc(year, month, day);
+  const tomorrow = new Date(Date.UTC(year, month - 1, day + 1));
+  const endOfDay = zonedMidnightToUtc(
+    tomorrow.getUTCFullYear(), tomorrow.getUTCMonth() + 1, tomorrow.getUTCDate()
+  );
+  endOfDay.setMilliseconds(endOfDay.getMilliseconds() - 1);
+  return { startOfDay, endOfDay };
 }
 
 /**
@@ -182,7 +223,7 @@ async function getOutreachSendsForReplyCheck() {
     .from('outreach_sends')
     .select(`
       *,
-      prospect:prospect_id(id, email),
+      prospect:prospect_id(id, email, status),
       campaign:campaign_id(
         mailbox:from_mailbox_id(id, email, oauth_token)
       )
@@ -193,7 +234,7 @@ async function getOutreachSendsForReplyCheck() {
     .gte('sent_at', cutoff);
 
   if (error) throw error;
-  return data || [];
+  return (data || []).filter(send => send.prospect?.status === 'active');
 }
 
 async function markOutreachReplied(id) {
@@ -207,6 +248,19 @@ async function markOutreachReplied(id) {
   return data;
 }
 
+async function markProspectCampaignReplied(campaignId, prospectId) {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('outreach_sends')
+    .update({ status: 'replied', replied_at: now })
+    .eq('campaign_id', campaignId)
+    .eq('prospect_id', prospectId)
+    .eq('status', 'sent')
+    .select();
+  if (error) throw error;
+  return data;
+}
+
 async function stopProspectSequence(campaignId, prospectId) {
   const { data, error } = await supabase
     .from('outreach_sends')
@@ -215,6 +269,28 @@ async function stopProspectSequence(campaignId, prospectId) {
     .eq('prospect_id', prospectId)
     .eq('status', 'scheduled')
     .select();
+  if (error) throw error;
+  return data;
+}
+
+async function stopAllProspectSequences(prospectId) {
+  const { data, error } = await supabase
+    .from('outreach_sends')
+    .update({ status: 'stopped' })
+    .eq('prospect_id', prospectId)
+    .eq('status', 'scheduled')
+    .select();
+  if (error) throw error;
+  return data;
+}
+
+async function updateProspectStatus(prospectId, status) {
+  const { data, error } = await supabase
+    .from('prospects')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', prospectId)
+    .select()
+    .single();
   if (error) throw error;
   return data;
 }
@@ -243,6 +319,9 @@ module.exports = {
   getOutreachSendsCountToday,
   getOutreachSendsForReplyCheck,
   markOutreachReplied,
+  markProspectCampaignReplied,
   stopProspectSequence,
+  stopAllProspectSequences,
+  updateProspectStatus,
   saveProspectReply,
 };

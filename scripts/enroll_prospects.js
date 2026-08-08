@@ -4,6 +4,7 @@
  * Usage:
  *   node scripts/enroll_prospects.js "EPSI Fund Outreach"
  *   node scripts/enroll_prospects.js "EPSI Fund Outreach" --dry-run
+ *   node scripts/enroll_prospects.js "EPSI Fund Outreach" --confirm-all
  *
  * What it does:
  *   - Finds the campaign by name
@@ -12,17 +13,31 @@
  *   - The scheduler picks them up on the next hourly cycle
  */
 
-require('dotenv').config();
+require('../src/env');
 const { createClient } = require('@supabase/supabase-js');
+const config = require('../src/config');
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY
+);
 
 async function main() {
+  if (!config.supabase.isServerKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required for enrollment');
+  }
   const campaignName = process.argv[2];
   const dryRun       = process.argv.includes('--dry-run');
+  const confirmAll    = process.argv.includes('--confirm-all');
 
   if (!campaignName) {
-    console.error('Usage: node scripts/enroll_prospects.js "Campaign Name" [--dry-run]');
+    console.error('Usage: node scripts/enroll_prospects.js "Campaign Name" [--dry-run|--confirm-all]');
+    process.exit(1);
+  }
+
+  if (!dryRun && !confirmAll) {
+    console.error('Refusing to enroll every active prospect without --confirm-all.');
+    console.error('For the Instantly-sourced campaign, use: npm run sync:instantly -- --enroll');
     process.exit(1);
   }
 

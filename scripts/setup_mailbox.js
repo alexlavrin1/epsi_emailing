@@ -1,20 +1,33 @@
 /**
- * Register your Yandex sending address in the database.
- * Run this ONCE before creating a campaign.
+ * Register (or update) your Yandex sending address in the database.
+ * Run this ONCE before creating a campaign — safe to re-run to update
+ * display_name / signature, it upserts by email.
  *
  * Usage:
  *   npm run setup:mailbox
  *   npm run setup:mailbox -- "EPSI Fund"   ← optional display name override
+ *
+ * Set SENDER_DISPLAY_NAME and SENDER_SIGNATURE to control the sender identity.
  */
 
-require('dotenv').config();
+require('../src/env');
 const { createClient } = require('@supabase/supabase-js');
+const config = require('../src/config');
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY
+);
+
+const SIGNATURE = process.env.SENDER_SIGNATURE || 'Alex Lavrin\nBusiness Development, EpsiFlow';
 
 async function main() {
+  if (!config.supabase.isServerKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required for mailbox setup');
+  }
   const email       = process.env.YANDEX_EMAIL;
-  const displayName = process.argv[2] || (email ? email.split('@')[0] : null) || 'EPSI Fund';
+  const displayName = process.argv[2] || process.env.SENDER_DISPLAY_NAME ||
+    (email ? email.split('@')[0] : null) || 'EpsiFlow';
 
   if (!email) {
     console.error('YANDEX_EMAIL is not set in .env');
@@ -28,14 +41,23 @@ async function main() {
     .maybeSingle();
 
   if (existing) {
-    console.log(`Mailbox already exists: ${existing.email} (id=${existing.id})`);
-    console.log('Nothing to do. Use the Supabase dashboard to update display_name or signature if needed.');
+    const { data: updated, error: uErr } = await supabase
+      .from('mailboxes')
+      .update({ display_name: displayName, signature: SIGNATURE })
+      .eq('id', existing.id)
+      .select()
+      .single();
+    if (uErr) throw uErr;
+
+    console.log(`✓ Mailbox updated: ${updated.email} (id=${updated.id})`);
+    console.log(`  display_name: ${updated.display_name}`);
+    console.log(`  signature:    ${updated.signature}`);
     return;
   }
 
   const { data, error } = await supabase
     .from('mailboxes')
-    .insert([{ email, oauth_token: 'smtp', display_name: displayName }])
+    .insert([{ email, oauth_token: 'smtp', display_name: displayName, signature: SIGNATURE }])
     .select()
     .single();
 
