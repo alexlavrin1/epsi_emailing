@@ -5,6 +5,7 @@
  *   npm run test:email
  *   npm run test:email -- --step 2
  *   npm run test:email -- --to you@example.com --step 2 --send
+ *   npm run test:email -- --to-sender --send
  *   npm run test:email -- --to you@example.com --threaded-sequence --send
  *
  * Defaults: previews step 1 using dummy prospect data; does not send.
@@ -23,8 +24,10 @@ const toIndex   = args.indexOf('--to');
 const stepIndex = args.indexOf('--step');
 const shouldSend = args.includes('--send');
 const threadedSequence = args.includes('--threaded-sequence');
+const sendToSender = args.includes('--to-sender');
 
-const TEST_TO       = toIndex   !== -1 ? args[toIndex   + 1] : 'your@email.com';
+const TEST_TO       = sendToSender ? config.yandex.email : (toIndex !== -1 ? args[toIndex + 1] : 'your@email.com');
+const DISPLAY_TO    = sendToSender ? '(configured sender mailbox)' : TEST_TO;
 const STEP          = stepIndex !== -1 ? parseInt(args[stepIndex + 1], 10) : 1;
 const CAMPAIGN_NAME = config.localCampaignName;
 
@@ -65,7 +68,7 @@ async function main() {
 
     console.log('\n─── THREADED SEQUENCE TEST ─────────────────────');
     console.log(`From: ${mailbox.display_name} <${mailbox.email}>`);
-    console.log(`To:   ${TEST_TO}`);
+    console.log(`To:   ${DISPLAY_TO}`);
     for (const step of steps) {
       const effectiveSubject = step.step_number === 1 ? initialSubject : `Re: ${initialSubject}`;
       console.log(`Step ${step.step_number}: ${effectiveSubject}`);
@@ -102,7 +105,7 @@ async function main() {
         { displayName: mailbox.display_name }
       );
     }
-    console.log(`✓ Sent all four steps as one threaded test to ${TEST_TO}`);
+    console.log(`✓ Sent all four steps as one threaded test to ${DISPLAY_TO}`);
     return;
   }
 
@@ -142,7 +145,7 @@ async function main() {
 
   console.log('\n─── TEST EMAIL PREVIEW ──────────────────────────');
   console.log(`From:    ${mailbox.display_name} <${mailbox.email}>`);
-  console.log(`To:      ${TEST_TO}`);
+  console.log(`To:      ${DISPLAY_TO}`);
   console.log(`Step:    ${STEP}`);
   if (subjectVariants) {
     console.log('Subject variants (rotated per prospect):');
@@ -176,7 +179,7 @@ async function main() {
     body,
     { displayName: mailbox.display_name }
   );
-  console.log(`✓ Sent to ${TEST_TO}`);
+  console.log(`✓ Sent to ${DISPLAY_TO}`);
 }
 
 main().catch(err => {

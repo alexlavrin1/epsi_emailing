@@ -2,7 +2,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { render, buildVars, pickSubject } = require('../src/outreach/templates');
-const { isBounceSender, isUnsubscribeReply } = require('../src/outreach/gmail');
+const {
+  isBounceSender,
+  isUnsubscribeReply,
+  composeRawMessage,
+  findSentMailbox,
+} = require('../src/outreach/gmail');
 const { normalizeEmail, normalizeLead } = require('../scripts/sync_instantly_leads');
 const { SUBJECT, STEPS, UNSUBSCRIBE_COPY } = require('../scripts/setup_campaign_steps');
 
@@ -46,6 +51,33 @@ test('classifies replies, unsubscribe requests, and common bounces', () => {
   assert.equal(isUnsubscribeReply('Re: Shopify Ads', 'Sounds useful'), false);
   assert.equal(isBounceSender('mailer-daemon@example.com', 'Delivery failed'), true);
   assert.equal(isBounceSender('person@example.com', 'Re: Shopify Ads'), false);
+});
+
+test('composes one auditable RFC822 message for SMTP and Sent archiving', async () => {
+  const message = await composeRawMessage({
+    from: { name: 'Alex', address: 'sender@example.com' },
+    replyTo: 'sender@example.com',
+    to: 'lead@example.com',
+    subject: 'Shopify Ads',
+    text: 'Hello',
+    headers: { 'List-Unsubscribe': '<mailto:sender@example.com?subject=unsubscribe>' },
+  });
+
+  const raw = message.raw.toString('utf8');
+  assert.match(raw, /Subject: Shopify Ads/);
+  assert.match(raw, /Message-ID:/i);
+  assert.match(raw, /List-Unsubscribe:/i);
+  assert.match(raw, /Hello/);
+  assert.equal(message.envelope.from, 'sender@example.com');
+  assert.deepEqual(message.envelope.to, ['lead@example.com']);
+});
+
+test('finds the provider Sent mailbox by special-use flag or path', () => {
+  assert.equal(findSentMailbox([
+    { path: 'Archive' },
+    { path: 'Sent', specialUse: '\\Sent' },
+  ]).path, 'Sent');
+  assert.equal(findSentMailbox([{ path: 'Sent Items' }]).path, 'Sent Items');
 });
 
 test('local sequence matches the approved Instantly cadence and safety footer', () => {

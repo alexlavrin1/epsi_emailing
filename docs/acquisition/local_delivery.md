@@ -7,6 +7,7 @@ Status: Implemented in code; live Supabase setup is blocked by an invalid or una
 - Instantly is the read-only sourcing database.
 - Supabase is the canonical contact, suppression, campaign, send, and reply database.
 - Yandex SMTP sends the messages.
+- Yandex IMAP archives an exact copy of every SMTP-accepted message in Sent.
 - Yandex IMAP detects replies, unsubscribe requests, and common delivery failures.
 - The local campaign is `Epsi Test v1 - Local`; the Instantly campaign must remain in Draft.
 
@@ -29,6 +30,13 @@ LOCAL_CAMPAIGN_NAME=Epsi Test v1 - Local
 `OUTREACH_ENABLED=false` prevents delivery even if a campaign or scheduled-send row is accidentally active. A campaign must also have `status=active` before it can send.
 
 The scheduler checks every 15 minutes and sends at most two messages per cycle. Follow-ups are prioritized over new leads. Total sends stop at 60 per India-local day, and no more than 30 new leads are introduced per day.
+
+An email is marked sent only after Yandex SMTP accepts at least one recipient. The
+sender logs the SMTP acceptance/rejection counts and server response. It then
+appends the submitted RFC822 message to the Yandex Sent mailbox. Sent archiving
+is best-effort: if IMAP is temporarily unavailable after SMTP accepts a message,
+the failure is logged but the send is still recorded to prevent duplicate
+delivery on the next cycle.
 
 ## Sequence
 
