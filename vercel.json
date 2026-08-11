@@ -2,6 +2,9 @@
   "functions": {
     "api/cron/outreach.js": {
       "maxDuration": 60
+    },
+    "api/webhooks/stripe.js": {
+      "maxDuration": 10
     }
   },
   "crons": [

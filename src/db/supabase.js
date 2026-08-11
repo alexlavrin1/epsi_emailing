@@ -305,6 +305,27 @@ async function saveProspectReply({ outreach_send_id, campaign_id, prospect_id, g
   if (error) logger.error('Error saving prospect reply', error.message);
 }
 
+// ─── Stripe webhook ingestion ────────────────────────────────────────────────
+
+/**
+ * Queue a verified Stripe event exactly once. We persist only routing metadata,
+ * not the event payload; the eventual worker will retrieve canonical objects
+ * from Stripe before taking any action.
+ */
+async function enqueueStripeWebhookEvent(eventRecord) {
+  const { data, error } = await supabase
+    .from('stripe_webhook_events')
+    .insert([eventRecord])
+    .select('id, status')
+    .single();
+
+  if (error?.code === '23505') {
+    return { duplicate: true, id: eventRecord.id };
+  }
+  if (error) throw error;
+  return { duplicate: false, ...data };
+}
+
 module.exports = {
   supabase,
   getMailboxByEmail,
@@ -324,4 +345,5 @@ module.exports = {
   stopAllProspectSequences,
   updateProspectStatus,
   saveProspectReply,
+  enqueueStripeWebhookEvent,
 };
