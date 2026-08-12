@@ -627,6 +627,7 @@ Phase 6 local verification:
 - Missed-webhook discovery gate passed with webhook processing disabled and all delivery disabled. Sandbox subscription `sub_1U3ZAGAe3OxHSCAxO0A9L4yR` produced open invoice `in_1U3ZAGAe3OxHSCAxfIYvW2f4` and PaymentIntent `pi_3U3ZAHAe3OxHSCAx06etQjDU` in `requires_action`; reconciliation discovered exactly one actionable case with zero failures.
 - A second reconciliation pass checked the existing case and discovered zero new cases. The database retained exactly two unique step-1 jobs (one email and one Slack), both queued at zero attempts with no provider IDs. Both original webhook events remained pending, establishing the precondition for the delayed-webhook deduplication gate.
 - After re-enabling webhook processing, both delayed events processed with zero failures. Reconciliation checked the same actionable case and discovered zero new cases; final verification retained exactly one case and the same two step-1 jobs at zero attempts. This proves reconciliation-first discovery and later webhook delivery converge without duplicate cases or messages.
+- Final-reminder scheduling gate passed with delivery disabled. A due cursor was seeded only on the known sandbox case; one cycle reported one due case, two scheduled jobs, and zero failures. The database then contained exactly one email and one Slack job for each of steps 1 and 2, all queued at zero attempts. The cursor was cleared, the maximum step remained 2, and a second cycle reported zero due and zero scheduled.
 
 ### Phase 7 — Testing and controlled rollout
 
