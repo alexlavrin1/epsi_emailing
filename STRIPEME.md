@@ -452,7 +452,7 @@ Post-payment stop verification on 2026-08-12:
 
 ### Phase 5 — Slack delivery
 
-Status: Implemented locally on 2026-08-12; Slack app configuration and controlled delivery testing pending.
+Status: Complete on 2026-08-12. Deployed, authenticated, explicitly mapped, and validated end to end in Stripe sandbox with one internal Slack DM.
 
 Create a dedicated Slack app rather than depending on a personal session.
 
@@ -531,7 +531,23 @@ Controlled Slack rollout:
 Phase 5 local verification:
 
 - Tests cover workspace mismatch, email lookup, deactivated/missing identity rejection, DM channel creation, link-unfurl suppression, trusted-link message rendering, explicit Slack-only scheduling, dry-run non-mutation, exact user allowlisting, fresh Stripe checks, successful provider-ID recording, and preview-versus-confirm mapping semantics.
-- No Slack credential is configured and no Slack API write has occurred during local implementation.
+- All 41 automated tests pass.
+
+Phase 5 controlled rollout evidence (2026-08-12):
+
+- Slack bot authentication succeeded for the intended workspace, and the internal test user was explicitly mapped to the sandbox Stripe customer with Slack enabled.
+- A fresh sandbox fixture produced subscription `sub_1U3YIlAe3OxHSCAxlm0Xdy0u`, open invoice `in_1U3YIlAe3OxHSCAxCKjCZ6cJ`, and PaymentIntent `pi_3U3YImAe3OxHSCAx19UTPbi7` in `requires_action`.
+- Both `invoice.payment_failed` and `invoice.payment_action_required` webhooks were ingested and processed without failures.
+- Email was temporarily disabled only for the mapped internal CRM customer during event processing, so exactly one Slack job and no email job were scheduled. The email preference was restored immediately afterward.
+- The Slack job remains `queued` with `attempt_count=0`, no provider message ID, and no error; therefore no Slack API write or DM occurred.
+- After correcting the Production environment and redeploying, the authenticated cycle reported email delivery disabled and Slack delivery enabled in dry-run mode, with exactly one due Slack job and zero sends, failures, or blocks.
+- The post-cycle database check confirmed the Slack job remained `queued` with `attempt_count=0`, no provider message ID, no error, and no sent timestamp. The Phase 5 dry-run gate is complete.
+- The first controlled real-delivery cycle was safely blocked before claiming the job (`due=1`, `sent=0`, `blocked=1`). The CRM customer remained active and Slack-enabled with the expected stored workspace/user mapping, narrowing the issue to the deployed `SLACK_TEAM_ID` or `SLACK_USER_ALLOWLIST` value. The job remained queued at zero attempts and no DM was sent.
+- After re-entering the exact Production workspace and user-allowlist values and redeploying, the controlled delivery cycle reported one due Slack job, one sent DM, zero failures, and zero blocks.
+- The durable message record is `sent` with `attempt_count=1`, no error, and provider ID `D0BP87HBPE3:1786527162.933309`. Exactly one internal Slack DM was issued.
+- The internal recipient confirmed the DM arrived and completed the sandbox invoice from its hosted link.
+- Stripe then reported the invoice `paid`, `amount_remaining=0`, and PaymentIntent `succeeded`. The `invoice.paid` event processed without error and resolved the recovery case with reason `paid` and no next reminder.
+- Final verification found exactly one message for the case: the already-sent Slack step with one attempt. A subsequent delivery stage reported zero due jobs and zero sends, proving stop-on-paid and no-duplicate behavior. Phase 5 acceptance is complete.
 
 ### Phase 6 — Reconciliation and reminder scheduler
 

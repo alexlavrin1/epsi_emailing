@@ -247,4 +247,7 @@ test('Slack mapping CLI is preview-only unless --confirm is explicit', () => {
   assert.equal(parseArgs([
     '--stripe-customer', 'cus_123', '--slack-email', 'person@example.com', '--confirm',
   ]).confirm, true);
+  assert.deepEqual(parseArgs(['--stripe-customer', 'cus_123']), {
+    stripeCustomerId: 'cus_123', slackEmail: null, confirm: false,
+  });
 });

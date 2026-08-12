@@ -17,19 +17,21 @@ function parseArgs(argv) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!args.stripeCustomerId || !args.slackEmail) {
-    throw new Error('Usage: --stripe-customer cus_... --slack-email person@example.com [--confirm]');
+  if (!args.stripeCustomerId) {
+    throw new Error('Usage: --stripe-customer cus_... [--slack-email person@example.com] [--confirm]');
   }
   if (!config.supabase.isServerKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
 
   const customer = await db.getCrmCustomerByStripeId(args.stripeCustomerId);
   if (!customer) throw new Error('CRM customer not found; process its Stripe event first');
-  const slackIdentity = await lookupUserByEmail(args.slackEmail);
+  const lookupEmail = args.slackEmail || customer.email;
+  if (!lookupEmail) throw new Error('CRM customer has no email; provide --slack-email explicitly');
+  const slackIdentity = await lookupUserByEmail(lookupEmail);
 
   const preview = {
     stripeCustomerId: customer.stripe_customer_id,
     crmEmailMatchesSlackLookup:
-      String(customer.email || '').toLowerCase() === String(args.slackEmail).toLowerCase(),
+      String(customer.email || '').toLowerCase() === String(lookupEmail).toLowerCase(),
     slackTeamId: slackIdentity.teamId,
     slackUserId: slackIdentity.userId,
     slackDisplayName: slackIdentity.displayName,
