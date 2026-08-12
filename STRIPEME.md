@@ -551,7 +551,7 @@ Phase 5 controlled rollout evidence (2026-08-12):
 
 ### Phase 6 — Reconciliation and reminder scheduler
 
-Status: Implemented locally on 2026-08-12. Migration 005, deployment, and controlled sandbox acceptance are pending.
+Status: Implemented locally on 2026-08-12. Migration 005 is applied and verified; deployment and controlled sandbox acceptance are pending.
 
 The existing authenticated `GET /api/cron/payment-recovery` endpoint now runs six ordered stages:
 
@@ -621,6 +621,7 @@ Phase 6 local verification:
 
 - All 49 automated tests pass.
 - Phase 6 tests cover off-by-default reconciliation, terminal-case resolution, missed-webhook discovery, immediate-email/delayed-Slack cadence, one-time final reminder scheduling, alert dry-run non-mutation, atomic alert delivery, and internal-channel posting without link unfurls.
+- Migration 005 was applied in Supabase and verified on 2026-08-12: the reconciliation and failure-alert columns are readable, and `claim_payment_recovery_failure_alert` is callable. A nonexistent message-ID probe returned zero rows and made no mutation.
 
 ### Phase 7 — Testing and controlled rollout
 
