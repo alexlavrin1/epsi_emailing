@@ -623,6 +623,7 @@ Phase 6 local verification:
 - Phase 6 tests cover off-by-default reconciliation, terminal-case resolution, missed-webhook discovery, immediate-email/delayed-Slack cadence, one-time final reminder scheduling, alert dry-run non-mutation, atomic alert delivery, and internal-channel posting without link unfurls.
 - Migration 005 was applied in Supabase and verified on 2026-08-12: the reconciliation and failure-alert columns are readable, and `claim_payment_recovery_failure_alert` is callable. A nonexistent message-ID probe returned zero rows and made no mutation.
 - Production was verified on commit `94cb7c3`: reconciliation, reminders, customer email, customer Slack delivery, and failure alerts all reported disabled; no events were pending and no delivery occurred.
+- Reconciliation-only production gate passed on 2026-08-12 with `STRIPE_ALLOW_LIVE_EVENTS=false`: zero open cases checked, zero missed invoices discovered, and zero failures. The database audit found three recovery cases, all resolved, and two historical messages, both sent; there were no open cases or queued/failed messages. All reminder and delivery stages remained disabled.
 
 ### Phase 7 — Testing and controlled rollout
 
