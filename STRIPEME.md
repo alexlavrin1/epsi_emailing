@@ -343,6 +343,8 @@ Phase 3 database verification completed on 2026-08-12:
 
 ### Phase 4 — Transactional email
 
+Status: Implemented and database-verified on 2026-08-12; controlled deployment pending.
+
 - Reuse the low-level Yandex SMTP and Sent-folder archiving behavior.
 - Add a dedicated transactional sender without cold-outreach unsubscribe headers.
 - Include customer name, amount/currency, a short explanation, and only the Stripe-hosted invoice URL.
@@ -352,6 +354,74 @@ Phase 3 database verification completed on 2026-08-12:
 Initial message direction:
 
 > Your payment of [amount] is waiting for bank authentication. Please use this secure Stripe link to complete the payment: [link]. If you have already completed it, no action is needed.
+
+Implemented Phase 4 components:
+
+- `database/migrations/004_payment_recovery_processing.sql` adds atomic batch claiming for pending/failed Stripe webhook rows using `FOR UPDATE SKIP LOCKED`.
+- Stripe event rows move through `pending/failed -> processing -> processed` or back to `failed` with a sanitized, length-limited error.
+- The worker retrieves the stored Stripe Event by ID and then re-fetches the current Invoice, PaymentIntent, Subscription, and Customer before changing CRM state.
+- A new recovery case can begin only from `invoice.payment_action_required`, or from `invoice.payment_failed` when the canonical PaymentIntent still has `requires_action`.
+- Ordinary card declines and missing-payment-method failures do not create 3DS recovery cases.
+- `invoice.paid`, voided/expired invoices, and cancelled subscriptions resolve existing cases and cancel queued notifications.
+- A stale action-required event whose invoice has already been paid creates a resolved audit case and schedules no message.
+- An actionable invoice must be `open`, have a positive amount remaining, have PaymentIntent status `requires_action`, and expose an HTTPS URL whose hostname is exactly `invoice.stripe.com`.
+- The first email job is unique by recovery case, channel, and step, so overlapping Stripe events cannot schedule duplicates.
+- Transactional email uses the existing Yandex SMTP submission and Sent-folder archive path but does not add cold-outreach unsubscribe headers.
+- The message includes the customer first name when available, correctly formats zero- and multi-decimal currencies, describes the authentication requirement, and includes only the Stripe Hosted Invoice Page.
+- Immediately before SMTP submission, the delivery worker claims the job atomically and re-fetches the invoice/payment state from Stripe. If action is no longer required, it cancels the job without sending.
+- Delivery records the SMTP RFC Message-ID after acceptance. Failures return the job to `failed` with a sanitized error for retry.
+- `api/cron/payment-recovery.js` runs the event worker followed by transactional delivery and uses the existing `CRON_SECRET` authorization pattern.
+- Vercel is configured to invoke payment recovery every 15 minutes, seven days per week, independently of cold-outreach business hours.
+
+Phase 4 configuration defaults:
+
+```text
+STRIPE_EVENT_PROCESSING_ENABLED=false
+STRIPE_PAYMENT_RECOVERY_ENABLED=false
+TRANSACTIONAL_EMAIL_ENABLED=false
+TRANSACTIONAL_EMAIL_DRY_RUN=true
+TRANSACTIONAL_EMAIL_ALLOWLIST=
+TRANSACTIONAL_EMAIL_MAX_ATTEMPTS=3
+```
+
+Safety gates:
+
+- `STRIPE_EVENT_PROCESSING_ENABLED` controls whether queued Stripe events are claimed.
+- `STRIPE_PAYMENT_RECOVERY_ENABLED` controls whether an actionable open case can schedule a notification job.
+- `TRANSACTIONAL_EMAIL_ENABLED` controls whether the delivery worker reads due jobs.
+- `TRANSACTIONAL_EMAIL_DRY_RUN=true` reports due-job counts without claiming or changing any job.
+- When dry-run is disabled, an exact lowercased email match in `TRANSACTIONAL_EMAIL_ALLOWLIST` is still mandatory. An empty allowlist sends to nobody.
+- Failed transactional jobs stop being eligible after `TRANSACTIONAL_EMAIL_MAX_ATTEMPTS` claims (default `3`), preventing unbounded retries.
+- The payment-recovery cron refuses to run when `CRON_SECRET` is missing and rejects requests without the matching bearer token.
+- `STRIPE_ALLOW_LIVE_EVENTS=false` continues to prevent live-event processing.
+
+Controlled activation sequence:
+
+1. Apply `database/migrations/004_payment_recovery_processing.sql` in Supabase.
+2. Deploy the Phase 4 code while every new Phase 4 flag remains at its safe default.
+3. Set `STRIPE_EVENT_PROCESSING_ENABLED=true` only. Leave recovery and transactional email disabled.
+4. Invoke the authenticated payment-recovery cron once.
+5. Verify the existing sandbox event becomes `processed`, its already-paid invoice produces one resolved case, and zero message jobs exist.
+6. Create a fresh sandbox 3DS-required invoice for an internal test email.
+7. Enable `STRIPE_PAYMENT_RECOVERY_ENABLED=true`, `TRANSACTIONAL_EMAIL_ENABLED=true`, keep `TRANSACTIONAL_EMAIL_DRY_RUN=true`, and place only the internal address in the allowlist.
+8. Verify dry-run reports one due job without claiming or sending it.
+9. Set `TRANSACTIONAL_EMAIL_DRY_RUN=false` for the internal allowlisted recipient and invoke one cycle.
+10. Confirm one SMTP-accepted email, one Sent-folder copy, and one `sent` message record.
+11. Complete 3DS and verify the paid event resolves the case with no further messages.
+
+Phase 4 local verification:
+
+- Automated tests cover trusted Stripe URLs, currency formatting, message content, actionable-state classification, stale-paid event handling, recovery-disabled behavior, ordinary payment-failure exclusion, dry-run non-mutation, allowlist enforcement, fresh Stripe re-checks, and successful delivery-state recording.
+- All customer-contact and live-event gates remain disabled locally and must remain disabled during the initial deployment.
+
+Migration 004 verification completed on 2026-08-12:
+
+- `claim_stripe_webhook_events` is present and callable by the service-role worker.
+- One uniquely labelled synthetic `pending` event was inserted with an earlier isolated `received_at` timestamp.
+- A one-row atomic claim returned only that synthetic event and changed it to `processing`.
+- The synthetic event was deleted after verification and no test row remains.
+- The real sandbox event `evt_1U3CUhAe3OxHSCAxPhWoosW1` remained `pending` before and after the test.
+- No CRM case or notification job was created and no email was sent during migration verification.
 
 ### Phase 5 — Slack delivery
 

@@ -326,6 +326,45 @@ async function enqueueStripeWebhookEvent(eventRecord) {
   return { duplicate: false, ...data };
 }
 
+async function claimStripeWebhookEvents(limit = 25) {
+  const { data, error } = await supabase
+    .rpc('claim_stripe_webhook_events', { p_limit: limit });
+  if (error) throw error;
+  return data || [];
+}
+
+async function markStripeWebhookEventProcessed(id) {
+  const { data, error } = await supabase
+    .from('stripe_webhook_events')
+    .update({
+      status: 'processed',
+      processing_error: null,
+      processed_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('status', 'processing')
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function markStripeWebhookEventFailed(id, errorMessage) {
+  const { data, error } = await supabase
+    .from('stripe_webhook_events')
+    .update({
+      status: 'failed',
+      processing_error: String(errorMessage || 'Unknown processing error').slice(0, 1000),
+      processed_at: null,
+    })
+    .eq('id', id)
+    .eq('status', 'processing')
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 // ─── CRM and payment recovery ────────────────────────────────────────────────
 
 async function upsertCrmCustomer(customerRecord) {
@@ -412,6 +451,7 @@ async function getDuePaymentRecoveryMessages(limit = 100) {
     .from('payment_recovery_messages')
     .select('*, recovery_case:recovery_case_id(*, customer:crm_customer_id(*))')
     .in('status', ['queued', 'failed'])
+    .lt('attempt_count', config.transactionalEmail.maxAttempts)
     .lte('scheduled_for', new Date().toISOString())
     .order('scheduled_for', { ascending: true })
     .limit(limit);
@@ -474,6 +514,19 @@ async function cancelPaymentRecoveryMessages(recoveryCaseId) {
   return data || [];
 }
 
+async function cancelPaymentRecoveryMessage(id) {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('payment_recovery_messages')
+    .update({ status: 'cancelled', cancelled_at: now, updated_at: now })
+    .eq('id', id)
+    .in('status', ['queued', 'sending', 'failed'])
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 module.exports = {
   supabase,
   getMailboxByEmail,
@@ -494,6 +547,9 @@ module.exports = {
   updateProspectStatus,
   saveProspectReply,
   enqueueStripeWebhookEvent,
+  claimStripeWebhookEvents,
+  markStripeWebhookEventProcessed,
+  markStripeWebhookEventFailed,
   upsertCrmCustomer,
   getCrmCustomerByStripeId,
   setCrmCustomerSlackIdentity,
@@ -505,4 +561,5 @@ module.exports = {
   markPaymentRecoveryMessageSent,
   markPaymentRecoveryMessageFailed,
   cancelPaymentRecoveryMessages,
+  cancelPaymentRecoveryMessage,
 };

@@ -59,6 +59,7 @@ function buildPaymentRecoveryCaseRecord({
   paymentIntent = null,
   subscription = null,
   eventCreatedAt,
+  nextReminderAt = null,
   now = new Date(),
 }) {
   const timestamp = toIsoTimestamp(now, 'now');
@@ -91,6 +92,10 @@ function buildPaymentRecoveryCaseRecord({
     currency,
     hosted_invoice_url: optionalText(invoice.hosted_invoice_url),
     last_stripe_event_created_at: toIsoTimestamp(eventCreatedAt, 'eventCreatedAt'),
+    next_reminder_at:
+      resolution.state === 'open' && nextReminderAt
+        ? toIsoTimestamp(nextReminderAt, 'nextReminderAt')
+        : null,
     resolved_at: resolution.state === 'open' ? null : timestamp,
     resolution_reason: resolution.resolutionReason,
     updated_at: timestamp,

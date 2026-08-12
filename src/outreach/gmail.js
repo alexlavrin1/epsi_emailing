@@ -152,6 +152,24 @@ async function sendReply(_token, fromEmail, toEmail, _threadId, inReplyToMsgId, 
   return info;
 }
 
+async function sendTransactionalEmail(fromEmail, to, subject, body, options = {}) {
+  const info = await submitMessage({
+    from: buildFrom(fromEmail, options.displayName),
+    replyTo: options.replyTo || fromEmail,
+    to,
+    subject,
+    text: body,
+  });
+  logger.info('Transactional email submitted', {
+    messageId: info.messageId,
+    archived: info.archive.archived,
+  });
+  return {
+    rfcMessageId: info.messageId,
+    archive: info.archive,
+  };
+}
+
 function normalizeAddress(address) {
   return String(address || '').trim().toLowerCase();
 }
@@ -254,6 +272,7 @@ async function getUserEmail()      { return config.yandex.email; }
 module.exports = {
   sendEmail,
   sendReply,
+  sendTransactionalEmail,
   findRecentInboundMessages,
   getUserEmail,
   // Exported for unit tests; not part of the sending interface.

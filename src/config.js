@@ -33,10 +33,23 @@ module.exports = {
     apiVersion: process.env.STRIPE_API_VERSION || '2022-11-15',
     eventIngestionEnabled:
       String(process.env.STRIPE_EVENT_INGESTION_ENABLED || 'false').toLowerCase() === 'true',
+    eventProcessingEnabled:
+      String(process.env.STRIPE_EVENT_PROCESSING_ENABLED || 'false').toLowerCase() === 'true',
     paymentRecoveryEnabled:
       String(process.env.STRIPE_PAYMENT_RECOVERY_ENABLED || 'false').toLowerCase() === 'true',
     allowLiveEvents:
       String(process.env.STRIPE_ALLOW_LIVE_EVENTS || 'false').toLowerCase() === 'true',
+  },
+  transactionalEmail: {
+    enabled:
+      String(process.env.TRANSACTIONAL_EMAIL_ENABLED || 'false').toLowerCase() === 'true',
+    dryRun:
+      String(process.env.TRANSACTIONAL_EMAIL_DRY_RUN || 'true').toLowerCase() !== 'false',
+    allowlist: String(process.env.TRANSACTIONAL_EMAIL_ALLOWLIST || '')
+      .split(',')
+      .map(email => email.trim().toLowerCase())
+      .filter(Boolean),
+    maxAttempts: parseInt(process.env.TRANSACTIONAL_EMAIL_MAX_ATTEMPTS || '3', 10),
   },
   outreachEnabled: String(process.env.OUTREACH_ENABLED || 'false').toLowerCase() === 'true',
   dailySendLimit: parseInt(process.env.DAILY_SEND_LIMIT || '60', 10),
