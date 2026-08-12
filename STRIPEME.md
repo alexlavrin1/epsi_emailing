@@ -551,22 +551,76 @@ Phase 5 controlled rollout evidence (2026-08-12):
 
 ### Phase 6 — Reconciliation and reminder scheduler
 
-Add an authenticated endpoint such as `GET /api/cron/payment-recovery`.
+Status: Implemented locally on 2026-08-12. Migration 005, deployment, and controlled sandbox acceptance are pending.
 
-Responsibilities:
+The existing authenticated `GET /api/cron/payment-recovery` endpoint now runs six ordered stages:
 
-- Re-read unresolved invoices from Stripe.
-- Cancel jobs for paid, voided, cancelled, or expired cases.
-- Send due reminders.
-- Periodically discover recent qualifying invoices missed by webhooks.
-- Route exhausted failures to an internal alert channel.
+1. Process verified Stripe webhook events.
+2. Reconcile open cases and discover recent actionable invoices missed by webhooks.
+3. Schedule due final reminders.
+4. Deliver due transactional email jobs.
+5. Deliver due Slack jobs.
+6. Alert an internal Slack channel about delivery jobs that exhausted their retry limit.
 
-Proposed initial cadence, subject to Phase 1 findings:
+Implemented Phase 6 components:
 
-- Email immediately.
-- Slack after 15–30 minutes if mapped and still unpaid.
-- One final reminder after 6–8 hours.
-- Stop immediately on payment or any terminal state.
+- Reconciliation re-fetches the canonical Invoice, PaymentIntent, Subscription, and Customer from Stripe. It never trusts a stored or webhook payload for current payment state.
+- Paid, zero-balance, void, cancelled, expired, or otherwise non-actionable cases are resolved/cancelled and their queued jobs are stopped.
+- Open cases rotate by `last_reconciled_at`, preventing a fixed batch of long-running invoices from starving later cases.
+- Recent open invoices are scanned over a configurable lookback window. Only an open invoice with money remaining, a trusted Stripe Hosted Invoice Page, and PaymentIntent `requires_action` can be recovered when its webhook was missed.
+- Reconciliation uses the same unique case and message keys as webhook processing, so a later webhook cannot create duplicate jobs.
+- When reminder scheduling is enabled, the initial email remains immediate, mapped Slack delivery is delayed 20 minutes by default, and one final step-2 reminder is scheduled after eight hours by default.
+- The optional minute-based final-delay override takes precedence over the hour setting and exists only to make controlled sandbox testing practical. It must be removed for production cadence.
+- Reminder scheduling re-checks Stripe before creating step 2, and each delivery worker re-checks Stripe again immediately before sending.
+- A due reminder cursor is cleared after the unique step-2 jobs are created, so no third reminder can be scheduled.
+- Exhausted email or Slack jobs can be routed to one explicit internal Slack channel. Alert messages contain operational IDs and the provider error, but not the hosted invoice URL or customer email.
+- Failure alerts use a separate atomic claim, retry counter, provider message ID, and sent/error state, preventing duplicate operational alerts across concurrent cron runs.
+- Reconciliation, reminders, customer delivery, and failure alerts retain independent kill switches. Every new Phase 6 switch defaults off; alert delivery additionally defaults to dry-run.
+
+Phase 6 configuration defaults:
+
+```text
+STRIPE_RECONCILIATION_ENABLED=false
+STRIPE_RECONCILIATION_LOOKBACK_HOURS=48
+STRIPE_RECONCILIATION_CASE_LIMIT=25
+
+PAYMENT_RECOVERY_REMINDERS_ENABLED=false
+PAYMENT_RECOVERY_SLACK_INITIAL_DELAY_MINUTES=20
+PAYMENT_RECOVERY_FINAL_REMINDER_HOURS=8
+PAYMENT_RECOVERY_FINAL_REMINDER_MINUTES=
+PAYMENT_RECOVERY_REMINDER_CASE_LIMIT=25
+
+SLACK_FAILURE_ALERTS_ENABLED=false
+SLACK_FAILURE_ALERTS_DRY_RUN=true
+SLACK_FAILURE_ALERT_CHANNEL_ID=
+SLACK_FAILURE_ALERT_MAX_ATTEMPTS=3
+```
+
+Migration 005:
+
+- `database/migrations/005_payment_recovery_reconciliation.sql` adds `last_reconciled_at` and its open-case rotation index.
+- It adds durable failure-alert state to `payment_recovery_messages`.
+- It adds `claim_payment_recovery_failure_alert`, which atomically claims one exhausted-job alert.
+- Existing customer, case, and message data is preserved. Existing messages receive the safe default alert state but are not alertable unless they are failed and have exhausted their channel retry limit.
+
+Controlled Phase 6 rollout:
+
+1. Keep all new Phase 6 flags at their defaults and keep customer email/Slack delivery disabled.
+2. Apply migration 005 in Supabase.
+3. Deploy the Phase 6 code and invoke one authenticated cycle. Require reconciliation, reminders, and alerts to report disabled.
+4. Enable reconciliation only in Stripe sandbox while `STRIPE_ALLOW_LIVE_EVENTS=false`; keep reminders and all delivery disabled.
+5. Verify known terminal cases remain terminal and reconciliation reports zero failures.
+6. Simulate a missed webhook by temporarily disabling event processing, creating one fresh sandbox 3DS-required invoice, and invoking reconciliation. Require exactly one open case and unique step-1 jobs.
+7. Re-enable event processing and verify the delayed webhook does not create duplicate cases or jobs.
+8. Enable reminders in sandbox with `PAYMENT_RECOVERY_FINAL_REMINDER_MINUTES=5` and, if testing Slack cadence, `PAYMENT_RECOVERY_SLACK_INITIAL_DELAY_MINUTES=1`. Keep channel delivery in dry-run or restricted to the exact internal allowlists.
+9. Verify exactly one step-2 job per enabled channel, then remove the minute override and restore the intended production delay.
+10. Select an internal Slack channel, invite the bot if required, enable failure alerts in dry-run, and verify exhausted jobs are reported without being claimed.
+11. Disable alert dry-run only for the internal channel, verify one deduplicated alert, then return every feature to its safe resting configuration until live rollout is approved.
+
+Phase 6 local verification:
+
+- All 49 automated tests pass.
+- Phase 6 tests cover off-by-default reconciliation, terminal-case resolution, missed-webhook discovery, immediate-email/delayed-Slack cadence, one-time final reminder scheduling, alert dry-run non-mutation, atomic alert delivery, and internal-channel posting without link unfurls.
 
 ### Phase 7 — Testing and controlled rollout
 

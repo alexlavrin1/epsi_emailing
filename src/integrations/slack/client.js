@@ -46,9 +46,22 @@ async function sendDirectMessage(userId, text, slack = getSlackClient()) {
   return { channelId, ts: result.ts, messageId: `${channelId}:${result.ts}` };
 }
 
+async function sendChannelMessage(channelId, text, slack = getSlackClient()) {
+  await validateWorkspace(slack);
+  const result = await slack.chat.postMessage({
+    channel: channelId,
+    text,
+    unfurl_links: false,
+    unfurl_media: false,
+  });
+  if (!result.ok || !result.ts) throw new Error('Slack did not confirm the message');
+  return { channelId, ts: result.ts, messageId: `${channelId}:${result.ts}` };
+}
+
 module.exports = {
   getSlackClient,
   validateWorkspace,
   lookupUserByEmail,
   sendDirectMessage,
+  sendChannelMessage,
 };

@@ -209,6 +209,7 @@ CREATE TABLE IF NOT EXISTS payment_recovery_cases (
   next_reminder_at             TIMESTAMPTZ,
   resolved_at                  TIMESTAMPTZ,
   resolution_reason            TEXT,
+  last_reconciled_at           TIMESTAMPTZ,
   created_at                   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at                   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CHECK (
@@ -223,6 +224,10 @@ CREATE INDEX IF NOT EXISTS idx_payment_recovery_cases_customer
 CREATE INDEX IF NOT EXISTS idx_payment_recovery_cases_due
   ON payment_recovery_cases (next_reminder_at)
   WHERE state = 'open' AND next_reminder_at IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_payment_recovery_cases_reconciliation
+  ON payment_recovery_cases (last_reconciled_at ASC NULLS FIRST)
+  WHERE state = 'open';
 
 ALTER TABLE payment_recovery_cases ENABLE ROW LEVEL SECURITY;
 
@@ -242,6 +247,13 @@ CREATE TABLE IF NOT EXISTS payment_recovery_messages (
   last_error          TEXT,
   sent_at             TIMESTAMPTZ,
   cancelled_at        TIMESTAMPTZ,
+  failure_alert_status TEXT NOT NULL DEFAULT 'pending'
+                       CHECK (failure_alert_status IN ('pending', 'sending', 'sent', 'failed')),
+  failure_alert_attempt_count INTEGER NOT NULL DEFAULT 0
+                       CHECK (failure_alert_attempt_count >= 0),
+  failure_alert_provider_message_id TEXT,
+  failure_alert_last_error TEXT,
+  failure_alerted_at    TIMESTAMPTZ,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (recovery_case_id, channel, step_number),
@@ -252,6 +264,10 @@ CREATE TABLE IF NOT EXISTS payment_recovery_messages (
 CREATE INDEX IF NOT EXISTS idx_payment_recovery_messages_due
   ON payment_recovery_messages (scheduled_for)
   WHERE status IN ('queued', 'failed');
+
+CREATE INDEX IF NOT EXISTS idx_payment_recovery_messages_failure_alert
+  ON payment_recovery_messages (updated_at)
+  WHERE status = 'failed' AND failure_alert_status IN ('pending', 'failed');
 
 ALTER TABLE payment_recovery_messages ENABLE ROW LEVEL SECURITY;
 
@@ -267,6 +283,23 @@ AS $$
          updated_at = NOW()
    WHERE id = p_message_id
      AND status IN ('queued', 'failed')
+  RETURNING *;
+$$;
+
+CREATE OR REPLACE FUNCTION claim_payment_recovery_failure_alert(p_message_id UUID)
+RETURNS SETOF payment_recovery_messages
+LANGUAGE SQL
+SECURITY INVOKER
+SET search_path = public
+AS $$
+  UPDATE payment_recovery_messages
+     SET failure_alert_status = 'sending',
+         failure_alert_attempt_count = failure_alert_attempt_count + 1,
+         failure_alert_last_error = NULL,
+         updated_at = NOW()
+   WHERE id = p_message_id
+     AND status = 'failed'
+     AND failure_alert_status IN ('pending', 'failed')
   RETURNING *;
 $$;
 

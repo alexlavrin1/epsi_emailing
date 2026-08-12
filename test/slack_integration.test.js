@@ -6,6 +6,7 @@ const {
   validateWorkspace,
   lookupUserByEmail,
   sendDirectMessage,
+  sendChannelMessage,
 } = require('../src/integrations/slack/client');
 const { renderPaymentActionSlack } = require('../src/payment-recovery/templates');
 const {
@@ -98,6 +99,23 @@ test('opens a bot DM and returns a stable provider message ID', async () => {
       chat: { postMessage: async payload => { posted.push(payload); return { ok: true, ts: '123.456' }; } },
     });
     assert.deepEqual(result, { channelId: 'D_DM', ts: '123.456', messageId: 'D_DM:123.456' });
+    assert.equal(posted[0].unfurl_links, false);
+  } finally {
+    config.slack.teamId = original;
+  }
+});
+
+test('posts an internal channel alert without link unfurls', async () => {
+  const original = config.slack.teamId;
+  config.slack.teamId = 'T_EXPECTED';
+  const posted = [];
+  try {
+    const result = await sendChannelMessage('C_INTERNAL', 'delivery failed', {
+      auth: { test: async () => ({ team_id: 'T_EXPECTED' }) },
+      chat: { postMessage: async payload => { posted.push(payload); return { ok: true, ts: '789.012' }; } },
+    });
+    assert.equal(result.messageId, 'C_INTERNAL:789.012');
+    assert.equal(posted[0].channel, 'C_INTERNAL');
     assert.equal(posted[0].unfurl_links, false);
   } finally {
     config.slack.teamId = original;

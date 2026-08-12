@@ -423,6 +423,60 @@ async function getPaymentRecoveryCaseByInvoiceId(stripeInvoiceId) {
   return data;
 }
 
+async function getOpenPaymentRecoveryCases(limit = 25) {
+  const { data, error } = await supabase
+    .from('payment_recovery_cases')
+    .select('*, customer:crm_customer_id(*)')
+    .eq('state', 'open')
+    .order('last_reconciled_at', { ascending: true, nullsFirst: true })
+    .order('opened_at', { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
+async function markPaymentRecoveryCaseReconciled(id, reconciledAt = new Date()) {
+  const { data, error } = await supabase
+    .from('payment_recovery_cases')
+    .update({
+      last_reconciled_at: new Date(reconciledAt).toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function getDuePaymentRecoveryReminderCases(limit = 25) {
+  const { data, error } = await supabase
+    .from('payment_recovery_cases')
+    .select('*, customer:crm_customer_id(*)')
+    .eq('state', 'open')
+    .not('next_reminder_at', 'is', null)
+    .lte('next_reminder_at', new Date().toISOString())
+    .order('next_reminder_at', { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
+async function setPaymentRecoveryNextReminder(id, nextReminderAt) {
+  const { data, error } = await supabase
+    .from('payment_recovery_cases')
+    .update({
+      next_reminder_at: nextReminderAt ? new Date(nextReminderAt).toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('state', 'open')
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 async function schedulePaymentRecoveryMessage(messageRecord) {
   const { data, error } = await supabase
     .from('payment_recovery_messages')
@@ -532,6 +586,67 @@ async function cancelPaymentRecoveryMessage(id) {
   return data;
 }
 
+async function getExhaustedPaymentRecoveryMessages(limit = 100) {
+  const { data, error } = await supabase
+    .from('payment_recovery_messages')
+    .select('*, recovery_case:recovery_case_id(*)')
+    .eq('status', 'failed')
+    .in('failure_alert_status', ['pending', 'failed'])
+    .lt('failure_alert_attempt_count', config.slack.failureAlertMaxAttempts)
+    .order('updated_at', { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []).filter(message => {
+    const maxAttempts = message.channel === 'slack'
+      ? config.slack.maxAttempts
+      : config.transactionalEmail.maxAttempts;
+    return message.attempt_count >= maxAttempts;
+  });
+}
+
+async function claimPaymentRecoveryFailureAlert(id) {
+  const { data, error } = await supabase
+    .rpc('claim_payment_recovery_failure_alert', { p_message_id: id })
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function markPaymentRecoveryFailureAlertSent(id, providerMessageId) {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('payment_recovery_messages')
+    .update({
+      failure_alert_status: 'sent',
+      failure_alert_provider_message_id: providerMessageId,
+      failure_alert_last_error: null,
+      failure_alerted_at: now,
+      updated_at: now,
+    })
+    .eq('id', id)
+    .eq('failure_alert_status', 'sending')
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function markPaymentRecoveryFailureAlertFailed(id, errorMessage) {
+  const { data, error } = await supabase
+    .from('payment_recovery_messages')
+    .update({
+      failure_alert_status: 'failed',
+      failure_alert_last_error: String(errorMessage || 'Unknown alert error').slice(0, 1000),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('failure_alert_status', 'sending')
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 module.exports = {
   supabase,
   getMailboxByEmail,
@@ -560,6 +675,10 @@ module.exports = {
   setCrmCustomerSlackIdentity,
   upsertPaymentRecoveryCase,
   getPaymentRecoveryCaseByInvoiceId,
+  getOpenPaymentRecoveryCases,
+  markPaymentRecoveryCaseReconciled,
+  getDuePaymentRecoveryReminderCases,
+  setPaymentRecoveryNextReminder,
   schedulePaymentRecoveryMessage,
   getDuePaymentRecoveryMessages,
   markPaymentRecoveryMessageSending,
@@ -567,4 +686,8 @@ module.exports = {
   markPaymentRecoveryMessageFailed,
   cancelPaymentRecoveryMessages,
   cancelPaymentRecoveryMessage,
+  getExhaustedPaymentRecoveryMessages,
+  claimPaymentRecoveryFailureAlert,
+  markPaymentRecoveryFailureAlertSent,
+  markPaymentRecoveryFailureAlertFailed,
 };

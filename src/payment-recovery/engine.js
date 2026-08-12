@@ -13,6 +13,7 @@ const {
   isTrustedHostedInvoiceUrl,
   renderPaymentActionEmail,
   renderPaymentActionSlack,
+  renderRecoveryFailureAlert,
 } = require('./templates');
 
 function objectId(value) {
@@ -35,19 +36,7 @@ async function retrieveSubscription(stripe, id, fallback = null) {
   }
 }
 
-async function loadCanonicalContext(event, stripe) {
-  let invoiceId;
-  let subscription = null;
-
-  if (event.type.startsWith('invoice.')) {
-    invoiceId = event.data.object.id;
-  } else if (event.type.startsWith('customer.subscription.')) {
-    const eventSubscription = event.data.object;
-    subscription = await retrieveSubscription(stripe, eventSubscription.id, eventSubscription);
-    invoiceId = objectId(subscription.latest_invoice) || objectId(eventSubscription.latest_invoice);
-  }
-  if (!invoiceId) return null;
-
+async function loadInvoiceContext(invoiceId, stripe, subscription = null) {
   const invoice = await stripe.invoices.retrieve(invoiceId, { expand: ['payment_intent'] });
   const subscriptionId = invoiceSubscriptionId(invoice) || objectId(subscription);
   if (!subscription && subscriptionId) {
@@ -67,6 +56,21 @@ async function loadCanonicalContext(event, stripe) {
   return { invoice, paymentIntent, subscription, stripeCustomer };
 }
 
+async function loadCanonicalContext(event, stripe) {
+  let invoiceId;
+  let subscription = null;
+
+  if (event.type.startsWith('invoice.')) {
+    invoiceId = event.data.object.id;
+  } else if (event.type.startsWith('customer.subscription.')) {
+    const eventSubscription = event.data.object;
+    subscription = await retrieveSubscription(stripe, eventSubscription.id, eventSubscription);
+    invoiceId = objectId(subscription.latest_invoice) || objectId(eventSubscription.latest_invoice);
+  }
+  if (!invoiceId) return null;
+  return loadInvoiceContext(invoiceId, stripe, subscription);
+}
+
 function requiresCustomerAction({ invoice, paymentIntent }) {
   return invoice.status === 'open' &&
     Number(invoice.amount_remaining) > 0 &&
@@ -79,22 +83,78 @@ function isRecoverySignal(eventType, actionRequired) {
     (eventType === 'invoice.payment_failed' && actionRequired);
 }
 
-async function processStripeEventRow(row, dependencies = {}) {
-  const stripe = dependencies.stripe || getStripeClient();
-  const database = dependencies.db || db;
-  const event = await stripe.events.retrieve(row.id);
+function positiveInteger(value, fallback) {
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
 
-  if (event.livemode && !config.stripe.allowLiveEvents) {
-    return { outcome: 'ignored_live_event' };
+function reminderTimestamp(now) {
+  if (!config.paymentRecoveryReminders.enabled) return null;
+  const minutes = positiveInteger(config.paymentRecoveryReminders.finalDelayMinutes, null);
+  const hours = positiveInteger(config.paymentRecoveryReminders.finalDelayHours, 8);
+  const delayMinutes = minutes || (hours * 60);
+  return new Date(now.getTime() + (delayMinutes * 60 * 1000));
+}
+
+function initialSlackTimestamp(now) {
+  if (!config.paymentRecoveryReminders.enabled) return now;
+  const configured = config.paymentRecoveryReminders.slackInitialDelayMinutes;
+  const minutes = Number.isInteger(configured) && configured >= 0 ? configured : 20;
+  return new Date(now.getTime() + (minutes * 60 * 1000));
+}
+
+async function scheduleRecoveryChannels({
+  database,
+  recoveryCase,
+  customer,
+  stepNumber,
+  scheduledFor,
+  slackScheduledFor = scheduledFor,
+}) {
+  const channels = [];
+  const duplicates = [];
+  if (customer.email_enabled && customer.email) {
+    const scheduled = await database.schedulePaymentRecoveryMessage(
+      buildRecoveryMessageRecord({
+        recoveryCaseId: recoveryCase.id,
+        channel: 'email',
+        stepNumber,
+        scheduledFor,
+      })
+    );
+    channels.push('email');
+    if (scheduled.duplicate) duplicates.push('email');
   }
+  if (customer.slack_enabled && customer.slack_team_id && customer.slack_user_id) {
+    const scheduled = await database.schedulePaymentRecoveryMessage(
+      buildRecoveryMessageRecord({
+        recoveryCaseId: recoveryCase.id,
+        channel: 'slack',
+        stepNumber,
+        scheduledFor: slackScheduledFor,
+      })
+    );
+    channels.push('slack');
+    if (scheduled.duplicate) duplicates.push('slack');
+  }
+  return { channels, duplicates };
+}
 
-  const context = await loadCanonicalContext(event, stripe);
-  if (!context) return { outcome: 'ignored_without_invoice' };
-
+async function persistRecoveryContext({
+  context,
+  eventType,
+  observedAt,
+  allowCreate = false,
+  dependencies = {},
+}) {
+  const database = dependencies.db || db;
   const actionRequired = requiresCustomerAction(context);
   const existing = await database.getPaymentRecoveryCaseByInvoiceId(context.invoice.id);
-  if (!existing && !isRecoverySignal(event.type, actionRequired)) {
-    return { outcome: 'ignored_without_recovery_case' };
+  const created = !existing;
+  if (!existing && !allowCreate && !isRecoverySignal(eventType, actionRequired)) {
+    return { result: { outcome: 'ignored_without_recovery_case' } };
+  }
+  if (!existing && allowCreate && !actionRequired) {
+    return { result: { outcome: 'ignored_without_recovery_case' } };
   }
 
   const customerRecord = buildCrmCustomerRecord({
@@ -102,13 +162,18 @@ async function processStripeEventRow(row, dependencies = {}) {
     email: context.stripeCustomer.email || context.invoice.customer_email,
   });
   const customer = await database.upsertCrmCustomer(customerRecord);
-  const now = new Date();
+  const now = dependencies.now ? new Date(dependencies.now) : new Date();
+  const nextReminderAt = existing
+    ? existing.next_reminder_at
+    : (actionRequired && config.stripe.paymentRecoveryEnabled ? reminderTimestamp(now) : null);
+  const eventCreatedAt = eventType.startsWith('reconciliation.') && existing
+    ? (existing.last_stripe_event_created_at || observedAt)
+    : observedAt;
   const caseRecord = buildPaymentRecoveryCaseRecord({
     crmCustomerId: customer.id,
     ...context,
-    eventCreatedAt: event.created,
-    nextReminderAt:
-      actionRequired && config.stripe.paymentRecoveryEnabled ? now : null,
+    eventCreatedAt,
+    nextReminderAt,
     now,
   });
 
@@ -122,49 +187,64 @@ async function processStripeEventRow(row, dependencies = {}) {
   const recoveryCase = await database.upsertPaymentRecoveryCase(caseRecord);
   if (recoveryCase.state !== 'open') {
     await database.cancelPaymentRecoveryMessages(recoveryCase.id);
-    return { outcome: 'case_resolved', state: recoveryCase.state };
+    return {
+      result: { outcome: 'case_resolved', state: recoveryCase.state },
+      recoveryCase,
+      customer,
+      actionRequired,
+      created,
+    };
   }
-
   if (!config.stripe.paymentRecoveryEnabled) {
-    return { outcome: 'case_open_recovery_disabled' };
+    return {
+      result: { outcome: 'case_open_recovery_disabled' },
+      recoveryCase,
+      customer,
+      actionRequired,
+      created,
+    };
   }
   if (customer.status !== 'active') {
-    return { outcome: 'case_open_customer_suppressed' };
+    return {
+      result: { outcome: 'case_open_customer_suppressed' },
+      recoveryCase,
+      customer,
+      actionRequired,
+      created,
+    };
   }
 
-  const channels = [];
-  const duplicates = [];
-  if (customer.email_enabled && customer.email) {
-    const scheduled = await database.schedulePaymentRecoveryMessage(
-      buildRecoveryMessageRecord({
-        recoveryCaseId: recoveryCase.id,
-        channel: 'email',
-        stepNumber: 1,
-        scheduledFor: now,
-      })
-    );
-    channels.push('email');
-    if (scheduled.duplicate) duplicates.push('email');
-  }
-  if (
-    customer.slack_enabled &&
-    customer.slack_team_id &&
-    customer.slack_user_id
-  ) {
-    const scheduled = await database.schedulePaymentRecoveryMessage(
-      buildRecoveryMessageRecord({
-        recoveryCaseId: recoveryCase.id,
-        channel: 'slack',
-        stepNumber: 1,
-        scheduledFor: now,
-      })
-    );
-    channels.push('slack');
-    if (scheduled.duplicate) duplicates.push('slack');
+  const scheduled = await scheduleRecoveryChannels({
+    database,
+    recoveryCase,
+    customer,
+    stepNumber: 1,
+    scheduledFor: now,
+    slackScheduledFor: initialSlackTimestamp(now),
+  });
+  const result = scheduled.channels.length
+    ? { outcome: 'messages_scheduled', ...scheduled }
+    : { outcome: 'case_open_channels_unavailable' };
+  return { result, recoveryCase, customer, actionRequired, created };
+}
+
+async function processStripeEventRow(row, dependencies = {}) {
+  const stripe = dependencies.stripe || getStripeClient();
+  const event = await stripe.events.retrieve(row.id);
+
+  if (event.livemode && !config.stripe.allowLiveEvents) {
+    return { outcome: 'ignored_live_event' };
   }
 
-  if (!channels.length) return { outcome: 'case_open_channels_unavailable' };
-  return { outcome: 'messages_scheduled', channels, duplicates };
+  const context = await loadCanonicalContext(event, stripe);
+  if (!context) return { outcome: 'ignored_without_invoice' };
+  const persisted = await persistRecoveryContext({
+    context,
+    eventType: event.type,
+    observedAt: event.created,
+    dependencies,
+  });
+  return persisted.result;
 }
 
 async function processPendingStripeEvents(dependencies = {}) {
@@ -193,6 +273,137 @@ async function processPendingStripeEvents(dependencies = {}) {
     }
   }
   return { enabled: true, claimed: rows.length, processed, failed };
+}
+
+async function reconcilePaymentRecoveryCases(dependencies = {}) {
+  if (!config.stripe.reconciliationEnabled) {
+    return {
+      enabled: false,
+      checked: 0,
+      resolved: 0,
+      actionable: 0,
+      discovered: 0,
+      failed: 0,
+    };
+  }
+  const database = dependencies.db || db;
+  const stripe = dependencies.stripe || getStripeClient();
+  const limit = positiveInteger(config.stripe.reconciliationCaseLimit, 25);
+  const openCases = await database.getOpenPaymentRecoveryCases(limit);
+  const knownInvoiceIds = new Set(openCases.map(recoveryCase => recoveryCase.stripe_invoice_id));
+  let checked = 0;
+  let resolved = 0;
+  let actionable = 0;
+  let discovered = 0;
+  let failed = 0;
+
+  for (const recoveryCase of openCases) {
+    try {
+      const context = await loadInvoiceContext(recoveryCase.stripe_invoice_id, stripe);
+      if (context.invoice.livemode && !config.stripe.allowLiveEvents) continue;
+      const persisted = await persistRecoveryContext({
+        context,
+        eventType: 'reconciliation.open_case',
+        observedAt: new Date(),
+        allowCreate: false,
+        dependencies,
+      });
+      checked++;
+      if (persisted.recoveryCase?.state === 'open' && persisted.actionRequired) actionable++;
+      if (persisted.result.outcome === 'case_resolved') resolved++;
+      if (persisted.recoveryCase) {
+        await database.markPaymentRecoveryCaseReconciled(persisted.recoveryCase.id);
+      }
+    } catch (error) {
+      failed++;
+      logger.error(
+        `Payment recovery reconciliation failed [invoice=${recoveryCase.stripe_invoice_id}]: ${error.message}`
+      );
+    }
+  }
+
+  const lookbackHours = positiveInteger(config.stripe.reconciliationLookbackHours, 48);
+  const createdAfter = Math.floor(Date.now() / 1000) - (lookbackHours * 60 * 60);
+  const recent = await stripe.invoices.list({
+    status: 'open',
+    created: { gte: createdAfter },
+    limit: Math.min(limit * 4, 100),
+  });
+  for (const invoice of recent.data || []) {
+    if (knownInvoiceIds.has(invoice.id)) continue;
+    if (invoice.livemode && !config.stripe.allowLiveEvents) continue;
+    try {
+      const existing = await database.getPaymentRecoveryCaseByInvoiceId(invoice.id);
+      if (existing?.state === 'open') continue;
+      const context = await loadInvoiceContext(invoice.id, stripe);
+      if (!requiresCustomerAction(context)) continue;
+      const persisted = await persistRecoveryContext({
+        context,
+        eventType: 'invoice.payment_action_required',
+        observedAt: context.invoice.created || new Date(),
+        allowCreate: true,
+        dependencies,
+      });
+      if (
+        persisted.recoveryCase?.state === 'open' &&
+        (persisted.created || existing?.state !== 'open')
+      ) {
+        discovered++;
+      }
+      if (persisted.recoveryCase?.state === 'open') actionable++;
+      if (persisted.recoveryCase) {
+        await database.markPaymentRecoveryCaseReconciled(persisted.recoveryCase.id);
+      }
+    } catch (error) {
+      failed++;
+      logger.error(`Payment recovery discovery failed [invoice=${invoice.id}]: ${error.message}`);
+    }
+  }
+
+  return { enabled: true, checked, resolved, actionable, discovered, failed };
+}
+
+async function scheduleDuePaymentRecoveryReminders(dependencies = {}) {
+  if (!config.paymentRecoveryReminders.enabled) {
+    return { enabled: false, due: 0, scheduled: 0, failed: 0 };
+  }
+  const database = dependencies.db || db;
+  const stripe = dependencies.stripe || getStripeClient();
+  const limit = positiveInteger(config.paymentRecoveryReminders.caseLimit, 25);
+  const dueCases = await database.getDuePaymentRecoveryReminderCases(limit);
+  let scheduled = 0;
+  let failed = 0;
+
+  for (const dueCase of dueCases) {
+    try {
+      const context = await loadInvoiceContext(dueCase.stripe_invoice_id, stripe);
+      if (context.invoice.livemode && !config.stripe.allowLiveEvents) continue;
+      const persisted = await persistRecoveryContext({
+        context,
+        eventType: 'reconciliation.reminder_due',
+        observedAt: new Date(),
+        allowCreate: false,
+        dependencies,
+      });
+      if (persisted.recoveryCase?.state !== 'open' || !persisted.actionRequired) continue;
+      if (persisted.customer.status === 'active') {
+        const result = await scheduleRecoveryChannels({
+          database,
+          recoveryCase: persisted.recoveryCase,
+          customer: persisted.customer,
+          stepNumber: 2,
+          scheduledFor: dependencies.now ? new Date(dependencies.now) : new Date(),
+        });
+        scheduled += result.channels.length - result.duplicates.length;
+      }
+      await database.setPaymentRecoveryNextReminder(persisted.recoveryCase.id, null);
+      await database.markPaymentRecoveryCaseReconciled(persisted.recoveryCase.id);
+    } catch (error) {
+      failed++;
+      logger.error(`Payment recovery reminder scheduling failed [case=${dueCase.id}]: ${error.message}`);
+    }
+  }
+  return { enabled: true, due: dueCases.length, scheduled, failed };
 }
 
 function isAllowedRecipient(email) {
@@ -251,6 +462,7 @@ async function deliverDueTransactionalEmails(dependencies = {}) {
         amountRemaining: invoice.amount_remaining,
         currency: invoice.currency,
         hostedInvoiceUrl: invoice.hosted_invoice_url,
+        reminder: message.step_number > 1,
       });
       const result = await mailer.sendTransactionalEmail(
         config.yandex.email,
@@ -326,6 +538,7 @@ async function deliverDueSlackMessages(dependencies = {}) {
         amountRemaining: invoice.amount_remaining,
         currency: invoice.currency,
         hostedInvoiceUrl: invoice.hosted_invoice_url,
+        reminder: message.step_number > 1,
       });
       const result = await slack.sendDirectMessage(customer.slack_user_id, text);
       await database.markPaymentRecoveryMessageSent(message.id, result.messageId);
@@ -339,20 +552,67 @@ async function deliverDueSlackMessages(dependencies = {}) {
   return { enabled: true, dryRun: false, due: due.length, sent, failed, blocked };
 }
 
+async function deliverRecoveryFailureAlerts(dependencies = {}) {
+  if (!config.slack.failureAlertsEnabled) {
+    return { enabled: false, due: 0, sent: 0, failed: 0 };
+  }
+  const database = dependencies.db || db;
+  const slack = dependencies.slack || slackClient;
+  const due = await database.getExhaustedPaymentRecoveryMessages(100);
+  if (!config.slack.failureAlertChannelId) {
+    return { enabled: true, configured: false, due: due.length, sent: 0, failed: 0 };
+  }
+  if (config.slack.failureAlertsDryRun) {
+    return { enabled: true, configured: true, dryRun: true, due: due.length, sent: 0, failed: 0 };
+  }
+
+  let sent = 0;
+  let failed = 0;
+  for (const message of due) {
+    const claimed = await database.claimPaymentRecoveryFailureAlert(message.id);
+    if (!claimed) continue;
+    try {
+      const text = renderRecoveryFailureAlert(message);
+      const result = await slack.sendChannelMessage(config.slack.failureAlertChannelId, text);
+      await database.markPaymentRecoveryFailureAlertSent(message.id, result.messageId);
+      sent++;
+    } catch (error) {
+      failed++;
+      await database.markPaymentRecoveryFailureAlertFailed(message.id, error.message);
+      logger.error(`Payment recovery failure alert failed [message=${message.id}]: ${error.message}`);
+    }
+  }
+  return {
+    enabled: true,
+    configured: true,
+    dryRun: false,
+    due: due.length,
+    sent,
+    failed,
+  };
+}
+
 async function runPaymentRecoveryCycle(dependencies = {}) {
   const events = await processPendingStripeEvents(dependencies);
+  const reconciliation = await reconcilePaymentRecoveryCases(dependencies);
+  const reminders = await scheduleDuePaymentRecoveryReminders(dependencies);
   const email = await deliverDueTransactionalEmails(dependencies);
   const slack = await deliverDueSlackMessages(dependencies);
-  return { events, email, slack };
+  const alerts = await deliverRecoveryFailureAlerts(dependencies);
+  return { events, reconciliation, reminders, email, slack, alerts };
 }
 
 module.exports = {
+  loadInvoiceContext,
   loadCanonicalContext,
   requiresCustomerAction,
   isRecoverySignal,
   processStripeEventRow,
   processPendingStripeEvents,
+  reconcilePaymentRecoveryCases,
+  scheduleDuePaymentRecoveryReminders,
   deliverDueTransactionalEmails,
   deliverDueSlackMessages,
+  deliverRecoveryFailureAlerts,
   runPaymentRecoveryCycle,
 };

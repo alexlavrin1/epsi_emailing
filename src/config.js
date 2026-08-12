@@ -39,6 +39,25 @@ module.exports = {
       String(process.env.STRIPE_PAYMENT_RECOVERY_ENABLED || 'false').toLowerCase() === 'true',
     allowLiveEvents:
       String(process.env.STRIPE_ALLOW_LIVE_EVENTS || 'false').toLowerCase() === 'true',
+    reconciliationEnabled:
+      String(process.env.STRIPE_RECONCILIATION_ENABLED || 'false').toLowerCase() === 'true',
+    reconciliationLookbackHours:
+      parseInt(process.env.STRIPE_RECONCILIATION_LOOKBACK_HOURS || '48', 10),
+    reconciliationCaseLimit:
+      parseInt(process.env.STRIPE_RECONCILIATION_CASE_LIMIT || '25', 10),
+  },
+  paymentRecoveryReminders: {
+    enabled:
+      String(process.env.PAYMENT_RECOVERY_REMINDERS_ENABLED || 'false').toLowerCase() === 'true',
+    finalDelayHours:
+      parseInt(process.env.PAYMENT_RECOVERY_FINAL_REMINDER_HOURS || '8', 10),
+    finalDelayMinutes: process.env.PAYMENT_RECOVERY_FINAL_REMINDER_MINUTES
+      ? parseInt(process.env.PAYMENT_RECOVERY_FINAL_REMINDER_MINUTES, 10)
+      : null,
+    slackInitialDelayMinutes:
+      parseInt(process.env.PAYMENT_RECOVERY_SLACK_INITIAL_DELAY_MINUTES || '20', 10),
+    caseLimit:
+      parseInt(process.env.PAYMENT_RECOVERY_REMINDER_CASE_LIMIT || '25', 10),
   },
   transactionalEmail: {
     enabled:
@@ -61,6 +80,13 @@ module.exports = {
       .map(id => id.trim().toUpperCase())
       .filter(Boolean),
     maxAttempts: parseInt(process.env.SLACK_MAX_ATTEMPTS || '3', 10),
+    failureAlertsEnabled:
+      String(process.env.SLACK_FAILURE_ALERTS_ENABLED || 'false').toLowerCase() === 'true',
+    failureAlertsDryRun:
+      String(process.env.SLACK_FAILURE_ALERTS_DRY_RUN || 'true').toLowerCase() !== 'false',
+    failureAlertChannelId: process.env.SLACK_FAILURE_ALERT_CHANNEL_ID,
+    failureAlertMaxAttempts:
+      parseInt(process.env.SLACK_FAILURE_ALERT_MAX_ATTEMPTS || '3', 10),
   },
   outreachEnabled: String(process.env.OUTREACH_ENABLED || 'false').toLowerCase() === 'true',
   dailySendLimit: parseInt(process.env.DAILY_SEND_LIMIT || '60', 10),

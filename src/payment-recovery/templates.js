@@ -20,14 +20,20 @@ function firstName(name) {
   return String(name || '').trim().split(/\s+/)[0] || null;
 }
 
-function renderPaymentActionEmail({ customerName, amountRemaining, currency, hostedInvoiceUrl }) {
+function renderPaymentActionEmail({
+  customerName,
+  amountRemaining,
+  currency,
+  hostedInvoiceUrl,
+  reminder = false,
+}) {
   if (!isTrustedHostedInvoiceUrl(hostedInvoiceUrl)) {
     throw new Error('Refusing to render an untrusted hosted invoice URL');
   }
   const amount = formatAmount(amountRemaining, currency);
   const greeting = firstName(customerName) ? `Hi ${firstName(customerName)},` : 'Hi,';
   return {
-    subject: `Action needed to complete your ${amount} payment`,
+    subject: `${reminder ? 'Reminder: action' : 'Action'} needed to complete your ${amount} payment`,
     body: [
       greeting,
       '',
@@ -44,13 +50,33 @@ function renderPaymentActionEmail({ customerName, amountRemaining, currency, hos
   };
 }
 
-function renderPaymentActionSlack({ customerName, amountRemaining, currency, hostedInvoiceUrl }) {
+function renderPaymentActionSlack({
+  customerName,
+  amountRemaining,
+  currency,
+  hostedInvoiceUrl,
+  reminder = false,
+}) {
   if (!isTrustedHostedInvoiceUrl(hostedInvoiceUrl)) {
     throw new Error('Refusing to render an untrusted hosted invoice URL');
   }
   const amount = formatAmount(amountRemaining, currency);
   const greeting = firstName(customerName) ? `Hi ${firstName(customerName)} — ` : '';
-  return `${greeting}your ${amount} payment to EpsiFlow is waiting for your bank's authentication. Complete it securely through Stripe: ${hostedInvoiceUrl}\n\nIf you already completed it, no action is needed.`;
+  const prefix = reminder ? 'Reminder — ' : '';
+  return `${greeting}${prefix}your ${amount} payment to EpsiFlow is waiting for your bank's authentication. Complete it securely through Stripe: ${hostedInvoiceUrl}\n\nIf you already completed it, no action is needed.`;
+}
+
+function renderRecoveryFailureAlert(message) {
+  const recoveryCase = message.recovery_case || {};
+  const error = String(message.last_error || 'No provider error recorded').slice(0, 500);
+  return [
+    ':warning: Payment-recovery delivery exhausted its retry limit.',
+    `Channel: ${message.channel}`,
+    `Invoice: ${recoveryCase.stripe_invoice_id || 'unknown'}`,
+    `Message: ${message.id}`,
+    `Attempts: ${message.attempt_count}`,
+    `Last error: ${error}`,
+  ].join('\n');
 }
 
 module.exports = {
@@ -58,4 +84,5 @@ module.exports = {
   formatAmount,
   renderPaymentActionEmail,
   renderPaymentActionSlack,
+  renderRecoveryFailureAlert,
 };
