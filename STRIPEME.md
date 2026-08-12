@@ -343,7 +343,7 @@ Phase 3 database verification completed on 2026-08-12:
 
 ### Phase 4 — Transactional email
 
-Status: Implemented and database-verified on 2026-08-12; controlled deployment pending.
+Status: Complete — deployed and verified end to end through post-payment shutdown on 2026-08-12.
 
 - Reuse the low-level Yandex SMTP and Sent-folder archiving behavior.
 - Add a dedicated transactional sender without cold-outreach unsubscribe headers.
@@ -423,7 +423,36 @@ Migration 004 verification completed on 2026-08-12:
 - The real sandbox event `evt_1U3CUhAe3OxHSCAxPhWoosW1` remained `pending` before and after the test.
 - No CRM case or notification job was created and no email was sent during migration verification.
 
+Controlled production verification on 2026-08-12:
+
+- Phase 4 commit `3a9cda4` deployed successfully from `master`.
+- The production cron rejects unauthenticated requests with `401`; the webhook continues to reject unsigned requests with `400`.
+- With event processing enabled but recovery/email disabled, the stale sandbox action-required event was processed against current Stripe state.
+- Its already-paid invoice created one resolved audit case with invoice `paid`, PaymentIntent `succeeded`, amount remaining `0`, resolution reason `paid`, and zero notification jobs.
+- The second sandbox fixture remained `open` with PaymentIntent `requires_action` and a valid Hosted Invoice Page.
+- Its sandbox customer email was changed to the configured internal Yandex mailbox while Customers Write was temporarily enabled; the restricted key was then returned to read-only.
+- With recovery enabled and transactional email in dry-run mode, one real sandbox event produced one open recovery case and one queued email job.
+- Dry-run reported one due job while leaving it unclaimed: `attempt_count=0`, no provider ID, and no send timestamp.
+- After disabling dry-run for the exact internal allowlisted address, one authenticated cycle reported one due and one sent email, with zero failures and zero blocks.
+- The job is `sent` after exactly one attempt, has no error, and stores RFC Message-ID `<ef091432-d884-0178-9ca4-d49690d51319@epsifund.com>`.
+- Direct read-only inspection of the most recent Yandex Sent envelopes found exactly one matching RFC Message-ID and one matching subject, confirming Sent-folder archival.
+- No live Stripe event was processed and no external customer was contacted.
+
+Post-payment stop verification on 2026-08-12:
+
+- The internal operator completed the second fixture's simulated 3DS authentication through the Hosted Invoice Page.
+- Stripe canonical state became invoice `paid`, PaymentIntent `succeeded`, subscription `active`, and amount remaining `0`.
+- The real `invoice.paid` webhook and related `customer.subscription.updated` webhook were ingested as separate pending rows.
+- One authenticated recovery cycle processed both terminal events with zero failures.
+- The recovery case changed from `open` to `resolved`, recorded resolution reason `paid`, cleared `next_reminder_at`, and retained current canonical Stripe states.
+- The delivery stage found zero due messages and sent zero emails during the terminal-event cycle.
+- The recovery case still has exactly one message record: the original internal email, `sent` after one attempt with no error.
+- A second direct read-only Yandex Sent inspection still found exactly one copy of the RFC Message-ID, proving payment resolution did not trigger a duplicate.
+- Phase 4 acceptance criteria are complete: detection, dry-run, allowlisted delivery, SMTP acceptance, Sent archival, paid-event resolution, and stop-on-paid behavior all passed in Stripe sandbox.
+
 ### Phase 5 — Slack delivery
+
+Status: Implemented locally on 2026-08-12; Slack app configuration and controlled delivery testing pending.
 
 Create a dedicated Slack app rather than depending on a personal session.
 
@@ -446,6 +475,63 @@ Constraints:
 - Stripe and Slack email addresses may differ.
 - External or Slack Connect members may not always be visible or DM-able by the app.
 - Messages will come from the EpsiFlow bot, not a personal user.
+
+Implemented Phase 5 components:
+
+- Official Slack Node Web API SDK installed and locked.
+- Slack authentication uses a dedicated `xoxb-...` bot token stored only in environment secrets.
+- Every lookup and delivery validates that the bot token's `team_id` matches the configured `SLACK_TEAM_ID`, preventing cross-workspace mistakes.
+- `npm run check:slack` performs a read-only `auth.test` and reports the workspace/team ID and bot identity without printing the token.
+- `npm run map:slack -- --stripe-customer cus_... --slack-email person@example.com` looks up a workspace user but makes no database change.
+- The mapping command requires a second run with `--confirm` before storing the Slack workspace/user IDs and enabling Slack for that CRM customer.
+- The preview reports whether the CRM and Slack lookup emails match, but an operator can explicitly approve a legitimate differing address.
+- Database constraints from Phase 3 require workspace and user IDs as a pair and prevent one Slack identity from mapping to multiple CRM customers.
+- Actionable Stripe events schedule email and Slack jobs independently. A missing/disabled email does not suppress a mapped Slack job.
+- Slack jobs reuse the unique recovery case/channel/step key and the atomic message-claim function, preventing duplicate DMs.
+- The Slack delivery worker runs after email delivery in the same authenticated recovery cycle and selects Slack jobs only.
+- Dry-run reports due Slack jobs without claiming or changing them.
+- Real delivery requires all of: Slack delivery enabled, dry-run disabled, active CRM customer, explicit Slack mapping enabled, exact workspace match, and exact Slack user-ID allowlist match.
+- An empty Slack user allowlist sends to nobody.
+- Immediately before posting, the worker atomically claims the job and re-fetches the Invoice/PaymentIntent from Stripe. Paid or otherwise non-actionable invoices cancel the job without a DM.
+- Slack links do not unfurl, reducing accidental exposure of invoice details in previews.
+- Successful delivery stores a provider identifier in `DM_CHANNEL_ID:message_ts` form; failures are retryable up to the configured maximum.
+
+Phase 5 configuration defaults:
+
+```text
+SLACK_BOT_TOKEN=
+SLACK_TEAM_ID=
+SLACK_DELIVERY_ENABLED=false
+SLACK_DELIVERY_DRY_RUN=true
+SLACK_USER_ALLOWLIST=
+SLACK_MAX_ATTEMPTS=3
+```
+
+Slack app setup:
+
+1. Create a Slack app named `EpsiFlow CRM` from scratch in the workspace where the clients are present.
+2. Under OAuth & Permissions, add bot token scopes `chat:write`, `im:write`, and `users:read.email`.
+3. Install the app to the workspace and copy the Bot User OAuth Token (`xoxb-...`) into local/Vercel secret storage as `SLACK_BOT_TOKEN`.
+4. Run `npm run check:slack` once to obtain the bot token's `teamId`, then set the same value as `SLACK_TEAM_ID` locally and in Vercel.
+5. Run `npm run check:slack` again and require `configuredTeamMatches=true`.
+6. Do not request `chat:write.customize`; the bot must not impersonate a personal account.
+
+Controlled Slack rollout:
+
+1. Deploy Phase 5 with Slack delivery disabled and dry-run enabled.
+2. Use the mapping command without `--confirm` for an internal Slack member and review the workspace/user IDs and email-match result.
+3. Re-run the same command with `--confirm` to create the explicit CRM mapping.
+4. Create a fresh sandbox 3DS-required invoice for that mapped internal CRM customer.
+5. Enable Slack delivery while keeping Slack dry-run true and allowlist only that exact Slack user ID.
+6. Verify one Slack job is due, still queued, and has `attempt_count=0`.
+7. Disable Slack dry-run and invoke one authenticated recovery cycle.
+8. Confirm one bot DM, one `sent` Slack message row, one attempt, and a stored channel/timestamp provider ID.
+9. Complete 3DS and confirm terminal Stripe events resolve the case and no second DM appears.
+
+Phase 5 local verification:
+
+- Tests cover workspace mismatch, email lookup, deactivated/missing identity rejection, DM channel creation, link-unfurl suppression, trusted-link message rendering, explicit Slack-only scheduling, dry-run non-mutation, exact user allowlisting, fresh Stripe checks, successful provider-ID recording, and preview-versus-confirm mapping semantics.
+- No Slack credential is configured and no Slack API write has occurred during local implementation.
 
 ### Phase 6 — Reconciliation and reminder scheduler
 

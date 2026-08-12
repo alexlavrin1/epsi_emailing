@@ -446,15 +446,20 @@ async function schedulePaymentRecoveryMessage(messageRecord) {
   return { duplicate: true, message: existing };
 }
 
-async function getDuePaymentRecoveryMessages(limit = 100) {
-  const { data, error } = await supabase
+async function getDuePaymentRecoveryMessages(limit = 100, channel = null) {
+  const maxAttempts = channel === 'slack'
+    ? config.slack.maxAttempts
+    : config.transactionalEmail.maxAttempts;
+  let query = supabase
     .from('payment_recovery_messages')
     .select('*, recovery_case:recovery_case_id(*, customer:crm_customer_id(*))')
     .in('status', ['queued', 'failed'])
-    .lt('attempt_count', config.transactionalEmail.maxAttempts)
+    .lt('attempt_count', maxAttempts)
     .lte('scheduled_for', new Date().toISOString())
     .order('scheduled_for', { ascending: true })
     .limit(limit);
+  if (channel) query = query.eq('channel', channel);
+  const { data, error } = await query;
   if (error) throw error;
   return (data || []).filter(message => message.recovery_case?.state === 'open');
 }

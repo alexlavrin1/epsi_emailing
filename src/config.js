@@ -51,6 +51,17 @@ module.exports = {
       .filter(Boolean),
     maxAttempts: parseInt(process.env.TRANSACTIONAL_EMAIL_MAX_ATTEMPTS || '3', 10),
   },
+  slack: {
+    botToken: process.env.SLACK_BOT_TOKEN,
+    teamId: process.env.SLACK_TEAM_ID,
+    enabled: String(process.env.SLACK_DELIVERY_ENABLED || 'false').toLowerCase() === 'true',
+    dryRun: String(process.env.SLACK_DELIVERY_DRY_RUN || 'true').toLowerCase() !== 'false',
+    userAllowlist: String(process.env.SLACK_USER_ALLOWLIST || '')
+      .split(',')
+      .map(id => id.trim().toUpperCase())
+      .filter(Boolean),
+    maxAttempts: parseInt(process.env.SLACK_MAX_ATTEMPTS || '3', 10),
+  },
   outreachEnabled: String(process.env.OUTREACH_ENABLED || 'false').toLowerCase() === 'true',
   dailySendLimit: parseInt(process.env.DAILY_SEND_LIMIT || '60', 10),
   dailyNewLeadLimit: parseInt(process.env.DAILY_NEW_LEAD_LIMIT || '30', 10),

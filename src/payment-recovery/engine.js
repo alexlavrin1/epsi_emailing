@@ -3,12 +3,17 @@ const db = require('../db/supabase');
 const gmail = require('../outreach/gmail');
 const logger = require('../utils/logger');
 const { getStripeClient } = require('../integrations/stripe/client');
+const slackClient = require('../integrations/slack/client');
 const {
   buildCrmCustomerRecord,
   buildPaymentRecoveryCaseRecord,
   buildRecoveryMessageRecord,
 } = require('../crm/records');
-const { isTrustedHostedInvoiceUrl, renderPaymentActionEmail } = require('./templates');
+const {
+  isTrustedHostedInvoiceUrl,
+  renderPaymentActionEmail,
+  renderPaymentActionSlack,
+} = require('./templates');
 
 function objectId(value) {
   if (!value) return null;
@@ -123,23 +128,43 @@ async function processStripeEventRow(row, dependencies = {}) {
   if (!config.stripe.paymentRecoveryEnabled) {
     return { outcome: 'case_open_recovery_disabled' };
   }
-  if (
-    customer.status !== 'active' ||
-    !customer.email_enabled ||
-    !customer.email
-  ) {
-    return { outcome: 'case_open_email_unavailable' };
+  if (customer.status !== 'active') {
+    return { outcome: 'case_open_customer_suppressed' };
   }
 
-  const scheduled = await database.schedulePaymentRecoveryMessage(
-    buildRecoveryMessageRecord({
-      recoveryCaseId: recoveryCase.id,
-      channel: 'email',
-      stepNumber: 1,
-      scheduledFor: now,
-    })
-  );
-  return { outcome: scheduled.duplicate ? 'message_already_scheduled' : 'message_scheduled' };
+  const channels = [];
+  const duplicates = [];
+  if (customer.email_enabled && customer.email) {
+    const scheduled = await database.schedulePaymentRecoveryMessage(
+      buildRecoveryMessageRecord({
+        recoveryCaseId: recoveryCase.id,
+        channel: 'email',
+        stepNumber: 1,
+        scheduledFor: now,
+      })
+    );
+    channels.push('email');
+    if (scheduled.duplicate) duplicates.push('email');
+  }
+  if (
+    customer.slack_enabled &&
+    customer.slack_team_id &&
+    customer.slack_user_id
+  ) {
+    const scheduled = await database.schedulePaymentRecoveryMessage(
+      buildRecoveryMessageRecord({
+        recoveryCaseId: recoveryCase.id,
+        channel: 'slack',
+        stepNumber: 1,
+        scheduledFor: now,
+      })
+    );
+    channels.push('slack');
+    if (scheduled.duplicate) duplicates.push('slack');
+  }
+
+  if (!channels.length) return { outcome: 'case_open_channels_unavailable' };
+  return { outcome: 'messages_scheduled', channels, duplicates };
 }
 
 async function processPendingStripeEvents(dependencies = {}) {
@@ -181,7 +206,7 @@ async function deliverDueTransactionalEmails(dependencies = {}) {
   const database = dependencies.db || db;
   const stripe = dependencies.stripe || getStripeClient();
   const mailer = dependencies.mailer || gmail;
-  const due = await database.getDuePaymentRecoveryMessages(100);
+  const due = await database.getDuePaymentRecoveryMessages(100, 'email');
 
   if (config.transactionalEmail.dryRun) {
     return { enabled: true, dryRun: true, due: due.length, sent: 0, failed: 0, blocked: 0 };
@@ -245,10 +270,80 @@ async function deliverDueTransactionalEmails(dependencies = {}) {
   return { enabled: true, dryRun: false, due: due.length, sent, failed, blocked };
 }
 
+function isAllowedSlackUser(userId) {
+  return config.slack.userAllowlist.includes(String(userId || '').toUpperCase());
+}
+
+async function deliverDueSlackMessages(dependencies = {}) {
+  if (!config.slack.enabled) {
+    return { enabled: false, due: 0, sent: 0, failed: 0, blocked: 0 };
+  }
+  const database = dependencies.db || db;
+  const stripe = dependencies.stripe || getStripeClient();
+  const slack = dependencies.slack || slackClient;
+  const due = await database.getDuePaymentRecoveryMessages(100, 'slack');
+
+  if (config.slack.dryRun) {
+    return { enabled: true, dryRun: true, due: due.length, sent: 0, failed: 0, blocked: 0 };
+  }
+
+  let sent = 0;
+  let failed = 0;
+  let blocked = 0;
+  for (const message of due) {
+    const customer = message.recovery_case?.customer;
+    if (
+      !customer ||
+      customer.status !== 'active' ||
+      !customer.slack_enabled ||
+      customer.slack_team_id !== config.slack.teamId ||
+      !isAllowedSlackUser(customer.slack_user_id)
+    ) {
+      blocked++;
+      continue;
+    }
+
+    const claimed = await database.markPaymentRecoveryMessageSending(message.id);
+    if (!claimed) continue;
+
+    try {
+      const invoice = await stripe.invoices.retrieve(
+        message.recovery_case.stripe_invoice_id,
+        { expand: ['payment_intent'] }
+      );
+      let paymentIntent = invoice.payment_intent || null;
+      if (typeof paymentIntent === 'string') {
+        paymentIntent = await stripe.paymentIntents.retrieve(paymentIntent);
+      }
+      if (!requiresCustomerAction({ invoice, paymentIntent })) {
+        await database.cancelPaymentRecoveryMessage(message.id);
+        await database.cancelPaymentRecoveryMessages(message.recovery_case.id);
+        continue;
+      }
+
+      const text = renderPaymentActionSlack({
+        customerName: customer.name,
+        amountRemaining: invoice.amount_remaining,
+        currency: invoice.currency,
+        hostedInvoiceUrl: invoice.hosted_invoice_url,
+      });
+      const result = await slack.sendDirectMessage(customer.slack_user_id, text);
+      await database.markPaymentRecoveryMessageSent(message.id, result.messageId);
+      sent++;
+    } catch (error) {
+      failed++;
+      await database.markPaymentRecoveryMessageFailed(message.id, error.message);
+      logger.error(`Slack recovery message failed [message=${message.id}]: ${error.message}`);
+    }
+  }
+  return { enabled: true, dryRun: false, due: due.length, sent, failed, blocked };
+}
+
 async function runPaymentRecoveryCycle(dependencies = {}) {
   const events = await processPendingStripeEvents(dependencies);
   const email = await deliverDueTransactionalEmails(dependencies);
-  return { events, email };
+  const slack = await deliverDueSlackMessages(dependencies);
+  return { events, email, slack };
 }
 
 module.exports = {
@@ -258,5 +353,6 @@ module.exports = {
   processStripeEventRow,
   processPendingStripeEvents,
   deliverDueTransactionalEmails,
+  deliverDueSlackMessages,
   runPaymentRecoveryCycle,
 };

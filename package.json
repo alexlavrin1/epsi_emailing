@@ -14,6 +14,8 @@
     "import:prospects": "node scripts/import_prospects.js",
     "import:prospects:dry": "node scripts/import_prospects.js --dry-run",
     "enroll:prospects": "node scripts/enroll_prospects.js",
+    "map:slack": "node scripts/map_crm_customer_slack.js",
+    "check:slack": "node scripts/check_slack.js",
     "test:email": "node scripts/send_test_email.js",
     "test": "node --test"
   },
@@ -21,6 +23,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@slack/web-api": "^8.0.0",
     "@supabase/supabase-js": "^2.38.0",
     "axios": "^1.6.0",
     "dotenv": "^16.3.1",

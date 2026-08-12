@@ -44,4 +44,18 @@ function renderPaymentActionEmail({ customerName, amountRemaining, currency, hos
   };
 }
 
-module.exports = { isTrustedHostedInvoiceUrl, formatAmount, renderPaymentActionEmail };
+function renderPaymentActionSlack({ customerName, amountRemaining, currency, hostedInvoiceUrl }) {
+  if (!isTrustedHostedInvoiceUrl(hostedInvoiceUrl)) {
+    throw new Error('Refusing to render an untrusted hosted invoice URL');
+  }
+  const amount = formatAmount(amountRemaining, currency);
+  const greeting = firstName(customerName) ? `Hi ${firstName(customerName)} — ` : '';
+  return `${greeting}your ${amount} payment to EpsiFlow is waiting for your bank's authentication. Complete it securely through Stripe: ${hostedInvoiceUrl}\n\nIf you already completed it, no action is needed.`;
+}
+
+module.exports = {
+  isTrustedHostedInvoiceUrl,
+  formatAmount,
+  renderPaymentActionEmail,
+  renderPaymentActionSlack,
+};
