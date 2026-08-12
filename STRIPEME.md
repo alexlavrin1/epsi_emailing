@@ -184,7 +184,7 @@ Phase 1 completion criteria:
 
 ### Phase 2 — Stripe event ingestion
 
-Status: Implemented locally on 2026-08-11; external activation pending.
+Status: Complete — implemented, deployed, and verified end-to-end on 2026-08-12.
 
 - Install and pin the official Stripe Node SDK.
 - Add `STRIPE_RESTRICTED_KEY`, `STRIPE_WEBHOOK_SECRET`, and disabled-by-default feature flags.
@@ -240,6 +240,18 @@ External activation checklist:
 8. Resend the existing sandbox `invoice.payment_action_required` event and confirm exactly one `pending` ledger row.
 9. Resend the same event again and confirm it is reported as a duplicate with no second row.
 
+Production activation verified on 2026-08-12:
+
+- Supabase migration is applied and schema-compatible.
+- Production endpoint: `https://epsi-emailing.vercel.app/api/webhooks/stripe`.
+- Production loads both the restricted sandbox API key and webhook signing secret.
+- An unsigned request is rejected with `400 Missing Stripe signature`.
+- The real sandbox event `evt_1U3CUhAe3OxHSCAxPhWoosW1` (`invoice.payment_action_required`) was submitted with a valid endpoint signature and returned `queued`.
+- Supabase stored one `pending` row for invoice `in_1U3CMvAe3OxHSCAxJCTbWc9d` with `livemode=false`.
+- Re-delivery of the same event returned `duplicate` and the ledger remained at exactly one matching row.
+- `STRIPE_PAYMENT_RECOVERY_ENABLED=false` and `STRIPE_ALLOW_LIVE_EVENTS=false`; no customer notification or live processing occurred.
+- Stripe's current SDK warns that account API version `2022-11-15` is older than the latest available version. The integration remains deliberately pinned to the account version validated in Phase 1; an API-version upgrade should be handled as a separate tested change.
+
 Phase 2 verification completed locally:
 
 - The webhook module and deployed-handler shape load correctly under CommonJS.
@@ -248,6 +260,8 @@ Phase 2 verification completed locally:
 - No email, Slack message, payment mutation, or live Stripe operation is enabled by Phase 2.
 
 ### Phase 3 — CRM data model
+
+Status: Complete — implemented and verified against Supabase on 2026-08-12.
 
 Proposed tables:
 
@@ -283,6 +297,49 @@ Proposed tables:
 - Event type.
 - Received and processed timestamps.
 - Processing result and sanitized error.
+
+Implemented Phase 3 components:
+
+- `database/migrations/003_crm_payment_recovery.sql` creates the three Phase 3 tables with RLS enabled and no client policies.
+- `crm_customers` uses the Stripe customer ID as its unique external identity and stores optional, explicit Slack workspace/user mappings.
+- Slack workspace and user IDs must either both be present or both be absent; a mapped Slack identity can belong to only one CRM customer.
+- Customer channel preferences are independent (`email_enabled` and `slack_enabled`) and the entire CRM customer can be suppressed.
+- `payment_recovery_cases` permits exactly one recovery lifecycle per Stripe invoice.
+- A case stores the canonical Stripe subscription and PaymentIntent IDs, invoice/payment states, amount remaining, currency, hosted invoice URL, latest source-event time, reminder time, and resolution evidence.
+- Open cases require `resolved_at` to be null; terminal cases require a resolution timestamp.
+- `payment_recovery_messages` permits one job per recovery case, channel, and step, preventing duplicate reminders across webhook retries.
+- Message jobs have explicit `queued`, `sending`, `sent`, `failed`, and `cancelled` states with attempt and provider audit fields.
+- The `claim_payment_recovery_message` database function atomically moves a queued/failed job to `sending` and increments its attempt count, preventing concurrent workers from both claiming it.
+- Application access methods cover customer upsert/lookup, explicit Slack mapping, case upsert/lookup, idempotent job scheduling, due-job selection, atomic claiming, sent/failed outcomes, and cancellation.
+- Pure record builders normalize email/currency, derive paid/void/expired/cancelled case outcomes from canonical Stripe state, reject negative amounts, and refuse to create an open recovery case without a Hosted Invoice Page.
+
+Phase 3 safety boundary:
+
+- Phase 3 does not consume the pending Stripe event, retrieve customer data automatically, or schedule/send any notification.
+- The existing Phase 2 row remains `pending` until the event-processing phase is explicitly implemented.
+- Full Stripe payloads and card/payment-method details are not stored in the CRM tables.
+- Hosted Invoice Page URLs are server-side CRM data protected by RLS and must never be written to logs.
+
+Phase 3 activation checklist:
+
+1. Apply `database/migrations/003_crm_payment_recovery.sql` in the Supabase SQL editor.
+2. Verify all three tables and the atomic claim function exist.
+3. Run database constraint checks using synthetic records inside a transaction that is rolled back.
+4. Deploy the Phase 3 code only after the migration is present.
+5. Keep `STRIPE_PAYMENT_RECOVERY_ENABLED=false`; Phase 3 alone must not contact a customer.
+
+Phase 3 database verification completed on 2026-08-12:
+
+- All three tables exist remotely with the expected columns and initially contained zero rows.
+- `claim_payment_recovery_message` exists and is callable by the server-side service role.
+- The paired Slack identity constraint rejected a workspace ID without a user ID (`23514`).
+- The nonnegative amount constraint rejected a negative invoice balance (`23514`).
+- The unique case/channel/step constraint rejected a duplicate email job (`23505`).
+- The first atomic claim changed the test job to `sending` and incremented `attempt_count` to `1`.
+- A second claim of the same job returned zero rows, proving concurrent workers cannot both claim it through this function.
+- The uniquely labelled synthetic customer, case, and message were removed after verification.
+- Post-verification row counts are zero for `crm_customers`, `payment_recovery_cases`, and `payment_recovery_messages`.
+- The Phase 2 Stripe webhook ledger and its pending sandbox event were not modified.
 
 ### Phase 4 — Transactional email
 

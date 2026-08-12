@@ -326,6 +326,154 @@ async function enqueueStripeWebhookEvent(eventRecord) {
   return { duplicate: false, ...data };
 }
 
+// ─── CRM and payment recovery ────────────────────────────────────────────────
+
+async function upsertCrmCustomer(customerRecord) {
+  const { data, error } = await supabase
+    .from('crm_customers')
+    .upsert(customerRecord, { onConflict: 'stripe_customer_id' })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function getCrmCustomerByStripeId(stripeCustomerId) {
+  const { data, error } = await supabase
+    .from('crm_customers')
+    .select('*')
+    .eq('stripe_customer_id', stripeCustomerId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function setCrmCustomerSlackIdentity(customerId, slackTeamId, slackUserId) {
+  const { data, error } = await supabase
+    .from('crm_customers')
+    .update({
+      slack_team_id: slackTeamId,
+      slack_user_id: slackUserId,
+      slack_enabled: Boolean(slackTeamId && slackUserId),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', customerId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function upsertPaymentRecoveryCase(caseRecord) {
+  const { data, error } = await supabase
+    .from('payment_recovery_cases')
+    .upsert(caseRecord, { onConflict: 'stripe_invoice_id' })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function getPaymentRecoveryCaseByInvoiceId(stripeInvoiceId) {
+  const { data, error } = await supabase
+    .from('payment_recovery_cases')
+    .select('*, customer:crm_customer_id(*)')
+    .eq('stripe_invoice_id', stripeInvoiceId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function schedulePaymentRecoveryMessage(messageRecord) {
+  const { data, error } = await supabase
+    .from('payment_recovery_messages')
+    .upsert(messageRecord, {
+      onConflict: 'recovery_case_id,channel,step_number',
+      ignoreDuplicates: true,
+    })
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+
+  if (data) return { duplicate: false, message: data };
+  const { data: existing, error: existingError } = await supabase
+    .from('payment_recovery_messages')
+    .select('*')
+    .eq('recovery_case_id', messageRecord.recovery_case_id)
+    .eq('channel', messageRecord.channel)
+    .eq('step_number', messageRecord.step_number)
+    .single();
+  if (existingError) throw existingError;
+  return { duplicate: true, message: existing };
+}
+
+async function getDuePaymentRecoveryMessages(limit = 100) {
+  const { data, error } = await supabase
+    .from('payment_recovery_messages')
+    .select('*, recovery_case:recovery_case_id(*, customer:crm_customer_id(*))')
+    .in('status', ['queued', 'failed'])
+    .lte('scheduled_for', new Date().toISOString())
+    .order('scheduled_for', { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []).filter(message => message.recovery_case?.state === 'open');
+}
+
+async function markPaymentRecoveryMessageSending(id) {
+  const { data, error } = await supabase
+    .rpc('claim_payment_recovery_message', { p_message_id: id })
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function markPaymentRecoveryMessageSent(id, providerMessageId = null) {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('payment_recovery_messages')
+    .update({
+      status: 'sent',
+      provider_message_id: providerMessageId,
+      last_error: null,
+      sent_at: now,
+      updated_at: now,
+    })
+    .eq('id', id)
+    .eq('status', 'sending')
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function markPaymentRecoveryMessageFailed(id, errorMessage) {
+  const { data, error } = await supabase
+    .from('payment_recovery_messages')
+    .update({
+      status: 'failed',
+      last_error: String(errorMessage || 'Unknown delivery error').slice(0, 1000),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('status', 'sending')
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function cancelPaymentRecoveryMessages(recoveryCaseId) {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('payment_recovery_messages')
+    .update({ status: 'cancelled', cancelled_at: now, updated_at: now })
+    .eq('recovery_case_id', recoveryCaseId)
+    .in('status', ['queued', 'failed'])
+    .select();
+  if (error) throw error;
+  return data || [];
+}
+
 module.exports = {
   supabase,
   getMailboxByEmail,
@@ -346,4 +494,15 @@ module.exports = {
   updateProspectStatus,
   saveProspectReply,
   enqueueStripeWebhookEvent,
+  upsertCrmCustomer,
+  getCrmCustomerByStripeId,
+  setCrmCustomerSlackIdentity,
+  upsertPaymentRecoveryCase,
+  getPaymentRecoveryCaseByInvoiceId,
+  schedulePaymentRecoveryMessage,
+  getDuePaymentRecoveryMessages,
+  markPaymentRecoveryMessageSending,
+  markPaymentRecoveryMessageSent,
+  markPaymentRecoveryMessageFailed,
+  cancelPaymentRecoveryMessages,
 };
