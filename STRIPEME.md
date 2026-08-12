@@ -624,6 +624,8 @@ Phase 6 local verification:
 - Migration 005 was applied in Supabase and verified on 2026-08-12: the reconciliation and failure-alert columns are readable, and `claim_payment_recovery_failure_alert` is callable. A nonexistent message-ID probe returned zero rows and made no mutation.
 - Production was verified on commit `94cb7c3`: reconciliation, reminders, customer email, customer Slack delivery, and failure alerts all reported disabled; no events were pending and no delivery occurred.
 - Reconciliation-only production gate passed on 2026-08-12 with `STRIPE_ALLOW_LIVE_EVENTS=false`: zero open cases checked, zero missed invoices discovered, and zero failures. The database audit found three recovery cases, all resolved, and two historical messages, both sent; there were no open cases or queued/failed messages. All reminder and delivery stages remained disabled.
+- Missed-webhook discovery gate passed with webhook processing disabled and all delivery disabled. Sandbox subscription `sub_1U3ZAGAe3OxHSCAxO0A9L4yR` produced open invoice `in_1U3ZAGAe3OxHSCAxfIYvW2f4` and PaymentIntent `pi_3U3ZAHAe3OxHSCAx06etQjDU` in `requires_action`; reconciliation discovered exactly one actionable case with zero failures.
+- A second reconciliation pass checked the existing case and discovered zero new cases. The database retained exactly two unique step-1 jobs (one email and one Slack), both queued at zero attempts with no provider IDs. Both original webhook events remained pending, establishing the precondition for the delayed-webhook deduplication gate.
 
 ### Phase 7 — Testing and controlled rollout
 
