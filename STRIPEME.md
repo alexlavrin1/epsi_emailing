@@ -640,6 +640,7 @@ Live observation checkpoint (2026-08-13):
 - The first live key/webhook configuration was discovered to belong to the wrong Stripe workspace and is invalidated as acceptance evidence.
 - After replacing both credentials with ones from the correct Stripe workspace, the corrected live restricted key was verified as an `rk_live_` key with successful read access to Customers, Events, Invoices, PaymentIntents, and Subscriptions. All five API responses used version `2022-11-15`, matching the corrected webhook destination.
 - One authenticated observation cycle against the corrected configuration completed with zero failures and no delivery. No live webhook event has reached the Supabase event ledger yet, so the corrected live endpoint signing secret remains pending verification through a real live event delivery or resend.
+- The corrected live webhook signing secret passed a controlled signature-only probe on 2026-08-13. A locally generated `invoice.created` snapshot payload signed with the configured secret received HTTP 200 and result `ignored`; because the type is outside the engine allowlist, no webhook-ledger row or CRM mutation was created. A genuine subscribed live event is still required for full end-to-end event retrieval acceptance.
 
 Automated coverage:
 
