@@ -551,7 +551,7 @@ Phase 5 controlled rollout evidence (2026-08-12):
 
 ### Phase 6 — Reconciliation and reminder scheduler
 
-Status: Deployed on 2026-08-12. Migration 005 and the safe disabled-state gate are verified; controlled sandbox reconciliation/reminder acceptance is pending.
+Status: Complete on 2026-08-13. Deployed and validated end to end in Stripe sandbox, including reconciliation, reminders, stop-on-paid, and deduplicated internal failure alerts.
 
 The existing authenticated `GET /api/cron/payment-recovery` endpoint now runs six ordered stages:
 
@@ -630,6 +630,7 @@ Phase 6 local verification:
 - Final-reminder scheduling gate passed with delivery disabled. A due cursor was seeded only on the known sandbox case; one cycle reported one due case, two scheduled jobs, and zero failures. The database then contained exactly one email and one Slack job for each of steps 1 and 2, all queued at zero attempts. The cursor was cleared, the maximum step remained 2, and a second cycle reported zero due and zero scheduled.
 - Stop-on-paid gate passed after completing the sandbox invoice. Stripe reported `paid`, zero amount remaining, and PaymentIntent `succeeded`; the terminal cycle processed two events with zero failures. The case resolved with reason `paid`, and all four step-1/step-2 jobs changed to `cancelled` at zero attempts with no provider IDs or sent timestamps. No reminder or customer delivery occurred.
 - Failure-alert dry-run gate passed using one clearly labeled synthetic exhausted email job (`PHASE6_SYNTHETIC_ALERT_TEST`) attached to the resolved sandbox case. Production reported one due alert and zero sends; the durable record remained `pending` with zero alert attempts, no provider ID, no alert error, and no alerted timestamp. Customer delivery and reminders remained disabled.
+- Controlled real failure-alert delivery passed on 2026-08-13: one due synthetic alert produced one internal Slack channel message with zero failures. The durable alert state is `sent` with exactly one attempt, no error, and provider ID `C0BPS7160TB:1786607783.825219`. A subsequent cycle found zero due alerts and sent zero, proving deduplication. Phase 6 acceptance is complete.
 
 ### Phase 7 — Testing and controlled rollout
 
