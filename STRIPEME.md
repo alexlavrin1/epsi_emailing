@@ -634,6 +634,12 @@ Phase 6 local verification:
 
 ### Phase 7 — Testing and controlled rollout
 
+Live observation checkpoint (2026-08-13):
+
+- Vercel Production runs event ingestion, event processing, and reconciliation with live events allowed, while payment-recovery scheduling, reminders, transactional email, customer Slack delivery, and failure alerts remain disabled.
+- The live restricted key was verified as an `rk_live_` key with successful read access to Customers, Events, Invoices, PaymentIntents, and Subscriptions. All five API responses used version `2023-10-16`.
+- One authenticated observation cycle completed with zero failures and no delivery. No live webhook event has reached the Supabase event ledger yet, so the live endpoint signing secret remains pending verification through a real live event delivery or resend.
+
 Automated coverage:
 
 - 3DS-required versus ordinary payment failure classification.
