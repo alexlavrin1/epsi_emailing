@@ -637,8 +637,9 @@ Phase 6 local verification:
 Live observation checkpoint (2026-08-13):
 
 - Vercel Production runs event ingestion, event processing, and reconciliation with live events allowed, while payment-recovery scheduling, reminders, transactional email, customer Slack delivery, and failure alerts remain disabled.
-- The live restricted key was verified as an `rk_live_` key with successful read access to Customers, Events, Invoices, PaymentIntents, and Subscriptions. All five API responses used version `2023-10-16`.
-- One authenticated observation cycle completed with zero failures and no delivery. No live webhook event has reached the Supabase event ledger yet, so the live endpoint signing secret remains pending verification through a real live event delivery or resend.
+- The first live key/webhook configuration was discovered to belong to the wrong Stripe workspace and is invalidated as acceptance evidence.
+- After replacing both credentials with ones from the correct Stripe workspace, the corrected live restricted key was verified as an `rk_live_` key with successful read access to Customers, Events, Invoices, PaymentIntents, and Subscriptions. All five API responses used version `2022-11-15`, matching the corrected webhook destination.
+- One authenticated observation cycle against the corrected configuration completed with zero failures and no delivery. No live webhook event has reached the Supabase event ledger yet, so the corrected live endpoint signing secret remains pending verification through a real live event delivery or resend.
 
 Automated coverage:
 
