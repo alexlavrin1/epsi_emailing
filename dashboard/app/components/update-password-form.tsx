@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 
 export function UpdatePasswordForm() {
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -28,7 +30,8 @@ export function UpdatePasswordForm() {
         setError(result.error ?? "The password could not be updated. Request a new link and try again.");
         return;
       }
-      window.location.assign("/?password_updated=1");
+      router.replace("/?password_updated=1");
+      router.refresh();
     } catch {
       setError("The dashboard could not be reached. Please try again.");
     } finally {

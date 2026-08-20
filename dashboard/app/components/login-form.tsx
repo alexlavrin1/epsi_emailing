@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 
 export function LoginForm({ notice }: { notice?: string }) {
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -22,7 +24,8 @@ export function LoginForm({ notice }: { notice?: string }) {
         setError(result.error ?? "Sign in failed. Please try again.");
         return;
       }
-      window.location.assign("/dashboard");
+      router.push("/dashboard");
+      router.refresh();
     } catch {
       setError("The dashboard could not be reached. Please try again.");
     } finally {

@@ -1,18 +1,52 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import test from "node:test";
+import { fileURLToPath } from "node:url";
+import test, { after, before } from "node:test";
 
 const root = new URL("../", import.meta.url);
+const port = 39000 + (process.pid % 1000);
+const origin = `http://127.0.0.1:${port}`;
+let server;
+
+before(async () => {
+  const nextBin = fileURLToPath(new URL("../node_modules/next/dist/bin/next", import.meta.url));
+  server = spawn(process.execPath, [nextBin, "start", "--hostname", "127.0.0.1", "--port", String(port)], {
+    cwd: fileURLToPath(root),
+    env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let lastError;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    if (server.exitCode !== null) {
+      const stderr = await new Promise((resolve) => {
+        let output = "";
+        server.stderr.on("data", (chunk) => { output += chunk; });
+        server.stderr.on("end", () => resolve(output));
+      });
+      throw new Error(`Next.js test server exited early: ${stderr}`);
+    }
+    try {
+      const response = await fetch(origin);
+      if (response.ok) return;
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw lastError ?? new Error("Next.js test server did not become ready.");
+});
+
+after(() => {
+  server?.kill("SIGTERM");
+});
 
 async function render(pathname = "/") {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${pathname}`);
-  const { default: worker } = await import(workerUrl.href);
-  return worker.fetch(
-    new Request(`http://localhost${pathname}`, { headers: { accept: "text/html" }, redirect: "manual" }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
+  return fetch(`${origin}${pathname}`, {
+    headers: { accept: "text/html" },
+    redirect: "manual",
+  });
 }
 
 test("server-renders the EpsiFlow invite-only sign-in screen", async () => {

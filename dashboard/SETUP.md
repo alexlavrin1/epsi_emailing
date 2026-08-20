@@ -51,3 +51,7 @@ While the project has exactly one organization, new engine records inherit that 
 ## 4. Run locally
 
 From the `dashboard/` directory, run `npm run dev`. Unauthenticated visitors see the sign-in screen. Authenticated users without an active organization membership see an access-pending screen.
+
+## 5. Deploy with Vercel
+
+Create a separate Vercel project from the EpsiFlow repository and set its **Root Directory** to `dashboard`. Vercel should detect **Next.js** automatically. Add the three values from `.env.example` to the Production environment, then redeploy after any environment-variable change.
