@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import Link from "next/link";
 
 export function LoginForm({ notice }: { notice?: string }) {
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +39,7 @@ export function LoginForm({ notice }: { notice?: string }) {
       <div className="field">
         <div className="field-heading">
           <label htmlFor="password">Password</label>
-          <Link className="inline-link" href="/forgot-password">Forgot password?</Link>
+          <a className="inline-link" href="/forgot-password">Forgot password?</a>
         </div>
         <input id="password" name="password" type="password" autoComplete="current-password" placeholder="Enter your password" minLength={8} required />
       </div>
