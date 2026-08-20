@@ -96,6 +96,13 @@ test("keeps privileged credentials out of dashboard source", async () => {
   assert.match(source, /NEXT_PUBLIC_SUPABASE_ANON_KEY/);
 });
 
+test("uses a cookie-backed PKCE client for password recovery", async () => {
+  const source = await readFile(new URL("app/api/auth/password-reset/route.ts", root), "utf8");
+  assert.match(source, /createSupabaseRouteClient\(request\)/);
+  assert.match(source, /applyCookies\(NextResponse\.json\(\{ ok: true \}\)\)/);
+  assert.doesNotMatch(source, /createClient\(/);
+});
+
 test("defines tenant RLS and an append-only audit log", async () => {
   const migration = await readFile(new URL("../database/migrations/006_dashboard_security_foundation.sql", root), "utf8");
   assert.match(migration, /ALTER TABLE organizations ENABLE ROW LEVEL SECURITY/i);

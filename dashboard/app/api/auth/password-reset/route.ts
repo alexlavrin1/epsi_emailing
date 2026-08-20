@@ -1,6 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
-import { requirePublicSupabaseConfig } from "../../../../lib/env";
+import { createSupabaseRouteClient } from "../../../../lib/supabase-route";
 
 function recoveryRedirect(request: NextRequest) {
   const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
@@ -20,20 +19,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
   }
 
-  let config;
-  try { config = requirePublicSupabaseConfig(); }
-  catch { return NextResponse.json({ error: "Authentication has not been configured yet." }, { status: 503 }); }
+  try {
+    // The SSR client uses PKCE and stores its verifier in an HTTP-only cookie.
+    // The callback needs that verifier to exchange the emailed code for a session.
+    const { client, applyCookies } = createSupabaseRouteClient(request);
+    const { error } = await client.auth.resetPasswordForEmail(email, {
+      redirectTo: recoveryRedirect(request),
+    });
+    if (error) {
+      const rateLimited = error.status === 429 || error.code?.includes("rate_limit");
+      console.error("Password reset request failed", { status: error.status, code: error.code });
+      return NextResponse.json(
+        { error: rateLimited ? "Too many reset emails were requested. Wait before trying again." : "We could not send the email. Please try again shortly." },
+        { status: rateLimited ? 429 : 502 },
+      );
+    }
 
-  const supabase = createClient(config.url, config.anonKey, {
-    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
-  });
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: recoveryRedirect(request),
-  });
-  if (error) {
-    return NextResponse.json({ error: "We could not send the email. Wait a moment and try again." }, { status: 429 });
+    // The same response is returned whether an account exists, preventing user enumeration.
+    return applyCookies(NextResponse.json({ ok: true }));
+  } catch {
+    return NextResponse.json({ error: "Authentication is temporarily unavailable." }, { status: 503 });
   }
-
-  // The same response is returned whether an account exists, preventing user enumeration.
-  return NextResponse.json({ ok: true });
 }
