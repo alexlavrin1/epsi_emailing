@@ -17,7 +17,7 @@
     "map:slack": "node scripts/map_crm_customer_slack.js",
     "check:slack": "node scripts/check_slack.js",
     "test:email": "node scripts/send_test_email.js",
-    "test": "node --test"
+    "test": "node --test test/*.test.js"
   },
   "keywords": [],
   "author": "",
