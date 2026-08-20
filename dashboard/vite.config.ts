@@ -1,6 +1,6 @@
 import { sites } from "@openai/sites-vite-plugin";
 import vinext from "vinext";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import hostingConfig from "./.openai/hosting.json";
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
@@ -33,7 +33,13 @@ const localBindingConfig = {
     : [],
 };
 
-export default defineConfig(async () => {
+export default defineConfig(async ({ mode }) => {
+  // Local development reuses only the browser-safe dashboard values from the
+  // engine's root env file. Privileged engine secrets are never loaded here.
+  const publicDashboardEnv = loadEnv(mode, "..", "NEXT_PUBLIC_");
+  for (const [key, value] of Object.entries(publicDashboardEnv)) {
+    process.env[key] ??= value;
+  }
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= "false";

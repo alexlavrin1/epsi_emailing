@@ -5,9 +5,14 @@ import { getCurrentUser } from "../lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ password_updated?: string }>;
+}) {
   const user = await getCurrentUser();
   if (user) redirect("/dashboard");
+  const params = await searchParams;
 
   return (
     <main className="login-shell" id="main-content">
@@ -30,7 +35,7 @@ export default async function Home() {
           <div className="status-pill"><span /> Protected workspace</div>
           <h2>Welcome back</h2>
           <p className="muted">Sign in with your invited EpsiFlow account.</p>
-          <LoginForm />
+          <LoginForm notice={params.password_updated === "1" ? "Password updated. You can now sign in." : undefined} />
           <p className="login-note">Accounts are created by an administrator. Contact your workspace owner if you need access.</p>
         </div>
       </section>

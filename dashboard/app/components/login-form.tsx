@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 
-export function LoginForm() {
+export function LoginForm({ notice }: { notice?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -37,9 +38,13 @@ export function LoginForm() {
         <input id="email" name="email" type="email" autoComplete="email" placeholder="you@company.com" required />
       </div>
       <div className="field">
-        <label htmlFor="password">Password</label>
+        <div className="field-heading">
+          <label htmlFor="password">Password</label>
+          <Link className="inline-link" href="/forgot-password">Forgot password?</Link>
+        </div>
         <input id="password" name="password" type="password" autoComplete="current-password" placeholder="Enter your password" minLength={8} required />
       </div>
+      {notice ? <p className="form-success" role="status">{notice}</p> : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       <button className="primary-button" type="submit" disabled={pending}>
         {pending ? "Signing in…" : "Sign in securely"}

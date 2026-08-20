@@ -13,8 +13,12 @@ In Supabase Auth settings:
 - Disable public user registration.
 - Create or invite the initial administrator.
 - Require email confirmation.
+- Set **Site URL** to the deployed dashboard origin (for example, `https://your-dashboard.example.com`).
+- Add `https://your-dashboard.example.com/auth/callback` to **Redirect URLs**. For local development, also add `http://localhost:3000/auth/callback` (or the port printed by the dev server).
 - Configure short session lifetimes appropriate for an internal tool.
 - Enable MFA for administrators before production use.
+
+Set `NEXT_PUBLIC_SITE_URL` to the same deployed dashboard origin. Password recovery emails use the allowlisted `/auth/callback` URL, which creates a temporary recovery session before the user chooses a password.
 
 ## 3. Provision the first organization
 
