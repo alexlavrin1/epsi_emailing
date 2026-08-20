@@ -8,6 +8,7 @@
     "dev": "nodemon src/index.js",
     "setup:mailbox": "node scripts/setup_mailbox.js",
     "setup:campaign": "node scripts/setup_campaign_steps.js",
+    "set:dashboard-password": "node scripts/set_dashboard_password.js",
     "sync:instantly": "node scripts/sync_instantly_leads.js",
     "sync:instantly:dry": "node scripts/sync_instantly_leads.js --dry-run",
     "preflight": "node scripts/preflight.js",
