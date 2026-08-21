@@ -1,42 +1,48 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Activity, CheckCircle2, LockKeyhole, ShieldCheck } from "lucide-react";
+import { AlertCircle, ArrowRight, Banknote, MailCheck, Megaphone, Send, Users } from "lucide-react";
 import { requireMembership } from "../../lib/auth";
+import { createSupabaseServerClient } from "../../lib/supabase-server";
+import { formatWhen, getOverviewData } from "../../lib/dashboard-data";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Dashboard" };
+export const metadata: Metadata = { title: "Operations overview" };
+
+const metricIcons = [Users, Megaphone, MailCheck, Banknote];
 
 export default async function DashboardPage() {
   const { user, membership } = await requireMembership();
-  if (!membership) {
-    return (
-      <main className="pending-shell" id="main-content"><section className="pending-card">
-        <LockKeyhole aria-hidden="true" size={28} /><p className="eyebrow">Access pending</p>
-        <h1>Your account is authenticated.</h1>
-        <p>{user.email} has not yet been assigned to an EpsiFlow organization. Ask an administrator to add your membership.</p>
-        <form action="/api/auth/logout" method="post"><button className="secondary-button" type="submit">Sign out</button></form>
-      </section></main>
-    );
-  }
-
+  if (!membership) return null;
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) throw new Error("Dashboard authentication is not configured.");
+  const data = await getOverviewData(supabase, membership.organization.id);
   const firstName = user.user_metadata?.full_name?.split(" ")[0] || user.email?.split("@")[0] || "Operator";
+  const metrics = [
+    { label: "Known contacts", value: data.metrics.contacts, detail: "Prospects and clients" },
+    { label: "Active campaigns", value: data.metrics.activeCampaigns, detail: `${data.metrics.scheduledSends} sends scheduled` },
+    { label: "Replies received", value: data.metrics.replies, detail: "Across outreach" },
+    { label: "Open recoveries", value: data.metrics.openRecoveries, detail: "Payment cases" },
+  ];
+
   return (
-    <div className="app-shell">
-      <aside className="sidebar" aria-label="Primary navigation">
-        <Link className="brand" href="/dashboard" aria-label="EpsiFlow dashboard"><span className="brand-mark" aria-hidden="true">E</span><span>EpsiFlow</span></Link>
-        <nav><Link className="nav-link active" href="/dashboard"><Activity size={18} />Overview</Link><span className="nav-section">Coming next</span><span className="nav-link disabled">CRM</span><span className="nav-link disabled">Inbox</span><span className="nav-link disabled">Automations</span></nav>
-        <div className="sidebar-footer"><span className="role-badge">{membership.role}</span><strong>{user.email}</strong><form action="/api/auth/logout" method="post"><button className="text-button" type="submit">Sign out</button></form></div>
-      </aside>
-      <main className="dashboard-main" id="main-content">
-        <header className="topbar"><div><p className="eyebrow">{membership.organization.name}</p><h1>Good to see you, {firstName}.</h1></div><div className="system-status"><span /> Engine boundary protected</div></header>
-        <section className="foundation-hero" aria-labelledby="foundation-heading"><div><p className="eyebrow">Phase 1</p><h2 id="foundation-heading">Security foundation is active.</h2><p>Identity, organization access, and server-side permission checks now sit between operators and sensitive EpsiFlow data.</p></div><ShieldCheck size={52} aria-hidden="true" /></section>
-        <section className="foundation-grid" aria-label="Foundation status">
-          {[["Authentication", "Invite-only Supabase sessions"], ["Authorization", `${membership.role} access in ${membership.organization.name}`], ["Data isolation", "Organization-scoped RLS policies"], ["Audit trail", "Append-only security events"]].map(([title, detail]) => (
-            <article className="foundation-card" key={title}><div className="card-icon"><CheckCircle2 size={19} aria-hidden="true" /></div><div><h3>{title}</h3><p>{detail}</p></div><span className="ready-label">Ready</span></article>
-          ))}
-        </section>
-        <section className="next-section"><div><p className="eyebrow">Next milestone</p><h2>Read-only CRM overview</h2></div><p>Phase 2 will connect client records, replies, payment recovery, and outreach activity into one timeline.</p></section>
-      </main>
-    </div>
+    <main className="dashboard-main" id="main-content">
+      <header className="topbar"><div><p className="eyebrow">{membership.organization.name} · Operations</p><h1>Good to see you, {firstName}.</h1><p className="page-summary">A live, read-only view of clients, outreach, replies, and payment recovery.</p></div><div className="system-status"><span /> Data connected</div></header>
+
+      <section className="metric-grid" aria-label="Workspace metrics">
+        {metrics.map((metric, index) => { const Icon = metricIcons[index]; return <article className="metric-card" key={metric.label}><div className="metric-heading"><span>{metric.label}</span><Icon size={18} aria-hidden="true" /></div><strong>{metric.value.toLocaleString()}</strong><p>{metric.detail}</p></article>; })}
+      </section>
+
+      <section className="content-grid">
+        <article className="panel attention-panel" aria-labelledby="attention-heading">
+          <div className="panel-heading"><div><p className="eyebrow">Priority</p><h2 id="attention-heading">Attention queue</h2></div><span className="count-badge">{data.attention.length}</span></div>
+          {data.attention.length ? <div className="attention-list">{data.attention.map(item => <Link className="attention-item" href={item.href} key={item.id}><span className={`attention-dot ${item.tone}`} aria-hidden="true" /><span><strong>{item.title}</strong><small>{item.detail}</small></span><ArrowRight size={17} aria-hidden="true" /></Link>)}</div> : <div className="empty-state"><AlertCircle size={22} aria-hidden="true" /><strong>No urgent exceptions</strong><p>Failed deliveries and overdue payment actions will appear here.</p></div>}
+        </article>
+
+        <article className="panel" aria-labelledby="activity-heading">
+          <div className="panel-heading"><div><p className="eyebrow">Live feed</p><h2 id="activity-heading">Recent activity</h2></div><Link className="panel-link" href="/dashboard/crm">View CRM</Link></div>
+          {data.activity.length ? <ol className="activity-list">{data.activity.map(item => <li key={item.id}><span className={`activity-icon ${item.type}`}><Send size={15} aria-hidden="true" /></span><Link href={item.href}><strong>{item.title}</strong><small>{item.detail}</small></Link><time dateTime={item.occurredAt}>{formatWhen(item.occurredAt)}</time></li>)}</ol> : <div className="empty-state"><Send size={22} aria-hidden="true" /><strong>No client activity yet</strong><p>Replies, outreach, and payment events will form a unified timeline.</p></div>}
+        </article>
+      </section>
+    </main>
   );
 }

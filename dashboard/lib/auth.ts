@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "./supabase-server";
 
@@ -8,12 +9,12 @@ export type DashboardMembership = {
   organization: { id: string; name: string; slug: string };
 };
 
-export async function getCurrentUser() {
+export const getCurrentUser = cache(async function getCurrentUser() {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return null;
   const { data, error } = await supabase.auth.getUser();
   return error ? null : data.user;
-}
+});
 
 export async function requireUser() {
   const user = await getCurrentUser();
@@ -21,7 +22,7 @@ export async function requireUser() {
   return user;
 }
 
-export async function getMembership(userId: string): Promise<DashboardMembership | null> {
+export const getMembership = cache(async function getMembership(userId: string): Promise<DashboardMembership | null> {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return null;
   const { data, error } = await supabase
@@ -35,7 +36,7 @@ export async function getMembership(userId: string): Promise<DashboardMembership
   const organization = Array.isArray(data.organization) ? data.organization[0] : data.organization;
   if (!organization) return null;
   return { id: data.id, role: data.role, status: data.status, organization } as DashboardMembership;
-}
+});
 
 export async function requireMembership() {
   const user = await requireUser();

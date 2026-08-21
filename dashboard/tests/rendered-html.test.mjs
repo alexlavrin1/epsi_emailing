@@ -103,6 +103,23 @@ test("uses a cookie-backed PKCE client for password recovery", async () => {
   assert.doesNotMatch(source, /createClient\(/);
 });
 
+test("ships the read-only Phase 2 CRM surfaces", async () => {
+  const files = [
+    "app/dashboard/page.tsx",
+    "app/dashboard/crm/page.tsx",
+    "app/dashboard/companies/page.tsx",
+    "app/dashboard/inbox/page.tsx",
+    "app/dashboard/crm/[kind]/[id]/page.tsx",
+    "lib/dashboard-data.ts",
+  ];
+  const source = (await Promise.all(files.map(file => readFile(new URL(file, root), "utf8")))).join("\n");
+  assert.match(source, /Attention queue/);
+  assert.match(source, /Contacts and clients/);
+  assert.match(source, /Activity timeline/);
+  assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(source, /\.insert\(|\.update\(|\.delete\(/);
+});
+
 test("defines tenant RLS and an append-only audit log", async () => {
   const migration = await readFile(new URL("../database/migrations/006_dashboard_security_foundation.sql", root), "utf8");
   assert.match(migration, /ALTER TABLE organizations ENABLE ROW LEVEL SECURITY/i);
