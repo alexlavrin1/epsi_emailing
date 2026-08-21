@@ -139,3 +139,21 @@ test("defines tenant RLS and an append-only audit log", async () => {
   assert.match(migration, /dashboard_is_org_member/i);
   assert.match(migration, /dashboard_assign_single_organization/i);
 });
+
+test("routes Phase 3 contact writes through audited database functions", async () => {
+  const [migration, actions, form] = await Promise.all([
+    readFile(new URL("../database/migrations/007_safe_crm_operator_actions.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/crm/[kind]/[id]/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/contact-actions.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /CREATE POLICY crm_contact_notes_member_read[\s\S]*FOR SELECT/i);
+  assert.doesNotMatch(migration, /CREATE POLICY crm_contact_(?:notes|tasks|overrides).*FOR (?:INSERT|UPDATE|DELETE)/i);
+  assert.match(migration, /dashboard_set_lifecycle_stage[\s\S]*INSERT INTO audit_events/i);
+  assert.match(migration, /dashboard_add_contact_note[\s\S]*INSERT INTO audit_events/i);
+  assert.match(migration, /dashboard_create_contact_task[\s\S]*INSERT INTO audit_events/i);
+  assert.match(actions, /\.rpc\("dashboard_set_lifecycle_stage"/);
+  assert.match(actions, /revalidatePath\("\/dashboard\/pipeline"\)/);
+  assert.doesNotMatch(actions + form, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(form, /Operator actions are ready to install/);
+  assert.match(form, /Saving…/);
+});

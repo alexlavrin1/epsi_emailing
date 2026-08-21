@@ -117,6 +117,13 @@ export type ContactDetail = {
   timeline: Array<{ id: string; type: string; title: string; detail: string; occurredAt: string }>;
 };
 
+export type ContactActionData = {
+  ready: boolean;
+  lifecycleStage: LifecycleStage | null;
+  notes: Array<{ id: string; body: string; createdAt: string }>;
+  tasks: Array<{ id: string; title: string; status: "open" | "completed"; dueAt: string | null; completedAt: string | null; createdAt: string }>;
+};
+
 function one<T>(value: Related<T>): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
 }
@@ -288,12 +295,16 @@ export async function getSlackHealth(supabase: SupabaseClient, organizationId: s
 }
 
 export async function getPipeline(supabase: SupabaseClient, organizationId: string): Promise<PipelineStage[]> {
-  const [prospects, customers] = await Promise.all([
+  const [prospects, customers, overrides] = await Promise.all([
     supabase.from("prospects").select("id,email,first_name,last_name,company,status,updated_at,outreach_sends(status,sent_at,replied_at,updated_at)").eq("organization_id", organizationId).limit(500),
     supabase.from("crm_customers").select("id,email,name,status,email_enabled,slack_enabled,updated_at,payment_recovery_cases(state,opened_at,resolved_at,updated_at)").eq("organization_id", organizationId).limit(500),
+    supabase.from("crm_contact_overrides").select("contact_kind,contact_id,lifecycle_stage").eq("organization_id", organizationId),
   ]);
   logQueryError("pipeline prospects", prospects.error);
   logQueryError("pipeline customers", customers.error);
+  if (overrides.error && !overrides.error.message.includes("crm_contact_overrides")) logQueryError("pipeline lifecycle overrides", overrides.error);
+
+  const stageOverrides = new Map((overrides.data ?? []).map(item => [`${item.contact_kind}:${item.contact_id}`, item.lifecycle_stage as LifecycleStage]));
 
   const contacts = new Map<string, PipelineContact>();
   for (const prospect of prospects.data ?? []) {
@@ -308,7 +319,7 @@ export async function getPipeline(supabase: SupabaseClient, organizationId: stri
       name: [prospect.first_name, prospect.last_name].filter(Boolean).join(" ") || prospect.email,
       email: prospect.email,
       company: prospect.company || "—",
-      stage: suppressed ? "suppressed" : replied ? "interested" : "prospect",
+      stage: stageOverrides.get(`prospect:${prospect.id}`) ?? (suppressed ? "suppressed" : replied ? "interested" : "prospect"),
       channels: "Email outreach",
       lastActivity: latestDate([prospect.updated_at, ...sends.flatMap(send => [send.updated_at, send.sent_at, send.replied_at])]),
     });
@@ -318,7 +329,7 @@ export async function getPipeline(supabase: SupabaseClient, organizationId: stri
     const cases = (customer.payment_recovery_cases ?? []) as Array<{ state: string; opened_at: string; resolved_at: string | null; updated_at: string }>;
     const key = customer.email ? `email:${customer.email.trim().toLowerCase()}` : `customer:${customer.id}`;
     const existing = contacts.get(key);
-    const stage: LifecycleStage = customer.status === "suppressed" ? "suppressed" : cases.some(item => item.state === "open") ? "at_risk" : "client";
+    const stage: LifecycleStage = stageOverrides.get(`customer:${customer.id}`) ?? (customer.status === "suppressed" ? "suppressed" : cases.some(item => item.state === "open") ? "at_risk" : "client");
     contacts.set(key, {
       key,
       id: customer.id,
@@ -343,6 +354,27 @@ export async function getPipeline(supabase: SupabaseClient, organizationId: stri
     ...stage,
     contacts: [...contacts.values()].filter(contact => contact.stage === stage.id).sort((a, b) => b.lastActivity.localeCompare(a.lastActivity)),
   }));
+}
+
+export async function getContactActionData(supabase: SupabaseClient, organizationId: string, kind: string, id: string): Promise<ContactActionData> {
+  if (!(["prospect", "customer"] as string[]).includes(kind)) return { ready: false, lifecycleStage: null, notes: [], tasks: [] };
+  const [override, notes, tasks] = await Promise.all([
+    supabase.from("crm_contact_overrides").select("lifecycle_stage").eq("organization_id", organizationId).eq("contact_kind", kind).eq("contact_id", id).maybeSingle(),
+    supabase.from("crm_contact_notes").select("id,body,created_at").eq("organization_id", organizationId).eq("contact_kind", kind).eq("contact_id", id).order("created_at", { ascending: false }).limit(50),
+    supabase.from("crm_contact_tasks").select("id,title,status,due_at,completed_at,created_at").eq("organization_id", organizationId).eq("contact_kind", kind).eq("contact_id", id).order("status", { ascending: false }).order("due_at", { ascending: true, nullsFirst: false }).limit(50),
+  ]);
+  const ready = !override.error && !notes.error && !tasks.error;
+  if (ready) {
+    logQueryError("contact lifecycle override", override.error);
+    logQueryError("contact notes", notes.error);
+    logQueryError("contact tasks", tasks.error);
+  }
+  return {
+    ready,
+    lifecycleStage: (override.data?.lifecycle_stage as LifecycleStage | undefined) ?? null,
+    notes: (notes.data ?? []).map(note => ({ id: note.id, body: note.body, createdAt: note.created_at })),
+    tasks: (tasks.data ?? []).map(task => ({ id: task.id, title: task.title, status: task.status, dueAt: task.due_at, completedAt: task.completed_at, createdAt: task.created_at })),
+  };
 }
 
 export async function getContacts(supabase: SupabaseClient, organizationId: string, query = "", status = "all"): Promise<ContactRow[]> {
