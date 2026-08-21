@@ -163,11 +163,11 @@ Outcome: operators can understand client activity from one interface.
 
 ### Phase 3 — Safe operator actions
 
-Status: in progress. Lifecycle overrides, internal notes, follow-up tasks, guarded campaign pause/resume, and contact-level outreach stops are active through tenant-validated database functions. Every successful mutation appends an audit event in the same transaction; browser users retain read-only table policies and cannot write around those functions. Migrations `007_safe_crm_operator_actions.sql` and `008_safe_outreach_controls.sql` were applied and verified on 2026-08-21.
+Status: complete. Lifecycle overrides, internal notes, follow-up tasks, guarded campaign pause/resume, and contact-level outreach stops are active through tenant-validated database functions. Every successful mutation appends an audit event in the same transaction; browser users retain read-only table policies and cannot write around those functions. Migrations `007_safe_crm_operator_actions.sql` and `008_safe_outreach_controls.sql` were applied and verified on 2026-08-21.
 
 The third slice adds approval-gated manual email replies and controlled recovery-delivery retries. Drafts are inert until explicitly approved; approved work is atomically claimed and executed by the server-side engine, which retains provider credentials and existing recipient/payment safeguards. Migration `009_approved_replies_and_retries.sql` was applied and verified on 2026-08-21. Anonymous mutation attempts are denied, the backend queue claim is available, and authenticated mailbox reads are restricted to non-secret columns.
 
-The final slice adds a tenant-scoped, read-only audit-log dashboard with action, category, and time filters; exact timestamps; safe expandable metadata; and links back to affected records. Audit metadata is rendered through an explicit allowlist so future event payloads cannot accidentally expose credentials or unrestricted message content. Migration `010_lock_audit_log_writes.sql` removes direct browser inserts so only guarded server-side actions can append history; it is required before Phase 3 is complete.
+The final slice adds a tenant-scoped, read-only audit-log dashboard with action, category, and time filters; exact timestamps; safe expandable metadata; and links back to affected records. Audit metadata is rendered through an explicit allowlist so future event payloads cannot accidentally expose credentials or unrestricted message content. Migration `010_lock_audit_log_writes.sql` removes direct browser inserts so only guarded server-side actions can append history; it was applied and verified on 2026-08-21.
 
 - Notes and tasks
 - Lifecycle stage changes
