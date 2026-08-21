@@ -173,3 +173,23 @@ test("keeps outreach controls tenant-scoped, confirmed, and audited", async () =
   assert.match(campaignControls + contactControls, /window\.confirm/);
   assert.doesNotMatch(campaignActions + campaignControls + contactControls, /SUPABASE_SERVICE_ROLE_KEY/);
 });
+
+test("approval-gates replies and recovery retries without exposing mailbox tokens", async () => {
+  const [migration, actions, approvalControls, draftForm] = await Promise.all([
+    readFile(new URL("../database/migrations/009_approved_replies_and_retries.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/approvals/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/approval-controls.tsx", root), "utf8"),
+    readFile(new URL("app/components/reply-draft-form.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /REVOKE SELECT ON mailboxes FROM authenticated/i);
+  assert.doesNotMatch(migration, /GRANT SELECT \([^)]*oauth_token/i);
+  assert.match(migration, /status IN \('draft', 'queued', 'sending', 'sent', 'failed', 'cancelled'\)/i);
+  assert.match(migration, /email\.reply\.queued/);
+  assert.match(migration, /recovery\.delivery\.retry_queued/);
+  assert.match(actions, /dashboard_create_email_reply_draft/);
+  assert.match(actions, /dashboard_queue_email_reply/);
+  assert.match(actions, /dashboard_retry_recovery_message/);
+  assert.match(approvalControls, /window\.confirm/);
+  assert.match(draftForm, /Saving creates a draft only/);
+  assert.doesNotMatch(actions + approvalControls + draftForm, /SUPABASE_SERVICE_ROLE_KEY/);
+});

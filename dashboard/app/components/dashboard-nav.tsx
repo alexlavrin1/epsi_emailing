@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Columns3, Inbox, LayoutDashboard, Megaphone, Users, Workflow } from "lucide-react";
+import { Building2, CheckCheck, Columns3, Inbox, LayoutDashboard, Megaphone, Users, Workflow } from "lucide-react";
 
 const items = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
@@ -21,6 +21,7 @@ export function DashboardNav() {
         return <Link className={`nav-link${active ? " active" : ""}`} href={href} key={href} aria-current={active ? "page" : undefined}><Icon size={18} aria-hidden="true" /><span>{label}</span></Link>;
       })}
       <span className="nav-section">Automation</span>
+      <Link className={`nav-link automation-link${pathname.startsWith("/dashboard/approvals") ? " active" : ""}`} href="/dashboard/approvals" aria-current={pathname.startsWith("/dashboard/approvals") ? "page" : undefined}><CheckCheck size={18} aria-hidden="true" /><span>Approvals</span></Link>
       <Link className={`nav-link automation-link${pathname.startsWith("/dashboard/campaigns") ? " active" : ""}`} href="/dashboard/campaigns" aria-current={pathname.startsWith("/dashboard/campaigns") ? "page" : undefined}><Megaphone size={18} aria-hidden="true" /><span>Campaigns</span></Link>
       <span className="nav-link disabled" aria-disabled="true"><Workflow size={18} aria-hidden="true" /><span>Automations</span></span>
     </nav>

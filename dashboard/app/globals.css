@@ -187,6 +187,9 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .status-prospect { border-color: rgba(139,185,255,.3); background: rgba(139,185,255,.08); color: #a8c9ff; }
 .status-interested { border-color: rgba(183,163,255,.3); background: rgba(183,163,255,.08); color: #c6b7ff; }
 .status-client { border-color: rgba(71,209,140,.3); background: var(--accent-soft); color: var(--accent-strong); }
+.status-draft { border-color: rgba(139,185,255,.3); background: rgba(139,185,255,.08); color: #a8c9ff; }
+.status-queued, .status-sending, .status-paused { border-color: rgba(240,189,101,.3); background: rgba(240,189,101,.08); color: #f0bd65; }
+.status-sent, .status-completed { border-color: rgba(71,209,140,.3); background: var(--accent-soft); color: var(--accent-strong); }
 .status-bounced, .status-failed, .status-suppressed { border-color: rgba(255,133,133,.3); background: rgba(255,133,133,.07); color: var(--danger); }
 
 .company-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
@@ -204,6 +207,37 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .reply-meta time { color: var(--faint); font-size: 10px; }
 .reply-card h2 { margin: 18px 0 7px; font-size: 15px; }
 .reply-card > p { margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.page-header-actions { display: flex; align-items: center; gap: 10px; }
+.header-action { display: inline-flex; align-items: center; gap: 7px; }
+.reply-actions { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.reply-composer { width: min(100%, 580px); border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); }
+.reply-composer summary { display: flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 12px; color: var(--accent-strong); font-size: 11px; font-weight: 650; cursor: pointer; list-style: none; }
+.reply-composer summary::-webkit-details-marker { display: none; }
+.reply-composer form { display: grid; gap: 9px; padding: 0 12px 14px; }
+.reply-composer label { color: var(--muted); font-size: 11px; font-weight: 650; }
+.reply-composer textarea { width: 100%; min-height: 138px; padding: 12px; border: 1px solid var(--border-strong); border-radius: 8px; outline: 0; background: #091310; color: var(--text); font-size: 16px; line-height: 1.55; resize: vertical; }
+.reply-composer textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.reply-composer .secondary-button { justify-self: start; }
+.setup-inline { margin: 0; padding: 0 12px 14px; color: #f0bd65; font-size: 11px; }
+.approval-section { margin-top: 24px; }
+.section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding-bottom: 13px; border-bottom: 1px solid var(--border); }
+.section-heading h2 { margin: 0; font-size: 19px; }
+.section-heading .eyebrow { margin-bottom: 5px; }
+.approval-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.approval-card { min-width: 0; padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.approval-card-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.approval-card-head strong, .approval-card-head small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.approval-card-head strong { font-size: 12px; }
+.approval-card-head small { margin-top: 4px; color: var(--muted); font-size: 10px; }
+.approval-preview { max-height: 190px; overflow: auto; margin-top: 15px; padding: 13px; border: 1px solid var(--border); border-radius: 8px; background: #091310; color: var(--muted); font-size: 11px; line-height: 1.6; white-space: pre-wrap; }
+.approval-error { display: flex; align-items: flex-start; gap: 7px; margin: 14px 0 0; color: var(--danger); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.approval-error svg { flex: 0 0 auto; margin-top: 1px; }
+.approval-card footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.approval-card footer time { color: var(--faint); font-size: 9px; }
+.approval-control { display: grid; justify-items: end; gap: 5px; }
+.approval-control .action-feedback { max-width: 280px; margin: 0; text-align: right; }
+.approval-empty { min-height: 190px; margin-top: 12px; border: 1px dashed var(--border-strong); border-radius: 12px; }
+.retry-card { grid-column: 1 / -1; }
 
 .pipeline-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 24px; }
 .pipeline-summary article { display: flex; align-items: center; gap: 10px; min-height: 68px; padding: 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
@@ -365,6 +399,7 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .pipeline-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pipeline-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .channel-layout { grid-template-columns: 1fr; }
+  .approval-list { grid-template-columns: 1fr; }
   .contact-actions-grid { grid-template-columns: 1fr; }
   .action-records { grid-column: auto; }
   .danger-zone { grid-column: auto; }
@@ -415,6 +450,13 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .note-list { grid-template-columns: 1fr; }
   .task-row { grid-template-columns: auto minmax(0, 1fr); padding-block: 10px; }
   .task-row form { grid-column: 2; }
+  .page-header-actions, .reply-actions { width: 100%; align-items: stretch; flex-direction: column; }
+  .page-header-actions .record-count { display: none; }
+  .header-action { justify-content: center; }
+  .reply-composer { width: 100%; }
+  .approval-card footer { align-items: stretch; flex-direction: column; }
+  .approval-control { justify-items: stretch; }
+  .approval-control .action-feedback { text-align: left; }
   .danger-zone { grid-template-columns: 1fr; }
   .campaign-card { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
   .campaign-metrics { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }

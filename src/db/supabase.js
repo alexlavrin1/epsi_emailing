@@ -647,6 +647,58 @@ async function markPaymentRecoveryFailureAlertFailed(id, errorMessage) {
   return data;
 }
 
+async function getQueuedOperatorEmailReplies(limit = 25) {
+  const { data, error } = await supabase
+    .from('operator_email_replies')
+    .select(`
+      *,
+      source_reply:prospect_reply_id(
+        id, gmail_message_id, subject,
+        prospect:prospect_id(id, email, status),
+        outreach_send:outreach_send_id(
+          id, gmail_thread_id,
+          campaign:campaign_id(
+            id, status,
+            mailbox:from_mailbox_id(id, email, display_name, oauth_token)
+          )
+        )
+      )
+    `)
+    .in('status', ['queued', 'failed'])
+    .lt('attempt_count', 3)
+    .order('queued_at', { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
+async function claimOperatorEmailReply(id) {
+  const { data, error } = await supabase
+    .rpc('claim_operator_email_reply', { target_reply_id: id })
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function markOperatorEmailReplySent(id, providerMessageId) {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase.from('operator_email_replies').update({
+    status: 'sent', provider_message_id: providerMessageId || null,
+    last_error: null, sent_at: now, updated_at: now,
+  }).eq('id', id).eq('status', 'sending').select().maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function markOperatorEmailReplyFailed(id, errorMessage) {
+  const { data, error } = await supabase.from('operator_email_replies').update({
+    status: 'failed', last_error: String(errorMessage || 'Unknown reply error').slice(0, 1000),
+    updated_at: new Date().toISOString(),
+  }).eq('id', id).eq('status', 'sending').select().maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 module.exports = {
   supabase,
   getMailboxByEmail,
@@ -690,4 +742,8 @@ module.exports = {
   claimPaymentRecoveryFailureAlert,
   markPaymentRecoveryFailureAlertSent,
   markPaymentRecoveryFailureAlertFailed,
+  getQueuedOperatorEmailReplies,
+  claimOperatorEmailReply,
+  markOperatorEmailReplySent,
+  markOperatorEmailReplyFailed,
 };

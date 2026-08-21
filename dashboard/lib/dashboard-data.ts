@@ -117,6 +117,12 @@ export type ReplyRow = {
   receivedAt: string;
 };
 
+export type ApprovalData = {
+  ready: boolean;
+  replies: Array<{ id: string; status: string; body: string; lastError: string | null; createdAt: string; contact: string; email: string; subject: string }>;
+  retries: Array<{ id: string; channel: string; attempts: number; error: string; updatedAt: string; customer: string }>;
+};
+
 export type ContactDetail = {
   id: string;
   kind: "prospect" | "customer";
@@ -212,7 +218,7 @@ export async function getOverviewData(supabase: SupabaseClient, organizationId: 
       tone: "danger",
       title: `${message.channel === "slack" ? "Slack" : "Email"} delivery failed`,
       detail: `${displayCustomer(customer)} · ${message.last_error || "Provider error requires review"}`,
-      href: recovery?.crm_customer_id ? `/dashboard/crm/customer/${recovery.crm_customer_id}` : "/dashboard/crm",
+      href: "/dashboard/approvals#recovery-retries",
     });
   }
   for (const recovery of overdueCases.data ?? []) {
@@ -490,10 +496,41 @@ export async function getReplies(supabase: SupabaseClient): Promise<ReplyRow[]> 
       email: prospect?.email || "Unknown email",
       company: prospect?.company || "—",
       subject: reply.subject || "No subject",
-      preview: String(reply.body || "Reply body unavailable").replace(/\s+/g, " ").trim().slice(0, 180),
+      preview: String(reply.body || "Reply body unavailable").trim().slice(0, 4000),
       receivedAt: reply.received_at || reply.created_at,
     };
   });
+}
+
+export async function getApprovalData(supabase: SupabaseClient, organizationId: string): Promise<ApprovalData> {
+  const [readiness, replies, retries] = await Promise.all([
+    supabase.rpc("dashboard_reply_controls_ready"),
+    supabase.from("operator_email_replies").select("id,body,status,last_error,created_at,source_reply:prospect_replies(subject,prospect:prospects(first_name,last_name,email))").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
+    supabase.from("payment_recovery_messages").select("id,channel,attempt_count,last_error,updated_at,recovery_case:payment_recovery_cases(customer:crm_customers(name,email,organization_id))").eq("status", "failed").order("updated_at", { ascending: false }).limit(100),
+  ]);
+  const ready = !readiness.error && readiness.data === true && !replies.error;
+  const retryRows = (retries.data ?? []).filter(message => {
+    const recovery = one(message.recovery_case as Related<{ customer: Related<CustomerIdentity & { organization_id: string }> }>);
+    const customer = one(recovery?.customer ?? null);
+    return customer?.organization_id === organizationId;
+  });
+  return {
+    ready,
+    replies: (replies.data ?? []).map(item => {
+      const source = one(item.source_reply as Related<{ subject: string | null; prospect: Related<ProspectIdentity> }>);
+      const prospect = one(source?.prospect ?? null);
+      return { id: item.id, status: item.status, body: item.body, lastError: item.last_error, createdAt: item.created_at, contact: displayProspect(prospect), email: prospect?.email || "Unknown email", subject: source?.subject || "No subject" };
+    }),
+    retries: retryRows.map(message => {
+      const recovery = one(message.recovery_case as Related<{ customer: Related<CustomerIdentity> }>);
+      return { id: message.id, channel: message.channel, attempts: message.attempt_count, error: message.last_error || "Unknown delivery error", updatedAt: message.updated_at, customer: displayCustomer(one(recovery?.customer ?? null)) };
+    }),
+  };
+}
+
+export async function getReplyControlsReady(supabase: SupabaseClient) {
+  const { data, error } = await supabase.rpc("dashboard_reply_controls_ready");
+  return !error && data === true;
 }
 
 export async function getContactDetail(supabase: SupabaseClient, organizationId: string, kind: string, id: string): Promise<ContactDetail | null> {

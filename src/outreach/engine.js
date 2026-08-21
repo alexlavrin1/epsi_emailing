@@ -53,6 +53,7 @@ async function runOutreachCycle() {
 
   // Replies, unsubscribes, and bounces are processed even when sending is
   // disabled or outside business hours.
+  await deliverOperatorEmailReplies();
   await checkForReplies();
 
   if (!config.outreachEnabled) {
@@ -234,4 +235,44 @@ async function checkForReplies() {
   }
 }
 
-module.exports = { runOutreachCycle };
+async function deliverOperatorEmailReplies(dependencies = {}) {
+  const database = dependencies.db || db;
+  const mailer = dependencies.mailer || gmail;
+  const queued = await database.getQueuedOperatorEmailReplies(25);
+  let sent = 0;
+  let failed = 0;
+
+  for (const queuedReply of queued) {
+    const source = queuedReply.source_reply;
+    const prospect = source?.prospect;
+    const outreachSend = source?.outreach_send;
+    const mailbox = outreachSend?.campaign?.mailbox;
+    const claimed = await database.claimOperatorEmailReply(queuedReply.id);
+    if (!claimed) continue;
+
+    try {
+      if (!source?.gmail_message_id || !prospect?.email || prospect.status !== 'active' || !mailbox?.email) {
+        throw new Error('Reply context is incomplete or the prospect is not active');
+      }
+      const result = await mailer.sendReply(
+        mailbox.oauth_token,
+        mailbox.email,
+        prospect.email,
+        outreachSend.gmail_thread_id,
+        source.gmail_message_id,
+        source.subject || 'Your reply',
+        queuedReply.body,
+        { displayName: mailbox.display_name }
+      );
+      await database.markOperatorEmailReplySent(queuedReply.id, result.messageId || null);
+      sent++;
+    } catch (error) {
+      failed++;
+      await database.markOperatorEmailReplyFailed(queuedReply.id, error.message);
+      logger.error(`Operator reply failed [id=${queuedReply.id}]: ${error.message}`);
+    }
+  }
+  return { due: queued.length, sent, failed };
+}
+
+module.exports = { runOutreachCycle, deliverOperatorEmailReplies };
