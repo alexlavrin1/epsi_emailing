@@ -18,10 +18,10 @@ export default async function DashboardPage() {
   const data = await getOverviewData(supabase, membership.organization.id);
   const firstName = user.user_metadata?.full_name?.split(" ")[0] || user.email?.split("@")[0] || "Operator";
   const metrics = [
-    { label: "Known contacts", value: data.metrics.contacts, detail: "Prospects and clients" },
-    { label: "Active campaigns", value: data.metrics.activeCampaigns, detail: `${data.metrics.scheduledSends} sends scheduled` },
-    { label: "Replies received", value: data.metrics.replies, detail: "Across outreach" },
-    { label: "Open recoveries", value: data.metrics.openRecoveries, detail: "Payment cases" },
+    { label: "Known contacts", value: data.metrics.contacts, detail: "Prospects and clients", href: undefined },
+    { label: "Active campaigns", value: data.metrics.activeCampaigns, detail: `${data.metrics.scheduledSends} sends scheduled`, href: "/dashboard/campaigns" },
+    { label: "Replies received", value: data.metrics.replies, detail: "Across outreach", href: undefined },
+    { label: "Open recoveries", value: data.metrics.openRecoveries, detail: "Payment cases", href: undefined },
   ];
 
   return (
@@ -29,7 +29,7 @@ export default async function DashboardPage() {
       <header className="topbar"><div><p className="eyebrow">{membership.organization.name} · Operations</p><h1>Good to see you, {firstName}.</h1><p className="page-summary">A live, read-only view of clients, outreach, replies, and payment recovery.</p></div><div className="system-status"><span /> Data connected</div></header>
 
       <section className="metric-grid" aria-label="Workspace metrics">
-        {metrics.map((metric, index) => { const Icon = metricIcons[index]; return <article className="metric-card" key={metric.label}><div className="metric-heading"><span>{metric.label}</span><Icon size={18} aria-hidden="true" /></div><strong>{metric.value.toLocaleString()}</strong><p>{metric.detail}</p></article>; })}
+        {metrics.map((metric, index) => { const Icon = metricIcons[index]; const content = <><div className="metric-heading"><span>{metric.label}</span><Icon size={18} aria-hidden="true" /></div><strong>{metric.value.toLocaleString()}</strong><p>{metric.detail}</p></>; return metric.href ? <Link className="metric-card metric-link" href={metric.href} key={metric.label}>{content}</Link> : <article className="metric-card" key={metric.label}>{content}</article>; })}
       </section>
 
       <section className="content-grid">

@@ -2,9 +2,9 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { Check, ClipboardCheck, FileText, Save } from "lucide-react";
+import { Ban, Check, ClipboardCheck, FileText, Save } from "lucide-react";
 import type { ContactActionData, LifecycleStage } from "../../lib/dashboard-data";
-import { addContactNote, createContactTask, setContactTaskStatus, setLifecycleStage, type ContactActionState } from "../dashboard/crm/[kind]/[id]/actions";
+import { addContactNote, createContactTask, setContactTaskStatus, setLifecycleStage, stopProspectOutreach, type ContactActionState } from "../dashboard/crm/[kind]/[id]/actions";
 
 const initialState: ContactActionState = { ok: false, message: "" };
 const stages: Array<{ value: LifecycleStage; label: string }> = [
@@ -20,16 +20,22 @@ function SubmitButton({ children }: { children: React.ReactNode }) {
   return <button className="secondary-button compact-button" disabled={pending} type="submit">{pending ? "Saving…" : children}</button>;
 }
 
+function DangerSubmit() {
+  const { pending } = useFormStatus();
+  return <button className="danger-button" disabled={pending} type="submit">{pending ? "Stopping…" : "Stop outreach"}</button>;
+}
+
 function Feedback({ state }: { state: ContactActionState }) {
   if (!state.message) return null;
   return <p className={state.ok ? "action-feedback success" : "action-feedback error"} role={state.ok ? "status" : "alert"}>{state.message}</p>;
 }
 
-export function ContactActions({ kind, id, currentStage, data }: { kind: "prospect" | "customer"; id: string; currentStage: LifecycleStage; data: ContactActionData }) {
+export function ContactActions({ kind, id, currentStage, data, outreachControlsReady }: { kind: "prospect" | "customer"; id: string; currentStage: LifecycleStage; data: ContactActionData; outreachControlsReady: boolean }) {
   const [stageState, stageAction] = useActionState(setLifecycleStage, initialState);
   const [noteState, noteAction] = useActionState(addContactNote, initialState);
   const [taskState, taskAction] = useActionState(createContactTask, initialState);
   const [taskStatusState, taskStatusAction] = useActionState(setContactTaskStatus, initialState);
+  const [stopState, stopAction] = useActionState(stopProspectOutreach, initialState);
   const selectedStage = data.lifecycleStage ?? currentStage;
 
   if (!data.ready) return <section className="panel setup-panel"><Save size={20} aria-hidden="true" /><div><strong>Operator actions are ready to install</strong><p>Apply migration 007 to enable audited lifecycle changes, notes, and tasks. Existing CRM data remains read-only.</p></div></section>;
@@ -71,6 +77,7 @@ export function ContactActions({ kind, id, currentStage, data }: { kind: "prospe
         {!data.notes.length && !data.tasks.length ? <div className="empty-state action-empty"><ClipboardCheck size={22} aria-hidden="true" /><strong>No notes or tasks yet</strong><p>Add the first piece of operational context above.</p></div> : null}
         <Feedback state={taskStatusState} />
       </article>
+      {kind === "prospect" ? <article className="panel danger-zone"><div><span className="danger-icon"><Ban size={17} aria-hidden="true" /></span><div><h2>Stop scheduled outreach</h2><p>Marks every currently scheduled send for this prospect as stopped. Already-sent messages remain in the timeline.</p></div></div>{outreachControlsReady ? <form action={stopAction} onSubmit={event => { if (!window.confirm("Stop every scheduled outreach send for this prospect? This cannot be resumed from the dashboard.")) event.preventDefault(); }}><input type="hidden" name="kind" value={kind} /><input type="hidden" name="id" value={id} /><DangerSubmit /></form> : <span className="campaign-locked">Migration 008 required</span>}<Feedback state={stopState} /></article> : null}
     </section>
   );
 }

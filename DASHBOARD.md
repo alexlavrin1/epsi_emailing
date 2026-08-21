@@ -163,7 +163,7 @@ Outcome: operators can understand client activity from one interface.
 
 ### Phase 3 — Safe operator actions
 
-Status: in progress. The first slice is active: lifecycle overrides, internal notes, and follow-up tasks run through tenant-validated database functions. Every successful mutation appends an audit event in the same transaction; browser users retain read-only table policies and cannot write around those functions. Migration `007_safe_crm_operator_actions.sql` was applied and verified on 2026-08-21.
+Status: in progress. The first slice is active: lifecycle overrides, internal notes, and follow-up tasks run through tenant-validated database functions. Every successful mutation appends an audit event in the same transaction; browser users retain read-only table policies and cannot write around those functions. Migration `007_safe_crm_operator_actions.sql` was applied and verified on 2026-08-21. The second slice adds guarded campaign pause/resume and contact-level outreach stops; migration `008_safe_outreach_controls.sql` is prepared and required before those controls activate.
 
 - Notes and tasks
 - Lifecycle stage changes

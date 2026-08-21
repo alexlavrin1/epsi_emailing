@@ -94,6 +94,18 @@ export type ContactRow = {
 
 export type CompanyRow = { name: string; contacts: number; active: number; replied: number; lastActivity: string };
 
+export type CampaignRow = {
+  id: string;
+  name: string;
+  status: string;
+  mailbox: string;
+  steps: number;
+  scheduled: number;
+  sent: number;
+  replied: number;
+  updatedAt: string;
+};
+
 export type ReplyRow = {
   id: string;
   prospectId: string | null;
@@ -437,6 +449,33 @@ export async function getCompanies(supabase: SupabaseClient, organizationId: str
     companies.set(name, current);
   }
   return [...companies.values()].sort((a, b) => b.lastActivity.localeCompare(a.lastActivity));
+}
+
+export async function getCampaigns(supabase: SupabaseClient, organizationId: string): Promise<CampaignRow[]> {
+  const { data, error } = await supabase.from("campaigns")
+    .select("id,name,status,updated_at,mailbox:mailboxes(email),campaign_steps(id),outreach_sends(status)")
+    .eq("organization_id", organizationId).order("updated_at", { ascending: false }).limit(100);
+  logQueryError("campaign controls", error);
+  return (data ?? []).map(campaign => {
+    const mailbox = one(campaign.mailbox as Related<{ email: string }>);
+    const sends = (campaign.outreach_sends ?? []) as Array<{ status: string }>;
+    return {
+      id: campaign.id,
+      name: campaign.name,
+      status: campaign.status,
+      mailbox: mailbox?.email || "No mailbox",
+      steps: campaign.campaign_steps?.length ?? 0,
+      scheduled: sends.filter(send => send.status === "scheduled").length,
+      sent: sends.filter(send => send.status === "sent").length,
+      replied: sends.filter(send => send.status === "replied").length,
+      updatedAt: campaign.updated_at,
+    };
+  });
+}
+
+export async function getOutreachControlsReady(supabase: SupabaseClient) {
+  const { data, error } = await supabase.rpc("dashboard_outreach_controls_ready");
+  return !error && data === true;
 }
 
 export async function getReplies(supabase: SupabaseClient): Promise<ReplyRow[]> {

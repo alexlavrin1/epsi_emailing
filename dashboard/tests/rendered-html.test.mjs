@@ -157,3 +157,19 @@ test("routes Phase 3 contact writes through audited database functions", async (
   assert.match(form, /Operator actions are ready to install/);
   assert.match(form, /Saving…/);
 });
+
+test("keeps outreach controls tenant-scoped, confirmed, and audited", async () => {
+  const [migration, campaignActions, campaignControls, contactControls] = await Promise.all([
+    readFile(new URL("../database/migrations/008_safe_outreach_controls.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/campaigns/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/campaign-controls.tsx", root), "utf8"),
+    readFile(new URL("app/components/contact-actions.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /organization_id = target_organization_id/i);
+  assert.match(migration, /outreach\.campaign\.status_changed/);
+  assert.match(migration, /outreach\.prospect\.stopped/);
+  assert.match(migration, /WHERE prospect_id = target_prospect_id AND status = 'scheduled'/i);
+  assert.match(campaignActions, /\.rpc\("dashboard_set_campaign_status"/);
+  assert.match(campaignControls + contactControls, /window\.confirm/);
+  assert.doesNotMatch(campaignActions + campaignControls + contactControls, /SUPABASE_SERVICE_ROLE_KEY/);
+});

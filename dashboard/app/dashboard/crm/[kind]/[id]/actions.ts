@@ -97,3 +97,20 @@ export async function setContactTaskStatus(_state: ContactActionState, formData:
   revalidatePath(`/dashboard/crm/${contact.kind}/${contact.id}`);
   return { ok: true, message: status === "completed" ? "Task completed." : "Task reopened." };
 }
+
+export async function stopProspectOutreach(_state: ContactActionState, formData: FormData): Promise<ContactActionState> {
+  const { membership } = await requireMembership();
+  if (!membership) return { ok: false, message: "An active organization membership is required." };
+  const contact = contactFields(formData);
+  if (!contact.valid || contact.kind !== "prospect") return { ok: false, message: "Only prospect outreach can be stopped here." };
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return initialError;
+  const { data, error } = await supabase.rpc("dashboard_stop_prospect_outreach", {
+    target_organization_id: membership.organization.id,
+    target_prospect_id: contact.id,
+  });
+  if (error) return { ok: false, message: friendlyError(error.message) };
+  revalidatePath(`/dashboard/crm/prospect/${contact.id}`);
+  revalidatePath("/dashboard");
+  return { ok: true, message: `${Number(data) || 0} scheduled outreach ${Number(data) === 1 ? "send" : "sends"} stopped and audited.` };
+}
