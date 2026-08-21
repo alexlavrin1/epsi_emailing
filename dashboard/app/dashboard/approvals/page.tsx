@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { AlertTriangle, CheckCheck, MailCheck, RefreshCcw } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, CheckCheck, FileClock, MailCheck, RefreshCcw } from "lucide-react";
 import { RecoveryRetryControl, ReplyApprovalControl } from "../../components/approval-controls";
 import { requireMembership } from "../../../lib/auth";
 import { createSupabaseServerClient } from "../../../lib/supabase-server";
@@ -16,7 +17,7 @@ export default async function ApprovalsPage() {
   const data = await getApprovalData(supabase, membership.organization.id);
   const pending = data.replies.filter(reply => ["draft", "failed"].includes(reply.status)).length + data.retries.length;
   return <main className="dashboard-main" id="main-content">
-    <header className="page-header"><div><p className="eyebrow">Human checkpoint</p><h1>Approvals</h1><p className="page-summary">Review message content and failed deliveries before anything is queued for external execution.</p></div><span className="record-count">{pending} awaiting decision</span></header>
+    <header className="page-header"><div><p className="eyebrow">Human checkpoint</p><h1>Approvals</h1><p className="page-summary">Review message content and failed deliveries before anything is queued for external execution.</p></div><div className="page-header-actions"><span className="record-count">{pending} awaiting decision</span><Link className="secondary-button compact-button header-action" href="/dashboard/audit"><FileClock size={15} aria-hidden="true" />View audit log</Link></div></header>
     {!data.ready ? <section className="panel setup-panel"><CheckCheck size={20} aria-hidden="true" /><div><strong>Approval controls are ready to install</strong><p>Apply migration 009 to enable reply drafts and controlled recovery retries.</p></div></section> : null}
 
     <section className="approval-section" aria-labelledby="reply-approvals-heading"><div className="section-heading"><div><p className="eyebrow">Email replies</p><h2 id="reply-approvals-heading">Draft review</h2></div><span className="count-badge">{data.replies.length}</span></div>

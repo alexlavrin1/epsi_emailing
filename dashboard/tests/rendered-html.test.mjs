@@ -132,12 +132,16 @@ test("keeps lifecycle classification deterministic and read-only", async () => {
 });
 
 test("defines tenant RLS and an append-only audit log", async () => {
-  const migration = await readFile(new URL("../database/migrations/006_dashboard_security_foundation.sql", root), "utf8");
-  assert.match(migration, /ALTER TABLE organizations ENABLE ROW LEVEL SECURITY/i);
-  assert.match(migration, /CREATE POLICY audit_actor_insert/i);
-  assert.doesNotMatch(migration, /CREATE POLICY audit_.*(?:UPDATE|DELETE)/i);
-  assert.match(migration, /dashboard_is_org_member/i);
-  assert.match(migration, /dashboard_assign_single_organization/i);
+  const [foundation, auditLock] = await Promise.all([
+    readFile(new URL("../database/migrations/006_dashboard_security_foundation.sql", root), "utf8"),
+    readFile(new URL("../database/migrations/010_lock_audit_log_writes.sql", root), "utf8"),
+  ]);
+  assert.match(foundation, /ALTER TABLE organizations ENABLE ROW LEVEL SECURITY/i);
+  assert.match(foundation, /dashboard_is_org_member/i);
+  assert.match(foundation, /dashboard_assign_single_organization/i);
+  assert.match(auditLock, /DROP POLICY IF EXISTS audit_actor_insert/i);
+  assert.match(auditLock, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON audit_events FROM authenticated/i);
+  assert.match(auditLock, /GRANT SELECT ON audit_events TO authenticated/i);
 });
 
 test("routes Phase 3 contact writes through audited database functions", async () => {
@@ -192,4 +196,21 @@ test("approval-gates replies and recovery retries without exposing mailbox token
   assert.match(approvalControls, /window\.confirm/);
   assert.match(draftForm, /Saving creates a draft only/);
   assert.doesNotMatch(actions + approvalControls + draftForm, /SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test("renders the audit trail from tenant-scoped, append-only records", async () => {
+  const [page, data, navigation, migration] = await Promise.all([
+    readFile(new URL("app/dashboard/audit/page.tsx", root), "utf8"),
+    readFile(new URL("lib/dashboard-data.ts", root), "utf8"),
+    readFile(new URL("app/components/dashboard-nav.tsx", root), "utf8"),
+    readFile(new URL("../database/migrations/006_dashboard_security_foundation.sql", root), "utf8"),
+  ]);
+  assert.match(page, /Append-only history/);
+  assert.match(page, /safeMetadataKeys/);
+  assert.doesNotMatch(page, /password|oauth_token|authorization|cookie/i);
+  assert.match(data, /\.from\("audit_events"\)/);
+  assert.match(data, /\.eq\("organization_id", organizationId\)/);
+  assert.doesNotMatch(page + data, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(navigation, /\/dashboard\/audit/);
+  assert.match(migration, /no UPDATE or DELETE policy: audit events are append-only/i);
 });

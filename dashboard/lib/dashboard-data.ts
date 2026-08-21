@@ -123,6 +123,22 @@ export type ApprovalData = {
   retries: Array<{ id: string; channel: string; attempts: number; error: string; updatedAt: string; customer: string }>;
 };
 
+export type AuditEvent = {
+  id: string;
+  actorUserId: string | null;
+  eventType: string;
+  targetType: string | null;
+  targetId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type AuditData = {
+  events: AuditEvent[];
+  total: number;
+  limited: boolean;
+};
+
 export type ContactDetail = {
   id: string;
   kind: "prospect" | "customer";
@@ -525,6 +541,51 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
       const recovery = one(message.recovery_case as Related<{ customer: Related<CustomerIdentity> }>);
       return { id: message.id, channel: message.channel, attempts: message.attempt_count, error: message.last_error || "Unknown delivery error", updatedAt: message.updated_at, customer: displayCustomer(one(recovery?.customer ?? null)) };
     }),
+  };
+}
+
+export async function getAuditEvents(
+  supabase: SupabaseClient,
+  organizationId: string,
+  filters: { query?: string; category?: string; period?: string } = {},
+): Promise<AuditData> {
+  const categoryPrefixes: Record<string, string> = {
+    crm: "crm.%",
+    outreach: "outreach.%",
+    email: "email.%",
+    recovery: "recovery.%",
+  };
+  const periodDays: Record<string, number> = { day: 1, week: 7, month: 30 };
+  let request = supabase
+    .from("audit_events")
+    .select("id,actor_user_id,event_type,target_type,target_id,metadata,created_at", { count: "exact" })
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  const prefix = categoryPrefixes[filters.category || ""];
+  if (prefix) request = request.like("event_type", prefix);
+  const days = periodDays[filters.period || ""];
+  if (days) request = request.gte("created_at", new Date(Date.now() - days * 86_400_000).toISOString());
+
+  const { data, error, count } = await request;
+  logQueryError("audit events", error);
+  const needle = filters.query?.trim().toLowerCase() || "";
+  const rows = (data ?? []).filter(event => !needle || [event.event_type, event.target_type, event.target_id]
+    .some(value => String(value || "").toLowerCase().includes(needle)));
+
+  return {
+    events: rows.map(event => ({
+      id: event.id,
+      actorUserId: event.actor_user_id,
+      eventType: event.event_type,
+      targetType: event.target_type,
+      targetId: event.target_id,
+      metadata: event.metadata && typeof event.metadata === "object" && !Array.isArray(event.metadata) ? event.metadata as Record<string, unknown> : {},
+      createdAt: event.created_at,
+    })),
+    total: needle ? rows.length : count ?? rows.length,
+    limited: !needle && (count ?? 0) > 200,
   };
 }
 

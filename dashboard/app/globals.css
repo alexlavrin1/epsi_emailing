@@ -371,6 +371,36 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .campaign-action .action-feedback { max-width: 220px; margin-top: 7px; }
 .campaign-locked { color: var(--faint); font-size: 10px; text-align: right; }
 
+.audit-assurance { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 22px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--border); }
+.audit-assurance > span { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; align-items: center; min-height: 72px; padding: 13px 16px; background: var(--surface); }
+.audit-assurance svg { grid-row: 1 / 3; color: var(--accent); }
+.audit-assurance strong { font-size: 11px; }
+.audit-assurance small { margin-top: 3px; color: var(--faint); font-size: 9px; }
+.audit-filters { margin-top: 14px; }
+.audit-list { display: grid; overflow: hidden; border: 1px solid var(--border); border-radius: 13px; background: var(--surface); }
+.audit-event { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(170px, .35fr); gap: 14px; padding: 18px; border-bottom: 1px solid var(--border); }
+.audit-event:last-child { border-bottom: 0; }
+.audit-event-icon { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
+.audit-event-icon.audit-outreach, .audit-category.audit-outreach { border-color: rgba(139,185,255,.3); background: rgba(139,185,255,.08); color: #a8c9ff; }
+.audit-event-icon.audit-email, .audit-category.audit-email { border-color: rgba(183,163,255,.3); background: rgba(183,163,255,.08); color: #c6b7ff; }
+.audit-event-icon.audit-recovery, .audit-category.audit-recovery { border-color: rgba(240,189,101,.3); background: rgba(240,189,101,.08); color: #f0bd65; }
+.audit-event-main { min-width: 0; }
+.audit-event-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.audit-event-title h2 { margin: 0; font-size: 13px; letter-spacing: -.01em; }
+.audit-event-main > p { margin: 8px 0 7px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.audit-event-main > code { color: var(--faint); font-family: var(--font-geist-mono), monospace; font-size: 9px; overflow-wrap: anywhere; }
+.audit-event-context { display: grid; align-content: start; justify-items: end; gap: 8px; color: var(--faint); font-size: 9px; text-align: right; }
+.audit-event-context > span, .audit-event-context > a { display: inline-flex; align-items: center; gap: 5px; }
+.audit-event-context > a { min-height: 28px; color: var(--accent-strong); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: color 180ms ease, text-decoration-color 180ms ease; }
+.audit-event-context > a:hover { color: var(--text); text-decoration-color: currentColor; }
+.audit-details { margin-top: 12px; }
+.audit-details summary { width: fit-content; min-height: 32px; color: var(--accent-strong); font-size: 10px; font-weight: 650; line-height: 32px; cursor: pointer; }
+.audit-details dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 7px 0 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--border); }
+.audit-details dl > div { min-width: 0; padding: 9px 10px; background: #091310; }
+.audit-details dt { color: var(--faint); font-size: 8px; letter-spacing: .04em; text-transform: uppercase; }
+.audit-details dd { margin: 5px 0 0; color: var(--muted); font-family: var(--font-geist-mono), monospace; font-size: 9px; overflow-wrap: anywhere; }
+.audit-limit-note { margin: 12px 0 0; color: var(--faint); font-size: 10px; text-align: center; }
+
 .loading-line, .loading-card, .loading-panel { overflow: hidden; background: linear-gradient(90deg, var(--surface) 25%, var(--surface-soft) 50%, var(--surface) 75%); background-size: 200% 100%; animation: loading-shimmer 1.4s infinite linear; }
 .loading-line { height: 13px; margin-top: 14px; border-radius: 5px; }
 .loading-line-short { width: 130px; }
@@ -403,6 +433,8 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .contact-actions-grid { grid-template-columns: 1fr; }
   .action-records { grid-column: auto; }
   .danger-zone { grid-column: auto; }
+  .audit-event { grid-template-columns: auto minmax(0, 1fr); }
+  .audit-event-context { grid-column: 2; grid-template-columns: repeat(3, auto); justify-content: start; justify-items: start; text-align: left; }
 }
 
 @media (max-width: 640px) {
@@ -461,6 +493,10 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .campaign-card { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
   .campaign-metrics { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .campaign-action, .campaign-locked { grid-column: 2; text-align: left; }
+  .audit-assurance { grid-template-columns: 1fr; }
+  .audit-filters select { width: 100%; }
+  .audit-event-context { grid-template-columns: 1fr; }
+  .audit-details dl { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
