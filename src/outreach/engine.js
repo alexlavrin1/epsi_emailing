@@ -238,7 +238,16 @@ async function checkForReplies() {
 async function deliverOperatorEmailReplies(dependencies = {}) {
   const database = dependencies.db || db;
   const mailer = dependencies.mailer || gmail;
-  const queued = await database.getQueuedOperatorEmailReplies(25);
+  let queued;
+  try {
+    queued = await database.getQueuedOperatorEmailReplies(25);
+  } catch (error) {
+    if (error.code === '42P01' || error.code === 'PGRST205' || /operator_email_replies|schema cache/i.test(error.message || '')) {
+      logger.warn('Operator reply queue is not installed yet; continuing the outreach cycle');
+      return { enabled: false, due: 0, sent: 0, failed: 0 };
+    }
+    throw error;
+  }
   let sent = 0;
   let failed = 0;
 

@@ -67,3 +67,11 @@ test('skips a reply another worker already claimed', async () => {
   const result = await deliverOperatorEmailReplies({ db, mailer });
   assert.deepEqual(result, { due: 1, sent: 0, failed: 0 });
 });
+
+test('continues safely before the operator reply migration is installed', async () => {
+  const db = {
+    getQueuedOperatorEmailReplies: async () => { const error = new Error("Could not find the table 'public.operator_email_replies' in the schema cache"); error.code = 'PGRST205'; throw error; },
+  };
+  const result = await deliverOperatorEmailReplies({ db, mailer: {} });
+  assert.deepEqual(result, { enabled: false, due: 0, sent: 0, failed: 0 });
+});
