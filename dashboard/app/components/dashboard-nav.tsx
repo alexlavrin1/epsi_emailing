@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Inbox, LayoutDashboard, Users, Workflow } from "lucide-react";
+import { Building2, Columns3, Inbox, LayoutDashboard, Users, Workflow } from "lucide-react";
 
 const items = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/crm", label: "CRM", icon: Users },
+  { href: "/dashboard/pipeline", label: "Pipeline", icon: Columns3 },
   { href: "/dashboard/companies", label: "Companies", icon: Building2 },
   { href: "/dashboard/inbox", label: "Replies", icon: Inbox },
 ];

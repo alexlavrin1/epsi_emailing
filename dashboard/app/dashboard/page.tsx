@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertCircle, ArrowRight, Banknote, MailCheck, Megaphone, Send, Users } from "lucide-react";
+import { AlertCircle, ArrowRight, Banknote, MailCheck, Megaphone, MessageSquareText, Send, Users } from "lucide-react";
 import { requireMembership } from "../../lib/auth";
 import { createSupabaseServerClient } from "../../lib/supabase-server";
 import { formatWhen, getOverviewData } from "../../lib/dashboard-data";
@@ -42,6 +42,11 @@ export default async function DashboardPage() {
           <div className="panel-heading"><div><p className="eyebrow">Live feed</p><h2 id="activity-heading">Recent activity</h2></div><Link className="panel-link" href="/dashboard/crm">View CRM</Link></div>
           {data.activity.length ? <ol className="activity-list">{data.activity.map(item => <li key={item.id}><span className={`activity-icon ${item.type}`}><Send size={15} aria-hidden="true" /></span><Link href={item.href}><strong>{item.title}</strong><small>{item.detail}</small></Link><time dateTime={item.occurredAt}>{formatWhen(item.occurredAt)}</time></li>)}</ol> : <div className="empty-state"><Send size={22} aria-hidden="true" /><strong>No client activity yet</strong><p>Replies, outreach, and payment events will form a unified timeline.</p></div>}
         </article>
+      </section>
+
+      <section className="slack-strip" aria-labelledby="overview-slack-heading">
+        <div><span className="activity-icon"><MessageSquareText size={16} aria-hidden="true" /></span><div><p className="eyebrow">Slack recovery channel</p><h2 id="overview-slack-heading">{data.slack.enabledClients} enabled clients · {data.slack.sent} reminders sent</h2></div></div>
+        <div className="slack-strip-status"><span className={`status-badge ${data.slack.failed ? "status-failed" : "status-active"}`}>{data.slack.failed ? `${data.slack.failed} failed` : "No failures"}</span><span>{data.slack.queued} queued</span><Link className="panel-link" href="/dashboard/pipeline#slack-health-heading">Inspect channel <ArrowRight size={14} aria-hidden="true" /></Link></div>
       </section>
     </main>
   );

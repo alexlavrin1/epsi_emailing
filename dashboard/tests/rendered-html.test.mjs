@@ -107,6 +107,7 @@ test("ships the read-only Phase 2 CRM surfaces", async () => {
   const files = [
     "app/dashboard/page.tsx",
     "app/dashboard/crm/page.tsx",
+    "app/dashboard/pipeline/page.tsx",
     "app/dashboard/companies/page.tsx",
     "app/dashboard/inbox/page.tsx",
     "app/dashboard/crm/[kind]/[id]/page.tsx",
@@ -116,7 +117,17 @@ test("ships the read-only Phase 2 CRM surfaces", async () => {
   assert.match(source, /Attention queue/);
   assert.match(source, /Contacts and clients/);
   assert.match(source, /Activity timeline/);
+  assert.match(source, /Lifecycle pipeline/);
+  assert.match(source, /Slack recovery delivery/);
   assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(source, /\.insert\(|\.update\(|\.delete\(/);
+});
+
+test("keeps lifecycle classification deterministic and read-only", async () => {
+  const source = await readFile(new URL("lib/dashboard-data.ts", root), "utf8");
+  assert.match(source, /email:\$\{prospect\.email\.trim\(\)\.toLowerCase\(\)\}/);
+  assert.match(source, /"prospect" \| "interested" \| "client" \| "at_risk" \| "suppressed"/);
+  assert.match(source, /\.eq\("channel", "slack"\)/);
   assert.doesNotMatch(source, /\.insert\(|\.update\(|\.delete\(/);
 });
 

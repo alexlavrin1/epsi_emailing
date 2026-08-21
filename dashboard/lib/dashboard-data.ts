@@ -38,6 +38,47 @@ export type OverviewData = {
   };
   attention: AttentionItem[];
   activity: ActivityItem[];
+  slack: SlackHealth;
+};
+
+export type LifecycleStage = "prospect" | "interested" | "client" | "at_risk" | "suppressed";
+
+export type PipelineContact = {
+  key: string;
+  id: string;
+  kind: "prospect" | "customer";
+  name: string;
+  email: string;
+  company: string;
+  stage: LifecycleStage;
+  channels: string;
+  lastActivity: string;
+};
+
+export type PipelineStage = {
+  id: LifecycleStage;
+  label: string;
+  description: string;
+  contacts: PipelineContact[];
+};
+
+export type SlackActivity = {
+  id: string;
+  customerId: string | null;
+  customer: string;
+  status: string;
+  step: number;
+  occurredAt: string;
+  error: string | null;
+};
+
+export type SlackHealth = {
+  mappedClients: number;
+  enabledClients: number;
+  queued: number;
+  sent: number;
+  failed: number;
+  recent: SlackActivity[];
 };
 
 export type ContactRow = {
@@ -121,7 +162,7 @@ export function formatWhen(value: string) {
 
 export async function getOverviewData(supabase: SupabaseClient, organizationId: string): Promise<OverviewData> {
   const now = new Date().toISOString();
-  const [prospects, customers, campaigns, replies, recoveries, scheduled, failedMessages, overdueCases, recentReplies, recentRecoveries, recentSends] = await Promise.all([
+  const [prospects, customers, campaigns, replies, recoveries, scheduled, failedMessages, overdueCases, recentReplies, recentRecoveries, recentSends, slack] = await Promise.all([
     supabase.from("prospects").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
     supabase.from("crm_customers").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
     supabase.from("campaigns").select("id", { count: "exact", head: true }).eq("organization_id", organizationId).eq("status", "active"),
@@ -133,6 +174,7 @@ export async function getOverviewData(supabase: SupabaseClient, organizationId: 
     supabase.from("prospect_replies").select("id,subject,received_at,created_at,prospect_id,prospect:prospects(first_name,last_name,email,company)").order("received_at", { ascending: false }).limit(5),
     supabase.from("payment_recovery_cases").select("id,state,amount_remaining,currency,opened_at,updated_at,crm_customer_id,customer:crm_customers(name,email)").order("updated_at", { ascending: false }).limit(5),
     supabase.from("outreach_sends").select("id,status,sent_at,replied_at,updated_at,prospect_id,prospect:prospects(first_name,last_name,email,company)").in("status", ["sent", "replied", "bounced"]).order("updated_at", { ascending: false }).limit(5),
+    getSlackHealth(supabase, organizationId),
   ]);
 
   [prospects, customers, campaigns, replies, recoveries, scheduled].forEach((result, index) => logQueryError(["prospects", "customers", "campaigns", "replies", "recoveries", "scheduled sends"][index], result.error));
@@ -211,7 +253,96 @@ export async function getOverviewData(supabase: SupabaseClient, organizationId: 
     },
     attention,
     activity,
+    slack,
   };
+}
+
+export async function getSlackHealth(supabase: SupabaseClient, organizationId: string): Promise<SlackHealth> {
+  const [clients, messages] = await Promise.all([
+    supabase.from("crm_customers").select("id,slack_enabled,slack_team_id,slack_user_id").eq("organization_id", organizationId),
+    supabase.from("payment_recovery_messages").select("id,status,step_number,sent_at,scheduled_for,updated_at,last_error,recovery_case:payment_recovery_cases(crm_customer_id,customer:crm_customers(name,email))").eq("channel", "slack").order("updated_at", { ascending: false }).limit(100),
+  ]);
+  logQueryError("Slack client mappings", clients.error);
+  logQueryError("Slack recovery activity", messages.error);
+
+  const rows = messages.data ?? [];
+  return {
+    mappedClients: (clients.data ?? []).filter(client => client.slack_team_id && client.slack_user_id).length,
+    enabledClients: (clients.data ?? []).filter(client => client.slack_enabled).length,
+    queued: rows.filter(message => ["queued", "sending"].includes(message.status)).length,
+    sent: rows.filter(message => message.status === "sent").length,
+    failed: rows.filter(message => message.status === "failed").length,
+    recent: rows.slice(0, 6).map(message => {
+      const recovery = one(message.recovery_case as Related<{ crm_customer_id: string; customer: Related<CustomerIdentity> }>);
+      return {
+        id: message.id,
+        customerId: recovery?.crm_customer_id ?? null,
+        customer: displayCustomer(one(recovery?.customer ?? null)),
+        status: message.status,
+        step: message.step_number,
+        occurredAt: message.sent_at || message.updated_at || message.scheduled_for,
+        error: message.last_error,
+      };
+    }),
+  };
+}
+
+export async function getPipeline(supabase: SupabaseClient, organizationId: string): Promise<PipelineStage[]> {
+  const [prospects, customers] = await Promise.all([
+    supabase.from("prospects").select("id,email,first_name,last_name,company,status,updated_at,outreach_sends(status,sent_at,replied_at,updated_at)").eq("organization_id", organizationId).limit(500),
+    supabase.from("crm_customers").select("id,email,name,status,email_enabled,slack_enabled,updated_at,payment_recovery_cases(state,opened_at,resolved_at,updated_at)").eq("organization_id", organizationId).limit(500),
+  ]);
+  logQueryError("pipeline prospects", prospects.error);
+  logQueryError("pipeline customers", customers.error);
+
+  const contacts = new Map<string, PipelineContact>();
+  for (const prospect of prospects.data ?? []) {
+    const sends = (prospect.outreach_sends ?? []) as Array<{ status: string; sent_at: string | null; replied_at: string | null; updated_at: string }>;
+    const suppressed = ["unsubscribed", "bounced", "suppressed"].includes(prospect.status);
+    const replied = sends.some(send => send.status === "replied");
+    const key = `email:${prospect.email.trim().toLowerCase()}`;
+    contacts.set(key, {
+      key,
+      id: prospect.id,
+      kind: "prospect",
+      name: [prospect.first_name, prospect.last_name].filter(Boolean).join(" ") || prospect.email,
+      email: prospect.email,
+      company: prospect.company || "—",
+      stage: suppressed ? "suppressed" : replied ? "interested" : "prospect",
+      channels: "Email outreach",
+      lastActivity: latestDate([prospect.updated_at, ...sends.flatMap(send => [send.updated_at, send.sent_at, send.replied_at])]),
+    });
+  }
+
+  for (const customer of customers.data ?? []) {
+    const cases = (customer.payment_recovery_cases ?? []) as Array<{ state: string; opened_at: string; resolved_at: string | null; updated_at: string }>;
+    const key = customer.email ? `email:${customer.email.trim().toLowerCase()}` : `customer:${customer.id}`;
+    const existing = contacts.get(key);
+    const stage: LifecycleStage = customer.status === "suppressed" ? "suppressed" : cases.some(item => item.state === "open") ? "at_risk" : "client";
+    contacts.set(key, {
+      key,
+      id: customer.id,
+      kind: "customer",
+      name: customer.name || existing?.name || customer.email || "Unnamed client",
+      email: customer.email || existing?.email || "—",
+      company: existing?.company && existing.company !== "—" ? existing.company : "Client",
+      stage,
+      channels: [customer.email_enabled ? "Email" : null, customer.slack_enabled ? "Slack" : null].filter(Boolean).join(" + ") || "No channel",
+      lastActivity: latestDate([existing?.lastActivity, customer.updated_at, ...cases.flatMap(item => [item.updated_at, item.opened_at, item.resolved_at])]),
+    });
+  }
+
+  const definitions: Array<Omit<PipelineStage, "contacts">> = [
+    { id: "prospect", label: "Prospects", description: "Active outreach contacts" },
+    { id: "interested", label: "Interested", description: "Prospects who replied" },
+    { id: "client", label: "Clients", description: "Active paying customers" },
+    { id: "at_risk", label: "At risk", description: "Clients in payment recovery" },
+    { id: "suppressed", label: "Suppressed", description: "Contact is intentionally paused" },
+  ];
+  return definitions.map(stage => ({
+    ...stage,
+    contacts: [...contacts.values()].filter(contact => contact.stage === stage.id).sort((a, b) => b.lastActivity.localeCompare(a.lastActivity)),
+  }));
 }
 
 export async function getContacts(supabase: SupabaseClient, organizationId: string, query = "", status = "all"): Promise<ContactRow[]> {

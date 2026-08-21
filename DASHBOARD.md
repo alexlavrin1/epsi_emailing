@@ -149,7 +149,7 @@ Outcome: only authorized organization members can access EpsiFlow data.
 
 ### Phase 2 — Read-only CRM and dashboard
 
-Status: in progress. The first read-only slice now includes live dashboard metrics, an attention queue, unified prospect/client search, company grouping, a reply queue, and per-contact outreach/payment timelines. A canonical lifecycle-stage pipeline and deeper Slack activity remain for the next Phase 2 iteration.
+Status: in progress. The read-only workspace now includes live dashboard metrics, an attention queue, unified prospect/client search, company grouping, a reply queue, per-contact outreach/payment timelines, a deterministic lifecycle pipeline, and Slack recovery-channel health. Contacts sharing an email are represented once in the pipeline; client and payment-risk states take precedence over outreach states. Manual lifecycle overrides remain for Phase 3 because they require audited write controls.
 
 - Unified contacts and companies
 - CRM pipeline
