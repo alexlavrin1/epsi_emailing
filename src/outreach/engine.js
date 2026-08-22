@@ -283,6 +283,12 @@ async function checkForReplies() {
             if (isAutomationUnavailable(error)) logger.warn('Reply automations are not installed yet; reply saved without a prepared draft');
             else throw error;
           }
+          try {
+            await db.createReplyFollowupTask(savedReply.id);
+          } catch (error) {
+            if (isAutomationUnavailable(error)) logger.warn('Automatic follow-up tasks are not installed yet; reply saved without an internal task');
+            else logger.error(`Automatic follow-up task failed: ${error.message}`);
+          }
         }
       }
     } catch (err) {
@@ -293,7 +299,7 @@ async function checkForReplies() {
 
 function isAutomationUnavailable(error) {
   return error?.code === '42P01' || error?.code === 'PGRST202' || error?.code === 'PGRST205' ||
-    /automation_(?:runs|workflows|workflow_versions)|enqueue_reply_automation|schema cache/i.test(error?.message || '');
+    /automation_(?:runs|workflows|workflow_versions|internal_task)|enqueue_reply_automation|create_reply_followup_task|schema cache/i.test(error?.message || '');
 }
 
 async function processReplyAutomationRuns(dependencies = {}) {

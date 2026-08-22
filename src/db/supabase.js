@@ -317,6 +317,13 @@ async function enqueueReplyAutomation(prospectReplyId) {
   return Number(data || 0);
 }
 
+async function createReplyFollowupTask(prospectReplyId) {
+  const { data, error } = await supabase
+    .rpc('create_reply_followup_task', { target_prospect_reply_id: prospectReplyId });
+  if (error) throw error;
+  return data || null;
+}
+
 async function getDueReplyAutomationRuns(limit = 25) {
   const { data, error } = await supabase
     .from('automation_runs')
@@ -804,6 +811,7 @@ module.exports = {
   updateProspectStatus,
   saveProspectReply,
   enqueueReplyAutomation,
+  createReplyFollowupTask,
   getDueReplyAutomationRuns,
   claimReplyAutomationRun,
   getReplyAutomationVersion,

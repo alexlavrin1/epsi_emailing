@@ -153,3 +153,24 @@ export async function retryAutomationRun(_state: WorkflowActionState, formData: 
   revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");
   return { ok: true, message: `Retry ${Number(data) || 1} queued. The worker will recheck the run before preparing a new draft.` };
 }
+
+export async function setAutomaticInternalTask(_state: WorkflowActionState, formData: FormData): Promise<WorkflowActionState> {
+  const context = await adminContext();
+  if (!context) return { ok: false, message: "Administrator access is required to configure automatic tasks." };
+  const enabledValue = String(formData.get("enabled") || "");
+  const taskTitle = String(formData.get("task_title") || "").trim();
+  const dueHours = Number(formData.get("due_hours"));
+  if (!['true', 'false'].includes(enabledValue)) return { ok: false, message: "Invalid automatic task action." };
+  if (taskTitle.length < 3 || taskTitle.length > 200) return { ok: false, message: "Task title must contain 3 to 200 characters." };
+  if (!Number.isInteger(dueHours) || dueHours < 1 || dueHours > 168) return { ok: false, message: "Due time must be a whole number between 1 and 168 hours." };
+  const enabled = enabledValue === "true";
+  const { error } = await context.supabase.rpc("dashboard_set_automatic_internal_task", {
+    target_organization_id: context.membership.organization.id,
+    target_enabled: enabled,
+    target_task_title: taskTitle,
+    target_due_hours: dueHours,
+  });
+  if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "Automatic internal tasks require migration 020." : actionError(error.message) };
+  revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");
+  return { ok: true, message: enabled ? "Automatic internal follow-up tasks enabled." : "Automatic internal follow-up tasks disabled." };
+}

@@ -32,6 +32,8 @@ const eventLabels: Record<string, string> = {
   "automation.run.rate_limited": "Automation trigger rate limited",
   "automation.run.retry_queued": "Automation retry queued",
   "automation.alert.acknowledged": "Failure alert acknowledged",
+  "automation.internal_task.configured": "Automatic task configured",
+  "automation.internal_task.created": "Automatic follow-up task created",
 };
 
 const safeMetadataKeys = new Set([
@@ -39,7 +41,7 @@ const safeMetadataKeys = new Set([
   "contact_kind", "contact_id", "scheduled_sends_stopped", "prospect_reply_id", "channel", "previous_attempt_count",
   "workflow_id", "automation_run_id", "version", "previous_version", "trigger_type", "status",
   "previous_limit", "new_limit", "hourly_limit", "runs_in_window",
-  "source_type", "source_id", "failure_code", "retry_count",
+  "source_type", "source_id", "failure_code", "retry_count", "previous_due_hours", "new_due_hours", "due_hours",
 ]);
 
 function readable(value: string) {
@@ -87,6 +89,8 @@ function eventSummary(event: AuditEvent) {
     case "automation.run.rate_limited": return `A trigger was blocked after ${meta.runs_in_window || 0} run(s) reached the hourly limit of ${meta.hourly_limit || "the configured value"}.`;
     case "automation.run.retry_queued": return `Retry ${meta.retry_count || "new"} was queued after eligibility and stop conditions were rechecked.`;
     case "automation.alert.acknowledged": return `A ${String(meta.source_type || "automation").replaceAll("_", " ")} failure alert was reviewed and cleared from the active list.`;
+    case "automation.internal_task.configured": return `The automatic internal task changed from ${meta.previous_status || "its previous state"} to ${meta.new_status || "a new state"}.`;
+    case "automation.internal_task.created": return `A CRM follow-up task was created with a ${meta.due_hours || "configured"}-hour due window.`;
     default: return "An operator action was recorded by EpsiFlow.";
   }
 }
@@ -99,6 +103,7 @@ function targetHref(event: AuditEvent) {
   if (event.targetType === "payment_recovery_message") return "/dashboard/approvals#recovery-retries";
   if (event.targetType === "automation_workflow" || event.targetType === "automation_run" || event.targetType === "automation_runtime") return "/dashboard/automations";
   if (event.targetType === "automation_failure_alert") return "/dashboard/automations";
+  if (event.targetType === "automation_internal_task") return "/dashboard/automations";
   return null;
 }
 

@@ -197,7 +197,7 @@ Outcome: EpsiFlow prepares work while operators retain control over sensitive ac
 
 ### Phase 5 — Full automations and monitoring
 
-Status: in progress. The first slice adds an organization-wide emergency pause with an explicit administrator reason, clear runtime-state visibility, and audit history. Database enforcement blocks new automation runs, queued run claims, draft completion, and delivery claims for automation-generated replies while preserving manual replies. Existing behavior remains enabled by default, and queued work resumes on the next worker cycle after the pause is lifted. Migration `014_automation_runtime_controls.sql` was applied and verified on 2026-08-22.
+Status: complete. The first slice adds an organization-wide emergency pause with an explicit administrator reason, clear runtime-state visibility, and audit history. Database enforcement blocks new automation runs, queued run claims, draft completion, and delivery claims for automation-generated replies while preserving manual replies. Existing behavior remains enabled by default, and queued work resumes on the next worker cycle after the pause is lifted. Migration `014_automation_runtime_controls.sql` was applied and verified on 2026-08-22.
 
 The second slice records tenant-scoped outreach-worker heartbeats from both Vercel cron and the local scheduler. The Automations dashboard shows the latest cycle, last success, 24-hour failure count, and stale state. Only sanitized failure codes are stored; monitoring remains best-effort and cannot prevent the outreach cycle from running. Migration `015_automation_worker_heartbeats.sql` was applied and verified on 2026-08-22.
 
@@ -208,6 +208,8 @@ The fourth slice adds tenant-scoped failure alerts for automation runs and monit
 The fifth slice adds privacy-preserving automation performance reporting for selectable 7-day and 30-day periods. A membership-guarded aggregate function returns trigger, draft, approval, delivery, decline, failure, active-run, and average-success-time metrics without exposing message content, recipients, or provider errors. The dashboard presents exact KPI values and a text-labelled outcome funnel. Migration `018_automation_performance_reporting.sql` was applied and verified on 2026-08-22.
 
 The sixth slice adds guarded retries for failed draft-preparation runs. Operators can requeue the same version-pinned run up to three times after the database rechecks membership, workflow state, the global runtime, reply provenance, and prospect eligibility. Runs that already created a reply remain routed through the approval queue, preventing duplicate drafts and deliveries. Retry actions clear the active failure alert, retain repeated-failure reopening, and append audit history. Migration `019_automation_run_retries.sql` was applied and verified on 2026-08-22.
+
+The seventh slice adds the first fully automatic low-risk action: a disabled-by-default rule that creates one assigned internal CRM follow-up task for each eligible new prospect reply. It never sends externally or changes prospect status, respects the organization-wide runtime pause, validates the assignee's active membership, remains idempotent under duplicate reply processing, and records configuration changes plus created tasks in the audit log. Migration `020_automatic_reply_followup_tasks.sql` was applied and verified on 2026-08-22.
 
 - Automatic low-risk workflows
 - Idempotency and retries

@@ -173,6 +173,7 @@ export type AutomationData = {
   alerts: { ready: boolean; openCount: number; items: AutomationFailureAlert[] };
   performance: { ready: boolean; days: 7 | 30; totalRuns: number; preparedDrafts: number; approvedDrafts: number; deliveredReplies: number; declinedDrafts: number; failedRuns: number; activeRuns: number; averageSuccessSeconds: number };
   retries: { ready: boolean };
+  automaticTasks: { ready: boolean; enabled: boolean; taskTitle: string; dueHours: number; created30d: number };
   worker: { ready: boolean; state: "unknown" | "running" | "healthy" | "failed" | "stale"; latestStartedAt: string | null; lastSuccessAt: string | null; recentFailures: number; latestFailureCode: string | null };
 };
 
@@ -610,9 +611,9 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
 export async function getAutomationData(supabase: SupabaseClient, organizationId: string, performanceDays: 7 | 30 = 30): Promise<AutomationData> {
   const readiness = await supabase.rpc("dashboard_automation_controls_ready");
   if (readiness.error || readiness.data !== true) {
-    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 }, runtime: { ready: false, paused: false, reason: null, pausedAt: null, updatedAt: null }, limits: { ready: false, hourlyLimit: 100, usedThisHour: 0, rateLimited24h: 0 }, alerts: { ready: false, openCount: 0, items: [] }, performance: { ready: false, days: performanceDays, totalRuns: 0, preparedDrafts: 0, approvedDrafts: 0, deliveredReplies: 0, declinedDrafts: 0, failedRuns: 0, activeRuns: 0, averageSuccessSeconds: 0 }, retries: { ready: false }, worker: { ready: false, state: "unknown", latestStartedAt: null, lastSuccessAt: null, recentFailures: 0, latestFailureCode: null } };
+    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 }, runtime: { ready: false, paused: false, reason: null, pausedAt: null, updatedAt: null }, limits: { ready: false, hourlyLimit: 100, usedThisHour: 0, rateLimited24h: 0 }, alerts: { ready: false, openCount: 0, items: [] }, performance: { ready: false, days: performanceDays, totalRuns: 0, preparedDrafts: 0, approvedDrafts: 0, deliveredReplies: 0, declinedDrafts: 0, failedRuns: 0, activeRuns: 0, averageSuccessSeconds: 0 }, retries: { ready: false }, automaticTasks: { ready: false, enabled: false, taskTitle: "Review new prospect reply", dueHours: 24, created30d: 0 }, worker: { ready: false, state: "unknown", latestStartedAt: null, lastSuccessAt: null, recentFailures: 0, latestFailureCode: null } };
   }
-  const [workflows, runs, runtimeReadiness, workerReadiness, limitReadiness, alertReadiness, reportingReadiness, retryReadiness] = await Promise.all([
+  const [workflows, runs, runtimeReadiness, workerReadiness, limitReadiness, alertReadiness, reportingReadiness, retryReadiness, automaticTaskReadiness] = await Promise.all([
     supabase.from("automation_workflows")
       .select("id,name,description,status,trigger_type,approval_mode,delay_minutes,current_version,updated_at,versions:automation_workflow_versions(version,body_template,created_at)")
       .eq("organization_id", organizationId).order("updated_at", { ascending: false }).limit(100),
@@ -625,6 +626,7 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
     supabase.rpc("dashboard_automation_failure_alerts_ready"),
     supabase.rpc("dashboard_automation_reporting_ready"),
     supabase.rpc("dashboard_automation_retries_ready"),
+    supabase.rpc("dashboard_automatic_internal_tasks_ready"),
   ]);
   const runtimeReady = !runtimeReadiness.error && runtimeReadiness.data === true;
   const workerReady = !workerReadiness.error && workerReadiness.data === true;
@@ -632,9 +634,11 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
   const alertsReady = !alertReadiness.error && alertReadiness.data === true;
   const reportingReady = !reportingReadiness.error && reportingReadiness.data === true;
   const retriesReady = !retryReadiness.error && retryReadiness.data === true;
+  const automaticTasksReady = !automaticTaskReadiness.error && automaticTaskReadiness.data === true;
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const [runtime, workerCycles, rateControl, hourlyUsage, rateLimitedEvents, failureAlerts, performance, retryMetadata] = await Promise.all([
+  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const [runtime, workerCycles, rateControl, hourlyUsage, rateLimitedEvents, failureAlerts, performance, retryMetadata, automaticTaskControl, automaticTaskCount] = await Promise.all([
     runtimeReady
       ? supabase.from("automation_runtime_controls").select("globally_paused,pause_reason,paused_at,updated_at").eq("organization_id", organizationId).maybeSingle()
       : Promise.resolve({ data: null, error: runtimeReadiness.error }),
@@ -659,6 +663,12 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
     retriesReady
       ? supabase.from("automation_runs").select("id,retry_count").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100)
       : Promise.resolve({ data: null, error: retryReadiness.error }),
+    automaticTasksReady
+      ? supabase.from("automation_internal_task_controls").select("enabled,task_title,due_hours").eq("organization_id", organizationId).maybeSingle()
+      : Promise.resolve({ data: null, error: automaticTaskReadiness.error }),
+    automaticTasksReady
+      ? supabase.from("crm_contact_tasks").select("id", { count: "exact", head: true }).eq("organization_id", organizationId).eq("automation_source_type", "prospect_reply_followup").gte("created_at", monthAgo)
+      : Promise.resolve({ count: null, error: automaticTaskReadiness.error }),
   ]);
   logQueryError("automation workflows", workflows.error);
   logQueryError("automation runs", runs.error);
@@ -747,6 +757,13 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
       averageSuccessSeconds: performanceMetric("average_success_seconds"),
     },
     retries: { ready: retriesReady && !retryMetadata.error },
+    automaticTasks: {
+      ready: automaticTasksReady && !automaticTaskControl.error && !automaticTaskCount.error && !!automaticTaskControl.data,
+      enabled: automaticTaskControl.data?.enabled === true,
+      taskTitle: automaticTaskControl.data?.task_title || "Review new prospect reply",
+      dueHours: Number(automaticTaskControl.data?.due_hours) || 24,
+      created30d: automaticTaskCount.count || 0,
+    },
     worker: {
       ready: workerReady && !workerCycles.error,
       state: workerState,

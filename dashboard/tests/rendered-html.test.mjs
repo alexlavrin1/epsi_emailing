@@ -470,3 +470,45 @@ test("retries failed automation preparation without duplicating approved replies
   assert.doesNotMatch(actions + control + page + data, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.doesNotMatch(actions + control, /\.from\("automation_runs"\)[\s\S]*\.(?:insert|update|delete)\(/);
 });
+
+test("creates disabled-by-default, idempotent internal follow-up tasks", async () => {
+  const [migration, engine, database, actions, control, data, page, audit] = await Promise.all([
+    readFile(new URL("../database/migrations/020_automatic_reply_followup_tasks.sql", root), "utf8"),
+    readFile(new URL("../src/outreach/engine.js", root), "utf8"),
+    readFile(new URL("../src/db/supabase.js", root), "utf8"),
+    readFile(new URL("app/dashboard/automations/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/automatic-internal-task-control.tsx", root), "utf8"),
+    readFile(new URL("lib/dashboard-data.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/automations/page.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/audit/page.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS automation_internal_task_controls/i);
+  assert.match(migration, /enabled\s+BOOLEAN NOT NULL DEFAULT FALSE/i);
+  assert.match(migration, /ALTER TABLE crm_contact_tasks ALTER COLUMN created_by_user_id DROP NOT NULL/i);
+  assert.match(migration, /crm_contact_tasks_creator_or_automation_check/i);
+  assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_contact_tasks_automation_source/i);
+  assert.match(migration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON crm_contact_tasks FROM authenticated, anon/i);
+  assert.match(migration, /dashboard_has_org_role\(target_organization_id, ARRAY\['admin'\]\)/i);
+  assert.match(migration, /target_enabled AND NOT previous\.enabled THEN auth\.uid\(\)/i);
+  assert.match(migration, /auth\.role\(\) IS DISTINCT FROM 'service_role'/i);
+  assert.match(migration, /assignee\.status = 'active'/i);
+  assert.match(migration, /NOT runtime\.globally_paused/i);
+  assert.match(migration, /prospect\.status = 'active'/i);
+  assert.match(migration, /ON CONFLICT \(organization_id, automation_source_type, automation_source_id\)/i);
+  assert.match(migration, /automation\.internal_task\.created/i);
+  assert.match(migration, /REVOKE ALL ON FUNCTION create_reply_followup_task\(UUID\) FROM PUBLIC, anon, authenticated/i);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION create_reply_followup_task\(UUID\) TO service_role/i);
+  assert.doesNotMatch(migration, /GRANT EXECUTE ON FUNCTION create_reply_followup_task\(UUID\) TO authenticated/i);
+  assert.match(database, /\.rpc\('create_reply_followup_task'/);
+  assert.match(engine, /createReplyFollowupTask\(savedReply\.id\)/);
+  assert.match(engine, /reply saved without an internal task/i);
+  assert.match(actions, /\.rpc\("dashboard_set_automatic_internal_task"/);
+  assert.match(control, /window\.confirm/);
+  assert.match(control, /never sends externally/i);
+  assert.match(data, /dashboard_automatic_internal_tasks_ready/);
+  assert.match(data, /automation_source_type", "prospect_reply_followup/);
+  assert.match(page, /Automatic · internal only/);
+  assert.match(page, /Duplicate reply processing returns the original task/);
+  assert.match(audit, /Automatic follow-up task created/);
+  assert.doesNotMatch(actions + control + data + page, /SUPABASE_SERVICE_ROLE_KEY/);
+});
