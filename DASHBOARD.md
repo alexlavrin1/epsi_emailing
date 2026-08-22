@@ -225,7 +225,9 @@ Outcome: reliable automation with clear visibility and intervention controls.
 
 Status: in progress. The first slice requires Supabase authenticator MFA for every administrator session before client or automation data can be read or mutated. New administrators receive an in-product TOTP enrollment flow; returning administrators complete a six-digit challenge after password login. Enforcement exists at both the application boundary and the database membership/role helpers, while operators retain password-only access. Migration `021_admin_mfa_enforcement.sql` was applied and the live enrollment/challenge flow was verified on 2026-08-22.
 
-The second slice adds a rollback-only production permission and RLS regression suite. It impersonates Supabase browser roles with transaction-local JWT claims and checks anonymous isolation, AAL1/AAL2 administrator behavior, operator access, cross-tenant visibility, direct-write revocations, and service-role-only worker functions without changing production records. `database/tests/001_dashboard_rls_regression.sql` is ready to run in the Supabase SQL Editor.
+The second slice adds a rollback-only production permission and RLS regression suite. It impersonates Supabase browser roles with transaction-local JWT claims and checks anonymous isolation, AAL1/AAL2 administrator behavior, operator access, cross-tenant visibility, direct-write revocations, and service-role-only worker functions without changing production records. `database/tests/001_dashboard_rls_regression.sql` passed against production on 2026-08-22.
+
+The third slice adds a provider-by-provider secret-rotation and exposure-response runbook, a complete sanitized server environment template, and a read-only `npm run secrets:check` audit. The audit validates server-key shape, minimum cron-secret length, feature-dependent credentials, browser exposure, ignored local environment files, and recognizable live credentials in tracked files without printing secret values.
 
 - MFA enforcement
 - Permission and RLS tests
