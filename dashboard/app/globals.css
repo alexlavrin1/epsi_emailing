@@ -424,6 +424,18 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .runtime-control-form input:focus { border-color: var(--accent); outline: 0; box-shadow: 0 0 0 3px var(--accent-soft); }
 .runtime-control-form .action-feedback, .runtime-role-note { margin: 0; max-width: 360px; text-align: right; }
 .runtime-role-note { color: var(--faint); font-size: 10px; line-height: 1.5; }
+.automation-worker-health { margin-top: 12px; padding: 16px 18px; border: 1px solid var(--border); border-radius: 13px; background: var(--surface); }
+.automation-worker-health.state-failed { border-color: rgba(255,133,133,.45); }
+.automation-worker-health.state-stale, .automation-worker-health.state-unknown { border-color: rgba(240,189,101,.38); }
+.automation-worker-health > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.automation-worker-health h2 { margin: 0; font-size: 15px; }
+.worker-health-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 14px; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--border); }
+.worker-health-grid span { padding: 12px; background: #091310; }
+.worker-health-grid small, .worker-health-grid strong { display: block; }
+.worker-health-grid small { color: var(--faint); font-size: 9px; text-transform: uppercase; }
+.worker-health-grid strong { margin-top: 6px; font-size: 11px; }
+.worker-failure { display: flex; align-items: center; gap: 7px; margin: 12px 0 0; color: var(--danger); font-size: 10px; }
+.worker-health-note { margin: 12px 0 0; color: var(--faint); font-size: 9px; line-height: 1.5; }
 .automation-metrics article { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 70px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
 .automation-metrics svg { color: var(--accent); }
 .automation-metrics span { color: var(--muted); font-size: 11px; }
@@ -581,6 +593,7 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .runtime-control-form, .runtime-role-note { grid-column: auto; }
   .runtime-control-form { justify-items: stretch; }
   .runtime-control-form label { width: 100%; }
+  .worker-health-grid { grid-template-columns: 1fr; }
   .workflow-card > header { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
   .workflow-version { grid-column: 2; justify-items: start; text-align: left; }
   .workflow-path { grid-template-columns: repeat(2, minmax(0, 1fr)); }

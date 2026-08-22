@@ -157,6 +157,7 @@ export type AutomationData = {
   runs: AutomationRun[];
   metrics: { active: number; waitingApproval: number; succeeded: number; failed: number };
   runtime: { ready: boolean; paused: boolean; reason: string | null; pausedAt: string | null; updatedAt: string | null };
+  worker: { ready: boolean; state: "unknown" | "running" | "healthy" | "failed" | "stale"; latestStartedAt: string | null; lastSuccessAt: string | null; recentFailures: number; latestFailureCode: string | null };
 };
 
 export type AuditEvent = {
@@ -593,9 +594,9 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
 export async function getAutomationData(supabase: SupabaseClient, organizationId: string): Promise<AutomationData> {
   const readiness = await supabase.rpc("dashboard_automation_controls_ready");
   if (readiness.error || readiness.data !== true) {
-    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 }, runtime: { ready: false, paused: false, reason: null, pausedAt: null, updatedAt: null } };
+    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 }, runtime: { ready: false, paused: false, reason: null, pausedAt: null, updatedAt: null }, worker: { ready: false, state: "unknown", latestStartedAt: null, lastSuccessAt: null, recentFailures: 0, latestFailureCode: null } };
   }
-  const [workflows, runs, runtimeReadiness] = await Promise.all([
+  const [workflows, runs, runtimeReadiness, workerReadiness] = await Promise.all([
     supabase.from("automation_workflows")
       .select("id,name,description,status,trigger_type,approval_mode,delay_minutes,current_version,updated_at,versions:automation_workflow_versions(version,body_template,created_at)")
       .eq("organization_id", organizationId).order("updated_at", { ascending: false }).limit(100),
@@ -603,11 +604,18 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
       .select("id,workflow_version,status,prospect_id,scheduled_for,created_at,completed_at,last_error,workflow:automation_workflows(name),prospect:prospects(first_name,last_name,email),replies:operator_email_replies(status)")
       .eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
     supabase.rpc("dashboard_automation_runtime_ready"),
+    supabase.rpc("dashboard_automation_worker_health_ready"),
   ]);
   const runtimeReady = !runtimeReadiness.error && runtimeReadiness.data === true;
-  const runtime = runtimeReady
-    ? await supabase.from("automation_runtime_controls").select("globally_paused,pause_reason,paused_at,updated_at").eq("organization_id", organizationId).maybeSingle()
-    : { data: null, error: runtimeReadiness.error };
+  const workerReady = !workerReadiness.error && workerReadiness.data === true;
+  const [runtime, workerCycles] = await Promise.all([
+    runtimeReady
+      ? supabase.from("automation_runtime_controls").select("globally_paused,pause_reason,paused_at,updated_at").eq("organization_id", organizationId).maybeSingle()
+      : Promise.resolve({ data: null, error: runtimeReadiness.error }),
+    workerReady
+      ? supabase.from("automation_worker_cycles").select("status,failure_code,started_at,completed_at").eq("organization_id", organizationId).order("started_at", { ascending: false }).limit(100)
+      : Promise.resolve({ data: null, error: workerReadiness.error }),
+  ]);
   logQueryError("automation workflows", workflows.error);
   logQueryError("automation runs", runs.error);
   const workflowRows: AutomationWorkflow[] = (workflows.data ?? []).map(workflow => {
@@ -630,6 +638,12 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
       lastError: run.last_error, replyStatus: replies[0]?.status || null,
     };
   });
+  const cycleRows = workerCycles.data ?? [];
+  const latestCycle = cycleRows[0];
+  const latestAge = latestCycle ? Date.now() - new Date(latestCycle.started_at).getTime() : Number.POSITIVE_INFINITY;
+  const workerState = !latestCycle ? "unknown" : latestCycle.status === "failed" ? "failed" : latestCycle.status === "running" && latestAge <= 30 * 60 * 1000 ? "running" : latestCycle.status === "succeeded" && latestAge <= 30 * 60 * 1000 ? "healthy" : "stale";
+  const lastSuccess = cycleRows.find(cycle => cycle.status === "succeeded");
+  const failureCutoff = Date.now() - 24 * 60 * 60 * 1000;
   return {
     ready: !workflows.error && !runs.error,
     workflows: workflowRows,
@@ -646,6 +660,14 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
       reason: runtime.data?.pause_reason || null,
       pausedAt: runtime.data?.paused_at || null,
       updatedAt: runtime.data?.updated_at || null,
+    },
+    worker: {
+      ready: workerReady && !workerCycles.error,
+      state: workerState,
+      latestStartedAt: latestCycle?.started_at || null,
+      lastSuccessAt: lastSuccess?.completed_at || null,
+      recentFailures: cycleRows.filter(cycle => cycle.status === "failed" && new Date(cycle.started_at).getTime() >= failureCutoff).length,
+      latestFailureCode: latestCycle?.status === "failed" ? latestCycle.failure_code : null,
     },
   };
 }

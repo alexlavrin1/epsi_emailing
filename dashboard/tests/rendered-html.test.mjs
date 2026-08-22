@@ -319,3 +319,28 @@ test("enforces an audited tenant-wide automation pause in every worker claim pat
   assert.match(audit, /automation\.runtime\.resumed/);
   assert.doesNotMatch(actions + control + page + data, /SUPABASE_SERVICE_ROLE_KEY/);
 });
+
+test("shows tenant-scoped worker heartbeats without exposing raw provider errors", async () => {
+  const [migration, engine, cron, scheduler, data, page] = await Promise.all([
+    readFile(new URL("../database/migrations/015_automation_worker_heartbeats.sql", root), "utf8"),
+    readFile(new URL("../src/outreach/engine.js", root), "utf8"),
+    readFile(new URL("../api/cron/outreach.js", root), "utf8"),
+    readFile(new URL("../src/scheduler.js", root), "utf8"),
+    readFile(new URL("lib/dashboard-data.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/automations/page.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS automation_worker_cycles/i);
+  assert.match(migration, /dashboard_is_org_member\(organization_id\)/i);
+  assert.match(migration, /failure_code[\s\S]*\^\[A-Za-z0-9_/i);
+  assert.match(migration, /auth\.role\(\) IS DISTINCT FROM 'service_role'/i);
+  assert.match(migration, /REVOKE ALL ON FUNCTION start_automation_worker_cycle\(UUID, TEXT\) FROM PUBLIC, anon, authenticated/i);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION finish_automation_worker_cycle\(UUID, TEXT, TEXT\) TO service_role/i);
+  assert.match(engine, /runMonitoredOutreachCycle/);
+  assert.match(engine, /workerFailureCode/);
+  assert.match(cron + scheduler, /runMonitoredOutreachCycle/);
+  assert.match(data, /\.from\("automation_worker_cycles"\)\.select\("status,failure_code,started_at,completed_at"\)/);
+  assert.match(page, /Worker heartbeat/);
+  assert.match(page, /heartbeat older than 30 minutes is marked stale/i);
+  assert.doesNotMatch(page, /last_error|error\.message|SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(migration, /last_error|error_message/i);
+});

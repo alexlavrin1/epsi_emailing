@@ -3,6 +3,7 @@ const gmail = require('./gmail');
 const { render, buildVars, pickSubject } = require('./templates');
 const config = require('../config');
 const logger = require('../utils/logger');
+const { randomUUID } = require('node:crypto');
 
 function isWeekend() {
   const day = new Intl.DateTimeFormat('en-US', {
@@ -123,6 +124,52 @@ async function runOutreachCycle() {
   }
 
   logger.info('Outreach cycle completed.');
+}
+
+function isWorkerMonitoringUnavailable(error) {
+  return error?.code === '42P01' || error?.code === 'PGRST202' || error?.code === 'PGRST205' ||
+    /automation_worker_cycles|start_automation_worker_cycle|finish_automation_worker_cycle|schema cache/i.test(error?.message || '');
+}
+
+function workerFailureCode(error) {
+  const candidate = String(error?.code || error?.name || 'worker_error').slice(0, 100);
+  return /^[A-Za-z0-9_.:-]{1,100}$/.test(candidate) ? candidate : 'worker_error';
+}
+
+async function runMonitoredOutreachCycle(dependencies = {}) {
+  const database = dependencies.db || db;
+  const cycle = dependencies.runCycle || runOutreachCycle;
+  const cycleKey = dependencies.cycleKey || randomUUID();
+  let tracking = false;
+
+  try {
+    await database.startAutomationWorkerCycle(cycleKey);
+    tracking = true;
+  } catch (error) {
+    const level = isWorkerMonitoringUnavailable(error) ? 'warn' : 'error';
+    logger[level](`Worker heartbeat start failed; continuing outreach cycle: ${error.message}`);
+  }
+
+  try {
+    const result = await cycle();
+    if (tracking) {
+      try {
+        await database.finishAutomationWorkerCycle(cycleKey, 'succeeded', null);
+      } catch (error) {
+        logger.error(`Worker heartbeat completion failed: ${error.message}`);
+      }
+    }
+    return result;
+  } catch (error) {
+    if (tracking) {
+      try {
+        await database.finishAutomationWorkerCycle(cycleKey, 'failed', workerFailureCode(error));
+      } catch (trackingError) {
+        logger.error(`Worker heartbeat failure recording failed: ${trackingError.message}`);
+      }
+    }
+    throw error;
+  }
 }
 
 async function processSend(send, mailbox) {
@@ -346,4 +393,4 @@ async function deliverOperatorEmailReplies(dependencies = {}) {
   return { due: queued.length, sent, failed };
 }
 
-module.exports = { runOutreachCycle, deliverOperatorEmailReplies, processReplyAutomationRuns };
+module.exports = { runOutreachCycle, runMonitoredOutreachCycle, deliverOperatorEmailReplies, processReplyAutomationRuns };

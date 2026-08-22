@@ -1,5 +1,5 @@
 require('../../src/env');
-const { runOutreachCycle } = require('../../src/outreach/engine');
+const { runMonitoredOutreachCycle } = require('../../src/outreach/engine');
 const logger = require('../../src/utils/logger');
 
 module.exports = async function handler(req, res) {
@@ -11,7 +11,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    await runOutreachCycle();
+    await runMonitoredOutreachCycle();
     return res.status(200).json({ ok: true, ts: new Date().toISOString() });
   } catch (err) {
     logger.error('Cron handler error', err);

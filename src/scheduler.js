@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { runOutreachCycle } = require('./outreach/engine');
+const { runMonitoredOutreachCycle } = require('./outreach/engine');
 const logger = require('./utils/logger');
 
 /**
@@ -14,7 +14,7 @@ function startScheduler() {
   cron.schedule('*/15 * * * *', async () => {
     logger.info('Cron triggered — running outreach cycle');
     try {
-      await runOutreachCycle();
+      await runMonitoredOutreachCycle();
     } catch (error) {
       logger.error('Outreach cycle failed', error);
     }

@@ -371,6 +371,25 @@ async function failReplyAutomationRun(id, errorMessage) {
   if (error) throw error;
 }
 
+async function startAutomationWorkerCycle(cycleKey) {
+  const { data, error } = await supabase.rpc('start_automation_worker_cycle', {
+    target_cycle_key: cycleKey,
+    target_worker_name: 'outreach',
+  });
+  if (error) throw error;
+  return Number(data || 0);
+}
+
+async function finishAutomationWorkerCycle(cycleKey, status, failureCode = null) {
+  const { data, error } = await supabase.rpc('finish_automation_worker_cycle', {
+    target_cycle_key: cycleKey,
+    target_status: status,
+    target_failure_code: failureCode,
+  });
+  if (error) throw error;
+  return Number(data || 0);
+}
+
 // ─── Stripe webhook ingestion ────────────────────────────────────────────────
 
 /**
@@ -791,6 +810,8 @@ module.exports = {
   getReplyAutomationContext,
   completeReplyAutomationRun,
   failReplyAutomationRun,
+  startAutomationWorkerCycle,
+  finishAutomationWorkerCycle,
   enqueueStripeWebhookEvent,
   claimStripeWebhookEvents,
   markStripeWebhookEventProcessed,
