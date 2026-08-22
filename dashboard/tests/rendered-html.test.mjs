@@ -512,3 +512,33 @@ test("creates disabled-by-default, idempotent internal follow-up tasks", async (
   assert.match(audit, /Automatic follow-up task created/);
   assert.doesNotMatch(actions + control + data + page, /SUPABASE_SERVICE_ROLE_KEY/);
 });
+
+test("requires AAL2 for administrator dashboard access and database privileges", async () => {
+  const [migration, auth, login, session, page, form, enroll, verify] = await Promise.all([
+    readFile(new URL("../database/migrations/021_admin_mfa_enforcement.sql", root), "utf8"),
+    readFile(new URL("lib/auth.ts", root), "utf8"),
+    readFile(new URL("app/api/auth/login/route.ts", root), "utf8"),
+    readFile(new URL("app/api/session/route.ts", root), "utf8"),
+    readFile(new URL("app/mfa/page.tsx", root), "utf8"),
+    readFile(new URL("app/components/mfa-form.tsx", root), "utf8"),
+    readFile(new URL("app/api/auth/mfa/enroll/route.ts", root), "utf8"),
+    readFile(new URL("app/api/auth/mfa/verify/route.ts", root), "utf8"),
+  ]);
+  assert.match(migration, /role <> 'admin' OR COALESCE\(auth\.jwt\(\) ->> 'aal', 'aal1'\) = 'aal2'/i);
+  assert.match(migration, /CREATE OR REPLACE FUNCTION dashboard_is_org_member/i);
+  assert.match(migration, /CREATE OR REPLACE FUNCTION dashboard_has_org_role/i);
+  assert.match(migration, /organizations_member_read/i);
+  assert.match(migration, /REVOKE ALL ON FUNCTION dashboard_is_org_member\(UUID\) FROM PUBLIC, anon/i);
+  assert.match(auth, /membership\?\.role === "admin"/);
+  assert.match(auth, /currentLevel !== "aal2"/);
+  assert.match(auth, /redirect\("\/mfa"\)/);
+  assert.match(login, /requiresMfa/);
+  assert.match(session, /Multi-factor authentication required/);
+  assert.match(page, /Administrator security/);
+  assert.match(page, /factors\?\.totp\[0\]/);
+  assert.match(form, /autocomplete="one-time-code"/i);
+  assert.match(form, /Set up authenticator/);
+  assert.match(enroll, /factorType: "totp"/);
+  assert.match(verify, /challengeAndVerify/);
+  assert.doesNotMatch(auth + login + session + page + form + enroll + verify, /SUPABASE_SERVICE_ROLE_KEY/);
+});

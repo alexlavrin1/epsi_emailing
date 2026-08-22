@@ -19,12 +19,12 @@ export function LoginForm({ notice }: { notice?: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email: form.get("email"), password: form.get("password") }),
       });
-      const result = (await response.json()) as { error?: string };
+      const result = (await response.json()) as { error?: string; requiresMfa?: boolean };
       if (!response.ok) {
         setError(result.error ?? "Sign in failed. Please try again.");
         return;
       }
-      router.push("/dashboard");
+      router.push(result.requiresMfa ? "/mfa" : "/dashboard");
       router.refresh();
     } catch {
       setError("The dashboard could not be reached. Please try again.");

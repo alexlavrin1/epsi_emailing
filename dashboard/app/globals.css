@@ -79,6 +79,21 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .form-success-panel { margin-top: 28px; padding: 18px; border: 1px solid rgba(71,209,140,.35); border-radius: 11px; background: var(--accent-soft); }
 .form-success-panel strong { color: var(--accent-strong); }
 .form-success-panel p { margin: 7px 0 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.mfa-card { width: min(100%, 500px); }
+.mfa-icon { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 13px; background: var(--accent-soft); color: var(--accent); }
+.mfa-card .auth-eyebrow { margin-top: 24px; }
+.mfa-start { display: grid; gap: 16px; margin-top: 28px; }
+.mfa-start > p, .mfa-enrollment > p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.mfa-setup { margin-top: 28px; }
+.mfa-enrollment { display: grid; gap: 14px; }
+.mfa-qr { width: fit-content; padding: 10px; border-radius: 12px; background: #fff; }
+.mfa-qr img { display: block; }
+.mfa-enrollment details { color: var(--muted); font-size: 12px; }
+.mfa-enrollment summary { cursor: pointer; color: var(--accent-strong); }
+.mfa-enrollment code { display: block; margin-top: 8px; padding: 10px; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: 8px; background: #091310; color: var(--text); letter-spacing: .08em; }
+.mfa-code-form { margin-top: 22px; }
+.mfa-code-form input { letter-spacing: .24em; font-family: var(--font-geist-mono), monospace; }
+.mfa-signout { margin-top: 18px; }
 
 .pending-shell { min-height: 100dvh; display: grid; place-items: center; padding: 24px; }
 .pending-card { width: min(100%, 540px); padding: 40px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); }

@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
   const { data: membership } = await supabase
     .from("organization_members")
-    .select("organization_id")
+    .select("organization_id,role")
     .eq("user_id", data.user.id)
     .eq("status", "active")
     .limit(1)
@@ -43,7 +43,9 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const response = NextResponse.json({ ok: true });
+  const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  const requiresMfa = membership?.role === "admin" && assurance?.currentLevel !== "aal2";
+  const response = NextResponse.json({ ok: true, requiresMfa });
   pendingCookies.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
   return response;
 }

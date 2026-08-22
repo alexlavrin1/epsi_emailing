@@ -223,6 +223,8 @@ Outcome: reliable automation with clear visibility and intervention controls.
 
 ### Phase 6 — Hardening
 
+Status: in progress. The first slice requires Supabase authenticator MFA for every administrator session before client or automation data can be read or mutated. New administrators receive an in-product TOTP enrollment flow; returning administrators complete a six-digit challenge after password login. Enforcement exists at both the application boundary and the database membership/role helpers, while operators retain password-only access. Migration `021_admin_mfa_enforcement.sql` is ready to apply.
+
 - MFA enforcement
 - Permission and RLS tests
 - Secret rotation process

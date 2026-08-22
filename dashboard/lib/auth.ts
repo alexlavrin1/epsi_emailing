@@ -40,5 +40,13 @@ export const getMembership = cache(async function getMembership(userId: string):
 
 export async function requireMembership() {
   const user = await requireUser();
-  return { user, membership: await getMembership(user.id) };
+  const membership = await getMembership(user.id);
+  if (membership?.role === "admin") {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = supabase
+      ? await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      : { data: null, error: new Error("Authentication unavailable") };
+    if (error || data?.currentLevel !== "aal2") redirect("/mfa");
+  }
+  return { user, membership };
 }
