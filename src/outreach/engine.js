@@ -167,6 +167,7 @@ async function syncExistingClientWorkspace(dependencies = {}) {
           client_app_id: contact.client_app_id,
           client_contact_id: contact.id,
           provider_message_id: String(message.messageId).slice(0, 500),
+          thread_key: message.threadKey,
           direction: message.direction,
           mailbox_email: message.mailboxEmail,
           counterparty_email: contact.email,

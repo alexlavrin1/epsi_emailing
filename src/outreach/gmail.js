@@ -2,6 +2,7 @@ const nodemailer = require('nodemailer');
 const MailComposer = require('nodemailer/lib/mail-composer');
 const { ImapFlow } = require('imapflow');
 const { simpleParser } = require('mailparser');
+const { createHash } = require('node:crypto');
 const config = require('../config');
 const logger = require('../utils/logger');
 
@@ -182,6 +183,22 @@ function addresses(list) {
   return (Array.isArray(list) ? list : []).map(item => normalizeAddress(item?.address)).filter(Boolean);
 }
 
+function messageIds(value) {
+  const values = Array.isArray(value) ? value : value ? [value] : [];
+  return values.flatMap(item => String(item).match(/<[^>]+>/g) || [String(item).trim()]).filter(Boolean);
+}
+
+function clientThreadKey(parsed, envelope = {}) {
+  const references = messageIds(parsed?.references);
+  const inReplyTo = messageIds(parsed?.inReplyTo);
+  const subject = String(parsed?.subject || envelope?.subject || '')
+    .replace(/^(\s*(?:re|fw|fwd)(?:\[[0-9]+\])?:\s*)+/i, '')
+    .trim()
+    .toLowerCase();
+  const root = references[0] || inReplyTo[0] || parsed?.messageId || envelope?.messageId || `subject:${subject || 'no-subject'}`;
+  return createHash('sha256').update(String(root).trim().toLowerCase()).digest('hex');
+}
+
 function isBounceSender(from, subject) {
   return /(?:mailer-daemon|postmaster)/i.test(from) ||
     /(?:undeliver|delivery[ -](?:status|failure)|mail delivery failed|returned mail|failure notice)/i.test(subject || '');
@@ -312,6 +329,7 @@ async function findRecentClientCorrespondence(contactEmails, since) {
           const parsed = await simpleParser(sourceMessage.source);
           results.push({
             messageId: message.envelope?.messageId || parsed.messageId || `${folder.path}-uid-${message.uid}`,
+            threadKey: clientThreadKey(parsed, message.envelope),
             contactEmail,
             direction: folder.direction,
             mailboxEmail: normalizeAddress(config.yandex.email),
@@ -345,4 +363,5 @@ module.exports = {
   isUnsubscribeReply,
   composeRawMessage,
   findSentMailbox,
+  clientThreadKey,
 };

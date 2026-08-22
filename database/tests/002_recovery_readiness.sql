@@ -32,6 +32,7 @@ BEGIN
   IF NOT has_function_privilege('service_role', 'claim_reply_automation_run(uuid)', 'EXECUTE') THEN RAISE EXCEPTION 'RECOVERY TEST FAILED: service worker access is missing'; END IF;
   IF has_function_privilege('authenticated', 'service_complete_client_slack_assignment(uuid,text,text,text,text)', 'EXECUTE') THEN RAISE EXCEPTION 'RECOVERY TEST FAILED: browser Slack worker access was restored incorrectly'; END IF;
   IF NOT has_function_privilege('service_role', 'service_complete_client_slack_assignment(uuid,text,text,text,text)', 'EXECUTE') THEN RAISE EXCEPTION 'RECOVERY TEST FAILED: client Slack worker access is missing'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'client_email_messages' AND column_name = 'thread_key' AND is_nullable = 'NO') THEN RAISE EXCEPTION 'RECOVERY TEST FAILED: client email thread key is missing or nullable'; END IF;
 END; $$;
 
 DO $$

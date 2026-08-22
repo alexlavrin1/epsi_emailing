@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       recoveryCases: client.from("payment_recovery_cases").select("id,crm_customer_id,stripe_invoice_id,state,invoice_status,payment_intent_status,amount_remaining,currency,opened_at,resolved_at,resolution_reason,created_at,updated_at").order("created_at").limit(limit + 1),
       clientApps: client.from("client_apps").select("id,name,website_url,status,created_at,updated_at").eq("organization_id", organization.id).order("created_at").limit(limit + 1),
       clientContacts: client.from("client_contacts").select("id,client_app_id,name,email,slack_name,slack_assignment_status,slack_team_id,slack_user_id,slack_channel_id,slack_display_name,last_email_sync_at,created_at,updated_at").eq("organization_id", organization.id).order("created_at").limit(limit + 1),
-      clientEmailMessages: client.from("client_email_messages").select("id,client_app_id,client_contact_id,provider_message_id,direction,mailbox_email,counterparty_email,subject,body,occurred_at,created_at").eq("organization_id", organization.id).order("occurred_at").limit(limit + 1),
+      clientEmailMessages: client.from("client_email_messages").select("id,client_app_id,client_contact_id,provider_message_id,thread_key,direction,mailbox_email,counterparty_email,subject,body,occurred_at,created_at").eq("organization_id", organization.id).order("occurred_at").limit(limit + 1),
       auditEvents: client.from("audit_events").select("id,actor_user_id,event_type,target_type,target_id,metadata,created_at").eq("organization_id", organization.id).order("created_at").limit(limit + 1),
     };
     const entries = await Promise.all(Object.entries(queries).map(async ([name, query]) => [name, await query] as const));

@@ -250,11 +250,12 @@ The eighth slice completes responsive and accessibility QA. The final pass keeps
 
 ### Phase 7 — Existing-client workspace
 
-Status: in progress. The first slice adds a tenant-scoped Clients workspace organized by app, with a validated website and any number of named contacts. Contact emails are deterministically unique inside the organization so the server-side Yandex IMAP worker can match recent INBOX and Sent correspondence without exposing mailbox credentials to the dashboard. Optional Slack names queue a server-side lookup by email with an exact-name fallback; the bot opens and records a direct conversation but does not post a message. Client creation, contact creation, and Slack assignment are guarded and audited, while client apps, contacts, and correspondence are included in versioned organization exports and the disabled-by-default email retention preview. Migration `025_existing_client_workspace.sql` is ready to apply.
+Status: in progress. The first slice adds a tenant-scoped Clients workspace organized by app, with a validated website and any number of named contacts. Contact emails are deterministically unique inside the organization so the server-side Yandex IMAP worker can match recent INBOX and Sent correspondence without exposing mailbox credentials to the dashboard. Optional Slack names queue a server-side lookup by email with an exact-name fallback; the bot opens and records a direct conversation but does not post a message. Client creation, contact creation, and Slack assignment are guarded and audited, while client apps, contacts, and correspondence are included in versioned organization exports and the disabled-by-default email retention preview. Migration `025_existing_client_workspace.sql` was applied on 2026-08-22. The second slice groups matched correspondence into expandable conversations using one-way hashes derived from standard email threading headers; migration `026_client_email_threads.sql` is ready to apply.
 
 - Client app registry and website links
 - Multiple contacts per app
 - Automatic email correspondence matching
+- Expandable correspondence grouped by email thread
 - Explicit Slack direct-chat assignment
 - Tenant isolation, auditing, export, and retention coverage
 

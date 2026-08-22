@@ -22,7 +22,7 @@ test('matches existing-client email and assigns a Slack DM without posting', asy
     completeClientSlackAssignment: async (id, assignment) => completed.push({ id, assignment }),
     failClientSlackAssignment: async () => { throw new Error('should not fail'); },
   };
-  const mailer = { findRecentClientCorrespondence: async () => [{ messageId: '<mail-1>', contactEmail: 'owner@example.com', direction: 'inbound', mailboxEmail: 'hello@epsiflow.com', subject: 'Project update', text: 'All good', occurredAt: new Date('2026-08-22T08:00:00Z') }] };
+  const mailer = { findRecentClientCorrespondence: async () => [{ messageId: '<mail-1>', threadKey: 'a'.repeat(64), contactEmail: 'owner@example.com', direction: 'inbound', mailboxEmail: 'hello@epsiflow.com', subject: 'Project update', text: 'All good', occurredAt: new Date('2026-08-22T08:00:00Z') }] };
   const slack = {
     lookupUserByEmailOrName: async () => ({ teamId: 'T_TEAM', userId: 'U_OWNER', displayName: 'Owner' }),
     openDirectConversation: async () => ({ channelId: 'D_OWNER' }),
@@ -30,6 +30,7 @@ test('matches existing-client email and assigns a Slack DM without posting', asy
   const result = await syncExistingClientWorkspace({ db, mailer, slack });
   assert.deepEqual(result, { enabled: true, contacts: 1, messages: 1, slackAssigned: 1, slackFailed: 0 });
   assert.equal(saved[0].client_app_id, 'app-1');
+  assert.equal(saved[0].thread_key, 'a'.repeat(64));
   assert.equal(saved[0].counterparty_email, 'owner@example.com');
   assert.deepEqual(synced, ['contact-1']);
   assert.deepEqual(completed[0].assignment, { teamId: 'T_TEAM', userId: 'U_OWNER', displayName: 'Owner', channelId: 'D_OWNER' });

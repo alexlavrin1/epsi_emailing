@@ -679,8 +679,9 @@ test("keeps every dashboard destination reachable and touch-friendly on mobile",
 });
 
 test("adds a tenant-scoped existing-client workspace with server-side email and Slack matching", async () => {
-  const [migration, nav, listPage, detailPage, forms, actions, data, engine, mailbox, slack, database, exportRoute, verifier, readiness, rlsRegression, css] = await Promise.all([
+  const [migration, threadMigration, nav, listPage, detailPage, forms, actions, data, engine, mailbox, slack, database, exportRoute, verifier, readiness, rlsRegression, css] = await Promise.all([
     readFile(new URL("../database/migrations/025_existing_client_workspace.sql", root), "utf8"),
+    readFile(new URL("../database/migrations/026_client_email_threads.sql", root), "utf8"),
     readFile(new URL("app/components/dashboard-nav.tsx", root), "utf8"),
     readFile(new URL("app/dashboard/clients/page.tsx", root), "utf8"),
     readFile(new URL("app/dashboard/clients/[id]/page.tsx", root), "utf8"),
@@ -704,9 +705,13 @@ test("adds a tenant-scoped existing-client workspace with server-side email and 
   assert.match(migration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON client_apps, client_contacts, client_email_messages FROM authenticated, anon/i);
   assert.match(migration, /auth\.role\(\) IS DISTINCT FROM 'service_role'/i);
   assert.match(migration, /client\.app\.created|client\.contact\.created|client\.slack\.assignment_requested|client\.slack\.assigned/);
+  assert.match(threadMigration, /ADD COLUMN IF NOT EXISTS thread_key/i);
+  assert.match(threadMigration, /ALTER COLUMN thread_key SET NOT NULL/i);
   assert.match(nav, /href: "\/dashboard\/clients", label: "Clients"/);
   assert.match(listPage, /Add an existing client/);
   assert.match(detailPage, /Email correspondence/);
+  assert.match(detailPage, /client-thread-list/);
+  assert.match(detailPage, /threadMap/);
   assert.match(detailPage, /app\.slack\.com\/client/);
   assert.match(forms, /Primary contact/);
   assert.match(forms, /Add another contact|Assign Slack chat/);
@@ -718,6 +723,7 @@ test("adds a tenant-scoped existing-client workspace with server-side email and 
   assert.match(data, /\.eq\("organization_id", organizationId\)/);
   assert.match(engine, /syncExistingClientWorkspace/);
   assert.match(mailbox, /findRecentClientCorrespondence/);
+  assert.match(mailbox, /clientThreadKey/);
   assert.match(mailbox, /folders = \[\{ path: 'INBOX', direction: 'inbound' \}\]/);
   assert.match(slack, /lookupUserByEmailOrName/);
   assert.match(slack, /openDirectConversation/);
@@ -734,4 +740,5 @@ test("adds a tenant-scoped existing-client workspace with server-side email and 
   assert.match(css, /\.client-create-form/);
   assert.match(css, /\.client-detail-layout/);
   assert.match(css, /\.client-message-list summary \{[^}]*min-height: 44px/);
+  assert.match(css, /\.client-thread-summary \{[^}]*min-height: 68px/);
 });

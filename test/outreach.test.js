@@ -7,6 +7,7 @@ const {
   isUnsubscribeReply,
   composeRawMessage,
   findSentMailbox,
+  clientThreadKey,
 } = require('../src/outreach/gmail');
 const { normalizeEmail, normalizeLead } = require('../scripts/sync_instantly_leads');
 const { SUBJECT, STEPS, UNSUBSCRIBE_COPY } = require('../scripts/setup_campaign_steps');
@@ -78,6 +79,14 @@ test('finds the provider Sent mailbox by special-use flag or path', () => {
     { path: 'Sent', specialUse: '\\Sent' },
   ]).path, 'Sent');
   assert.equal(findSentMailbox([{ path: 'Sent Items' }]).path, 'Sent Items');
+});
+
+test('groups an original email and its replies under one privacy-safe thread key', () => {
+  const original = clientThreadKey({ messageId: '<root-message@example.com>', subject: 'Quarterly review' });
+  const reply = clientThreadKey({ messageId: '<reply@example.com>', references: ['<root-message@example.com>'], inReplyTo: '<root-message@example.com>', subject: 'Re: Quarterly review' });
+  assert.equal(reply, original);
+  assert.match(original, /^[a-f0-9]{64}$/);
+  assert.doesNotMatch(original, /root-message/);
 });
 
 test('local sequence matches the approved Instantly cadence and safety footer', () => {

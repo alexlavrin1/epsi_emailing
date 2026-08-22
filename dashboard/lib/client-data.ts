@@ -25,6 +25,7 @@ export type ClientAppSummary = {
 export type ClientMessage = {
   id: string;
   clientContactId: string;
+  threadKey: string;
   direction: "inbound" | "outbound";
   subject: string | null;
   body: string | null;
@@ -65,7 +66,7 @@ export async function getClientAppDetail(supabase: SupabaseClient, organizationI
       .select("id,name,website_url,status,updated_at,contacts:client_contacts(id,name,email,slack_name,slack_display_name,slack_assignment_status,slack_team_id,slack_channel_id,slack_failure_code,last_email_sync_at)")
       .eq("organization_id", organizationId).eq("id", clientAppId).maybeSingle(),
     supabase.from("client_email_messages")
-      .select("id,client_contact_id,direction,subject,body,occurred_at")
+      .select("id,client_contact_id,thread_key,direction,subject,body,occurred_at")
       .eq("organization_id", organizationId).eq("client_app_id", clientAppId)
       .order("occurred_at", { ascending: false }).limit(250),
   ]);
@@ -77,6 +78,7 @@ export async function getClientAppDetail(supabase: SupabaseClient, organizationI
   };
   const messages = (messagesResult.data ?? []).map(message => ({
     id: message.id, clientContactId: message.client_contact_id,
+    threadKey: message.thread_key || message.id,
     direction: message.direction as ClientMessage["direction"], subject: message.subject,
     body: message.body, occurredAt: message.occurred_at,
   }));

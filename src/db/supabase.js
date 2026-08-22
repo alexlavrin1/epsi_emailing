@@ -814,7 +814,7 @@ async function getClientContactsForEmailSync(limit = 500) {
 async function upsertClientEmailMessage(record) {
   const { data, error } = await supabase
     .from('client_email_messages')
-    .upsert(record, { onConflict: 'organization_id,provider_message_id', ignoreDuplicates: true })
+    .upsert(record, { onConflict: 'organization_id,provider_message_id' })
     .select('id')
     .maybeSingle();
   if (error) throw error;
