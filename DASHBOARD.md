@@ -229,7 +229,7 @@ The second slice adds a rollback-only production permission and RLS regression s
 
 The third slice adds a provider-by-provider secret-rotation and exposure-response runbook, a complete sanitized server environment template, and a read-only `npm run secrets:check` audit. The audit validates server-key shape, minimum cron-secret length, feature-dependent credentials, browser exposure, ignored local environment files, and recognizable live credentials in tracked files without printing secret values.
 
-The fourth slice adds an AAL2 administrator-only organization JSON export and disabled-by-default retention policy previews. Exports use the authenticated tenant RLS session, exclude unrestricted audit metadata, declare per-dataset limits, disable response caching, and must append an audit event before download. Administrators can tune draft retention periods and preview eligible row counts, but no deletion executor exists or runs in this slice. Migration `022_data_governance_foundation.sql` is ready to apply.
+The fourth slice adds an AAL2 administrator-only organization JSON export and disabled-by-default retention policy previews. Exports use the authenticated tenant RLS session, exclude unrestricted audit metadata, declare per-dataset limits, disable response caching, and must append an audit event before download. Administrators can tune draft retention periods and preview eligible row counts, but no deletion executor exists or runs in this slice. Migration `022_data_governance_foundation.sql` was applied and verified on 2026-08-22.
 
 - MFA enforcement
 - Permission and RLS tests
