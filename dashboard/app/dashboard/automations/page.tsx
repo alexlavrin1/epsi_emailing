@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, CheckCheck, CircleStop, Clock3, GitBranch, History, MailCheck, PauseCircle, PlayCircle, ShieldCheck, Workflow } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCheck, CircleStop, Clock3, GitBranch, History, MailCheck, PauseCircle, PlayCircle, ShieldCheck, Workflow } from "lucide-react";
+import { AutomationRuntimeControl } from "../../components/automation-runtime-control";
 import { WorkflowBuilder, WorkflowControls } from "../../components/workflow-controls";
 import { requireMembership } from "../../../lib/auth";
 import { createSupabaseServerClient } from "../../../lib/supabase-server";
@@ -27,6 +28,9 @@ export default async function AutomationsPage() {
   return <main className="dashboard-main" id="main-content">
     <header className="page-header"><div><p className="eyebrow">Structured workflows</p><h1>Automations</h1><p className="page-summary">Prepare repeatable work while keeping every external reply behind a human checkpoint.</p></div><div className="page-header-actions"><span className="record-count">{data.workflows.length} workflows</span><Link className="secondary-button compact-button header-action" href="/dashboard/approvals"><CheckCheck size={15} aria-hidden="true" />Review approvals</Link></div></header>
     {!data.ready ? <section className="panel setup-panel"><Workflow size={20} aria-hidden="true" /><div><strong>Automation controls are ready to install</strong><p>Apply migration 011 to enable versioned reply-draft workflows and run history.</p></div></section> : null}
+    {data.ready && !data.runtime.ready ? <section className="panel setup-panel"><ShieldCheck size={20} aria-hidden="true" /><div><strong>Global runtime controls are ready to install</strong><p>Apply migration 014 to enable the emergency pause and runtime health status.</p></div></section> : null}
+
+    {data.runtime.ready ? <section className={`automation-runtime ${data.runtime.paused ? "paused" : "running"}`} aria-labelledby="runtime-heading"><div className="runtime-status-icon" aria-hidden="true">{data.runtime.paused ? <AlertTriangle size={22} /> : <ShieldCheck size={22} />}</div><div className="runtime-copy"><p className="eyebrow">Runtime status</p><h2 id="runtime-heading">{data.runtime.paused ? "All automations paused" : "Automation runtime enabled"}</h2><p>{data.runtime.paused ? data.runtime.reason : "New triggers and queued work can be claimed by active workflows."}</p><small>{data.runtime.pausedAt ? `Paused ${formatWhen(data.runtime.pausedAt)}` : data.runtime.updatedAt ? `Control updated ${formatWhen(data.runtime.updatedAt)}` : "Runtime control active"} · manual replies are unaffected</small></div><AutomationRuntimeControl paused={data.runtime.paused} isAdmin={isAdmin} /></section> : null}
 
     <section className="automation-metrics" aria-label="Automation summary">
       <article><PlayCircle size={17} aria-hidden="true" /><span>Active workflows</span><strong>{data.metrics.active}</strong></article>

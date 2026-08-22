@@ -87,3 +87,21 @@ export async function setWorkflowStatus(_state: WorkflowActionState, formData: F
   revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");
   return { ok: true, message: status === "active" ? "Workflow activated. New replies can now prepare approval-gated drafts." : "Workflow paused. Queued runs will remain stopped until it is reactivated." };
 }
+
+export async function setAutomationRuntimePause(_state: WorkflowActionState, formData: FormData): Promise<WorkflowActionState> {
+  const context = await adminContext();
+  if (!context) return { ok: false, message: "Administrator access is required to control the automation runtime." };
+  const paused = String(formData.get("paused") || "");
+  const reason = String(formData.get("reason") || "").trim();
+  if (!["true", "false"].includes(paused)) return { ok: false, message: "Invalid runtime action." };
+  if (paused === "true" && (reason.length < 3 || reason.length > 500)) return { ok: false, message: "Enter a pause reason between 3 and 500 characters." };
+  const targetPaused = paused === "true";
+  const { error } = await context.supabase.rpc("dashboard_set_automation_pause", {
+    target_organization_id: context.membership.organization.id,
+    target_paused: targetPaused,
+    target_reason: targetPaused ? reason : null,
+  });
+  if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "Global runtime controls require migration 014." : actionError(error.message) };
+  revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");
+  return { ok: true, message: targetPaused ? "All automations paused. Queued work is preserved but cannot be claimed." : "Automations resumed. Queued work can continue on the next worker cycle." };
+}

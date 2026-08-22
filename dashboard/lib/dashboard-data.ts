@@ -156,6 +156,7 @@ export type AutomationData = {
   workflows: AutomationWorkflow[];
   runs: AutomationRun[];
   metrics: { active: number; waitingApproval: number; succeeded: number; failed: number };
+  runtime: { ready: boolean; paused: boolean; reason: string | null; pausedAt: string | null; updatedAt: string | null };
 };
 
 export type AuditEvent = {
@@ -592,16 +593,21 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
 export async function getAutomationData(supabase: SupabaseClient, organizationId: string): Promise<AutomationData> {
   const readiness = await supabase.rpc("dashboard_automation_controls_ready");
   if (readiness.error || readiness.data !== true) {
-    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 } };
+    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 }, runtime: { ready: false, paused: false, reason: null, pausedAt: null, updatedAt: null } };
   }
-  const [workflows, runs] = await Promise.all([
+  const [workflows, runs, runtimeReadiness] = await Promise.all([
     supabase.from("automation_workflows")
       .select("id,name,description,status,trigger_type,approval_mode,delay_minutes,current_version,updated_at,versions:automation_workflow_versions(version,body_template,created_at)")
       .eq("organization_id", organizationId).order("updated_at", { ascending: false }).limit(100),
     supabase.from("automation_runs")
       .select("id,workflow_version,status,prospect_id,scheduled_for,created_at,completed_at,last_error,workflow:automation_workflows(name),prospect:prospects(first_name,last_name,email),replies:operator_email_replies(status)")
       .eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
+    supabase.rpc("dashboard_automation_runtime_ready"),
   ]);
+  const runtimeReady = !runtimeReadiness.error && runtimeReadiness.data === true;
+  const runtime = runtimeReady
+    ? await supabase.from("automation_runtime_controls").select("globally_paused,pause_reason,paused_at,updated_at").eq("organization_id", organizationId).maybeSingle()
+    : { data: null, error: runtimeReadiness.error };
   logQueryError("automation workflows", workflows.error);
   logQueryError("automation runs", runs.error);
   const workflowRows: AutomationWorkflow[] = (workflows.data ?? []).map(workflow => {
@@ -633,6 +639,13 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
       waitingApproval: runRows.filter(item => item.status === "waiting_approval").length,
       succeeded: runRows.filter(item => item.status === "succeeded").length,
       failed: runRows.filter(item => item.status === "failed").length,
+    },
+    runtime: {
+      ready: runtimeReady && !runtime.error && !!runtime.data,
+      paused: runtime.data?.globally_paused === true,
+      reason: runtime.data?.pause_reason || null,
+      pausedAt: runtime.data?.paused_at || null,
+      updatedAt: runtime.data?.updated_at || null,
     },
   };
 }

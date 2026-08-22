@@ -288,3 +288,34 @@ test("supports tenant-guarded, audited skip and cancel approval decisions", asyn
   assert.doesNotMatch(actions + controls, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.doesNotMatch(actions + controls, /\.from\("operator_email_replies"\)[\s\S]*\.(?:insert|update|delete)\(/);
 });
+
+test("enforces an audited tenant-wide automation pause in every worker claim path", async () => {
+  const [migration, actions, control, page, data, audit] = await Promise.all([
+    readFile(new URL("../database/migrations/014_automation_runtime_controls.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/automations/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/automation-runtime-control.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/automations/page.tsx", root), "utf8"),
+    readFile(new URL("lib/dashboard-data.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/audit/page.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS automation_runtime_controls/i);
+  assert.match(migration, /globally_paused\s+BOOLEAN NOT NULL DEFAULT FALSE/i);
+  assert.match(migration, /dashboard_has_org_role\(target_organization_id, ARRAY\['admin'\]\)/i);
+  assert.match(migration, /automation_runs_block_while_paused/i);
+  assert.match(migration, /claim_reply_automation_run[\s\S]*NOT EXISTS[\s\S]*globally_paused/i);
+  assert.match(migration, /complete_reply_automation_run[\s\S]*globally_paused/i);
+  assert.match(migration, /claim_operator_email_reply[\s\S]*automation_run_id IS NULL OR NOT EXISTS[\s\S]*globally_paused/i);
+  assert.match(migration, /REVOKE ALL ON FUNCTION dashboard_set_automation_pause\(UUID, BOOLEAN, TEXT\) FROM PUBLIC, anon, authenticated/i);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION dashboard_set_automation_pause\(UUID, BOOLEAN, TEXT\) TO authenticated/i);
+  assert.match(actions, /\.rpc\("dashboard_set_automation_pause"/);
+  assert.match(control, /Pause all automations/);
+  assert.match(control, /Reason for emergency pause/);
+  assert.match(control, /window\.confirm/);
+  assert.match(page, /Runtime status/);
+  assert.match(control + page, /provider call already in flight/i);
+  assert.match(page, /manual replies are unaffected/i);
+  assert.match(data, /\.from\("automation_runtime_controls"\)/);
+  assert.match(audit, /automation\.runtime\.paused/);
+  assert.match(audit, /automation\.runtime\.resumed/);
+  assert.doesNotMatch(actions + control + page + data, /SUPABASE_SERVICE_ROLE_KEY/);
+});

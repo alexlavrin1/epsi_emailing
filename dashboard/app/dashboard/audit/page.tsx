@@ -26,6 +26,8 @@ const eventLabels: Record<string, string> = {
   "automation.workflow.status_changed": "Workflow status changed",
   "automation.run.queued": "Automation run queued",
   "automation.run.waiting_approval": "Automation draft prepared",
+  "automation.runtime.paused": "All automations paused",
+  "automation.runtime.resumed": "All automations resumed",
 };
 
 const safeMetadataKeys = new Set([
@@ -73,6 +75,8 @@ function eventSummary(event: AuditEvent) {
     case "automation.workflow.status_changed": return `Workflow changed from ${meta.previous_status || "its previous state"} to ${meta.new_status || "a new state"}.`;
     case "automation.run.queued": return "A reply-triggered automation run was scheduled.";
     case "automation.run.waiting_approval": return "A version-pinned reply draft was prepared for human review.";
+    case "automation.runtime.paused": return "An administrator paused new and queued automation work for this organization.";
+    case "automation.runtime.resumed": return "An administrator allowed queued automation work to continue.";
     default: return "An operator action was recorded by EpsiFlow.";
   }
 }

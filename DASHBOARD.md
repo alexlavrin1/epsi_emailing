@@ -181,7 +181,7 @@ Outcome: the platform becomes an operational CRM rather than only a reporting vi
 
 ### Phase 4 — Semi-automations
 
-Status: in progress. The first slice adds a structured incoming-reply workflow: administrators can create versioned templates, configure a delay, activate or pause one reply trigger, and observe version-pinned run history. New eligible replies prepare inert drafts through the backend worker; operators can edit and approve those drafts, and the existing delivery worker sends only after approval. Runs recheck workflow and prospect state before preparing work. Migrations `011_reply_draft_automations.sql` and `012_lock_automation_worker_functions.sql` were applied and verified on 2026-08-22. Browser roles cannot invoke worker functions; backend enqueue and atomic claim access remains active.
+Status: complete. The first slice adds a structured incoming-reply workflow: administrators can create versioned templates, configure a delay, activate or pause one reply trigger, and observe version-pinned run history. New eligible replies prepare inert drafts through the backend worker; operators can edit and approve those drafts, and the existing delivery worker sends only after approval. Runs recheck workflow and prospect state before preparing work. Migrations `011_reply_draft_automations.sql` and `012_lock_automation_worker_functions.sql` were applied and verified on 2026-08-22. Browser roles cannot invoke worker functions; backend enqueue and atomic claim access remains active.
 
 The second slice adds explicit skip and cancel dispositions to the approval queue. Both close the draft without delivery, record distinct stopped or cancelled automation outcomes, and append tenant-scoped audit history through guarded database functions. Migration `013_approval_dispositions.sql` was applied and verified on 2026-08-22.
 
@@ -196,6 +196,8 @@ The second slice adds explicit skip and cancel dispositions to the approval queu
 Outcome: EpsiFlow prepares work while operators retain control over sensitive actions.
 
 ### Phase 5 — Full automations and monitoring
+
+Status: in progress. The first slice adds an organization-wide emergency pause with an explicit administrator reason, clear runtime-state visibility, and audit history. Database enforcement blocks new automation runs, queued run claims, draft completion, and delivery claims for automation-generated replies while preserving manual replies. Existing behavior remains enabled by default, and queued work resumes on the next worker cycle after the pause is lifted. Migration `014_automation_runtime_controls.sql` was applied and verified on 2026-08-22.
 
 - Automatic low-risk workflows
 - Idempotency and retries

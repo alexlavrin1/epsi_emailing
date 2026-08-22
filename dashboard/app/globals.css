@@ -410,6 +410,20 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .audit-limit-note { margin: 12px 0 0; color: var(--faint); font-size: 10px; text-align: center; }
 
 .automation-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 22px; }
+.automation-runtime { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(280px, .7fr); align-items: center; gap: 16px; margin-top: 22px; padding: 18px; border: 1px solid rgba(71,209,140,.35); border-radius: 13px; background: var(--accent-soft); }
+.automation-runtime.paused { border-color: rgba(255,133,133,.45); background: rgba(255,133,133,.08); }
+.runtime-status-icon { display: grid; width: 46px; height: 46px; place-items: center; border-radius: 12px; background: rgba(71,209,140,.14); color: var(--accent-strong); }
+.automation-runtime.paused .runtime-status-icon { background: rgba(255,133,133,.12); color: var(--danger); }
+.runtime-copy h2 { margin: 0; font-size: 16px; }
+.runtime-copy > p:not(.eyebrow) { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.runtime-copy small { display: block; margin-top: 7px; color: var(--faint); font-size: 9px; }
+.runtime-control-form { display: grid; justify-items: end; gap: 8px; }
+.runtime-control-form label { display: grid; width: min(100%, 360px); gap: 6px; color: var(--muted); font-size: 10px; }
+.runtime-control-form label span { color: var(--faint); }
+.runtime-control-form input { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 9px; background: #091310; color: var(--text); font-size: 12px; }
+.runtime-control-form input:focus { border-color: var(--accent); outline: 0; box-shadow: 0 0 0 3px var(--accent-soft); }
+.runtime-control-form .action-feedback, .runtime-role-note { margin: 0; max-width: 360px; text-align: right; }
+.runtime-role-note { color: var(--faint); font-size: 10px; line-height: 1.5; }
 .automation-metrics article { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 70px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
 .automation-metrics svg { color: var(--accent); }
 .automation-metrics span { color: var(--muted); font-size: 11px; }
@@ -496,6 +510,8 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .workflow-path { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .workflow-path > svg { display: none; }
   .automation-layout { grid-template-columns: 1fr; }
+  .automation-runtime { grid-template-columns: auto minmax(0, 1fr); }
+  .runtime-control-form, .runtime-role-note { grid-column: 2; justify-items: start; width: 100%; text-align: left; }
 }
 
 @media (max-width: 640px) {
@@ -561,6 +577,10 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .audit-event-context { grid-template-columns: 1fr; }
   .audit-details dl { grid-template-columns: 1fr; }
   .automation-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .automation-runtime { grid-template-columns: 1fr; align-items: start; }
+  .runtime-control-form, .runtime-role-note { grid-column: auto; }
+  .runtime-control-form { justify-items: stretch; }
+  .runtime-control-form label { width: 100%; }
   .workflow-card > header { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
   .workflow-version { grid-column: 2; justify-items: start; text-align: left; }
   .workflow-path { grid-template-columns: repeat(2, minmax(0, 1fr)); }
