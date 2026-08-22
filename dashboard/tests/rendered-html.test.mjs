@@ -560,3 +560,32 @@ test("ships rollback-only production permission and RLS regression checks", asyn
   assert.match(sql, /has_function_privilege\('service_role'/i);
   assert.match(sql, /EpsiFlow permission and RLS regression checks passed/i);
 });
+
+test("exports tenant data and previews retention without enabling deletion", async () => {
+  const [migration, route, page, actions, nav, audit] = await Promise.all([
+    readFile(new URL("../database/migrations/022_data_governance_foundation.sql", root), "utf8"),
+    readFile(new URL("app/api/data-export/route.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/data-governance/page.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/data-governance/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/dashboard-nav.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/audit/page.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS data_retention_policies/i);
+  assert.match(migration, /enabled BOOLEAN NOT NULL DEFAULT FALSE/i);
+  assert.match(migration, /category <> 'audit_history' OR retention_days >= 365/i);
+  assert.match(migration, /dashboard_has_org_role\(target_organization_id, ARRAY\['admin'\]\)/i);
+  assert.match(migration, /data\.retention\.period_changed/i);
+  assert.match(migration, /data\.export\.downloaded/i);
+  assert.doesNotMatch(migration, /FUNCTION\s+[^\s(]*(?:purge|delete|enforce_retention)/i);
+  assert.match(route, /currentLevel !== "aal2"/);
+  assert.match(route, /safeAuditKeys/);
+  assert.match(route, /limit = 5000/);
+  assert.match(route, /dashboard_record_data_export/);
+  assert.match(route, /private, no-store, max-age=0/);
+  assert.doesNotMatch(route, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(page, /No deletion enabled/);
+  assert.match(page, /Download JSON export/);
+  assert.match(actions, /dashboard_set_retention_period/);
+  assert.match(nav, /Data governance/);
+  assert.match(audit, /Organization data exported/);
+});
