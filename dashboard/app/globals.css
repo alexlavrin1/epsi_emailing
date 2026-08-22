@@ -486,6 +486,35 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .automation-metrics svg { color: var(--accent); }
 .automation-metrics span { color: var(--muted); font-size: 11px; }
 .automation-metrics strong { font-family: var(--font-geist-mono), monospace; font-size: 20px; font-variant-numeric: tabular-nums; }
+.automation-performance { margin-top: 12px; padding: 18px; border: 1px solid var(--border); border-radius: 13px; background: var(--surface); }
+.automation-performance > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.automation-performance h2 { margin: 0; font-size: 16px; }
+.automation-performance header p:not(.eyebrow) { margin: 6px 0 0; max-width: 650px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.performance-range { display: inline-grid; grid-template-columns: repeat(2, 1fr); flex: 0 0 auto; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 9px; }
+.performance-range a { display: grid; min-width: 72px; min-height: 44px; place-items: center; padding: 0 12px; color: var(--muted); font-size: 10px; font-weight: 650; transition: background 180ms ease, color 180ms ease; }
+.performance-range a + a { border-left: 1px solid var(--border-strong); }
+.performance-range a:hover { color: var(--text); }
+.performance-range a[aria-current="page"] { background: var(--accent-soft); color: var(--accent-strong); }
+.performance-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+.performance-kpis article { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 7px 9px; padding: 13px; border: 1px solid var(--border); border-radius: 10px; background: #091310; }
+.performance-kpis svg { color: var(--accent); }
+.performance-kpis span { color: var(--muted); font-size: 10px; }
+.performance-kpis strong { grid-column: 1 / -1; font-family: var(--font-geist-mono), monospace; font-size: 22px; font-variant-numeric: tabular-nums; }
+.performance-kpis small { grid-column: 1 / -1; color: var(--faint); font-size: 9px; line-height: 1.4; }
+.performance-funnel { margin-top: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; }
+.performance-funnel-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.performance-funnel-heading strong { font-size: 11px; }
+.performance-funnel-heading small { color: var(--faint); font-size: 9px; }
+.performance-stage { display: grid; grid-template-columns: 110px minmax(120px, 1fr) 90px; align-items: center; gap: 12px; min-height: 32px; }
+.performance-stage > span { color: var(--muted); font-size: 10px; }
+.performance-stage > strong { font-family: var(--font-geist-mono), monospace; font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+.performance-stage > strong small { color: var(--faint); font-size: 9px; }
+.performance-stage progress { width: 100%; height: 8px; overflow: hidden; border: 0; border-radius: 999px; background: #091310; color: var(--accent); accent-color: var(--accent); }
+.performance-stage progress::-webkit-progress-bar { border-radius: 999px; background: #091310; }
+.performance-stage progress::-webkit-progress-value { border-radius: 999px; background: var(--accent); }
+.performance-stage progress::-moz-progress-bar { border-radius: 999px; background: var(--accent); }
+.performance-funnel footer { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--border); }
+.performance-funnel footer span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 9px; }
 .automation-section { margin-top: 32px; }
 .workflow-list { display: grid; gap: 11px; margin-top: 12px; }
 .workflow-card { overflow: hidden; border: 1px solid var(--border); border-radius: 13px; background: var(--surface); }
@@ -568,6 +597,7 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .workflow-path { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .workflow-path > svg { display: none; }
   .automation-layout { grid-template-columns: 1fr; }
+  .performance-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .automation-runtime { grid-template-columns: auto minmax(0, 1fr); }
   .runtime-control-form, .runtime-role-note { grid-column: 2; justify-items: start; width: 100%; text-align: left; }
   .automation-alert-item { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
@@ -640,6 +670,11 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .audit-event-context { grid-template-columns: 1fr; }
   .audit-details dl { grid-template-columns: 1fr; }
   .automation-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .automation-performance > header { align-items: stretch; flex-direction: column; }
+  .performance-range { align-self: flex-start; }
+  .performance-kpis { grid-template-columns: 1fr; }
+  .performance-stage { grid-template-columns: 90px minmax(80px, 1fr) 72px; gap: 8px; }
+  .performance-funnel-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
   .automation-runtime { grid-template-columns: 1fr; align-items: start; }
   .runtime-control-form, .runtime-role-note { grid-column: auto; }
   .runtime-control-form { justify-items: stretch; }

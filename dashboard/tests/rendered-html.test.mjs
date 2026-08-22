@@ -405,3 +405,32 @@ test("surfaces deduplicated automation failure alerts with audited acknowledgeme
   assert.doesNotMatch(page, /error\.message|SUPABASE_SERVICE_ROLE_KEY/);
   assert.doesNotMatch(actions + control, /\.from\("automation_failure_alerts"\)[\s\S]*\.(?:insert|update|delete)\(/);
 });
+
+test("reports tenant-scoped automation conversion metrics without sensitive content", async () => {
+  const [migration, data, page] = await Promise.all([
+    readFile(new URL("../database/migrations/018_automation_performance_reporting.sql", root), "utf8"),
+    readFile(new URL("lib/dashboard-data.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/automations/page.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /dashboard_get_automation_performance/i);
+  assert.match(migration, /dashboard_is_org_member\(target_organization_id\)/i);
+  assert.match(migration, /target_period_days NOT IN \(7, 30\)/i);
+  assert.match(migration, /WITH period_runs AS MATERIALIZED/i);
+  assert.match(migration, /prepared_drafts/);
+  assert.match(migration, /approved_drafts/);
+  assert.match(migration, /delivered_replies/);
+  assert.match(migration, /average_success_seconds/);
+  assert.match(migration, /REVOKE ALL ON FUNCTION dashboard_get_automation_performance\(UUID, INTEGER\) FROM PUBLIC, anon, authenticated/i);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION dashboard_get_automation_performance\(UUID, INTEGER\) TO authenticated/i);
+  assert.doesNotMatch(migration, /reply\.body|last_error/i);
+  assert.match(data, /\.rpc\("dashboard_get_automation_performance"/);
+  assert.match(data, /target_period_days: performanceDays/);
+  assert.match(page, /Operational conversion/);
+  assert.match(page, /Approval rate/);
+  assert.match(page, /Delivery completion/);
+  assert.match(page, /aria-label={`Automation outcome funnel/);
+  assert.match(page, /<progress/);
+  assert.match(page, /\?range=7/);
+  assert.match(page, /\?range=30/);
+  assert.doesNotMatch(page + data, /SUPABASE_SERVICE_ROLE_KEY/);
+});

@@ -169,6 +169,7 @@ export type AutomationData = {
   runtime: { ready: boolean; paused: boolean; reason: string | null; pausedAt: string | null; updatedAt: string | null };
   limits: { ready: boolean; hourlyLimit: number; usedThisHour: number; rateLimited24h: number };
   alerts: { ready: boolean; openCount: number; items: AutomationFailureAlert[] };
+  performance: { ready: boolean; days: 7 | 30; totalRuns: number; preparedDrafts: number; approvedDrafts: number; deliveredReplies: number; declinedDrafts: number; failedRuns: number; activeRuns: number; averageSuccessSeconds: number };
   worker: { ready: boolean; state: "unknown" | "running" | "healthy" | "failed" | "stale"; latestStartedAt: string | null; lastSuccessAt: string | null; recentFailures: number; latestFailureCode: string | null };
 };
 
@@ -603,12 +604,12 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
   };
 }
 
-export async function getAutomationData(supabase: SupabaseClient, organizationId: string): Promise<AutomationData> {
+export async function getAutomationData(supabase: SupabaseClient, organizationId: string, performanceDays: 7 | 30 = 30): Promise<AutomationData> {
   const readiness = await supabase.rpc("dashboard_automation_controls_ready");
   if (readiness.error || readiness.data !== true) {
-    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 }, runtime: { ready: false, paused: false, reason: null, pausedAt: null, updatedAt: null }, limits: { ready: false, hourlyLimit: 100, usedThisHour: 0, rateLimited24h: 0 }, alerts: { ready: false, openCount: 0, items: [] }, worker: { ready: false, state: "unknown", latestStartedAt: null, lastSuccessAt: null, recentFailures: 0, latestFailureCode: null } };
+    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 }, runtime: { ready: false, paused: false, reason: null, pausedAt: null, updatedAt: null }, limits: { ready: false, hourlyLimit: 100, usedThisHour: 0, rateLimited24h: 0 }, alerts: { ready: false, openCount: 0, items: [] }, performance: { ready: false, days: performanceDays, totalRuns: 0, preparedDrafts: 0, approvedDrafts: 0, deliveredReplies: 0, declinedDrafts: 0, failedRuns: 0, activeRuns: 0, averageSuccessSeconds: 0 }, worker: { ready: false, state: "unknown", latestStartedAt: null, lastSuccessAt: null, recentFailures: 0, latestFailureCode: null } };
   }
-  const [workflows, runs, runtimeReadiness, workerReadiness, limitReadiness, alertReadiness] = await Promise.all([
+  const [workflows, runs, runtimeReadiness, workerReadiness, limitReadiness, alertReadiness, reportingReadiness] = await Promise.all([
     supabase.from("automation_workflows")
       .select("id,name,description,status,trigger_type,approval_mode,delay_minutes,current_version,updated_at,versions:automation_workflow_versions(version,body_template,created_at)")
       .eq("organization_id", organizationId).order("updated_at", { ascending: false }).limit(100),
@@ -619,14 +620,16 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
     supabase.rpc("dashboard_automation_worker_health_ready"),
     supabase.rpc("dashboard_automation_rate_limits_ready"),
     supabase.rpc("dashboard_automation_failure_alerts_ready"),
+    supabase.rpc("dashboard_automation_reporting_ready"),
   ]);
   const runtimeReady = !runtimeReadiness.error && runtimeReadiness.data === true;
   const workerReady = !workerReadiness.error && workerReadiness.data === true;
   const limitsReady = !limitReadiness.error && limitReadiness.data === true;
   const alertsReady = !alertReadiness.error && alertReadiness.data === true;
+  const reportingReady = !reportingReadiness.error && reportingReadiness.data === true;
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const [runtime, workerCycles, rateControl, hourlyUsage, rateLimitedEvents, failureAlerts] = await Promise.all([
+  const [runtime, workerCycles, rateControl, hourlyUsage, rateLimitedEvents, failureAlerts, performance] = await Promise.all([
     runtimeReady
       ? supabase.from("automation_runtime_controls").select("globally_paused,pause_reason,paused_at,updated_at").eq("organization_id", organizationId).maybeSingle()
       : Promise.resolve({ data: null, error: runtimeReadiness.error }),
@@ -645,6 +648,9 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
     alertsReady
       ? supabase.from("automation_failure_alerts").select("id,source_type,source_id,severity,failure_code,created_at,workflow:automation_workflows(name)", { count: "exact" }).eq("organization_id", organizationId).is("acknowledged_at", null).order("created_at", { ascending: false }).limit(20)
       : Promise.resolve({ data: null, count: null, error: alertReadiness.error }),
+    reportingReady
+      ? supabase.rpc("dashboard_get_automation_performance", { target_organization_id: organizationId, target_period_days: performanceDays })
+      : Promise.resolve({ data: null, error: reportingReadiness.error }),
   ]);
   logQueryError("automation workflows", workflows.error);
   logQueryError("automation runs", runs.error);
@@ -686,6 +692,8 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
       createdAt: alert.created_at,
     };
   });
+  const performancePayload = performance.data && typeof performance.data === "object" && !Array.isArray(performance.data) ? performance.data as Record<string, unknown> : {};
+  const performanceMetric = (key: string) => Math.max(0, Number(performancePayload[key]) || 0);
   return {
     ready: !workflows.error && !runs.error,
     workflows: workflowRows,
@@ -713,6 +721,18 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
       ready: alertsReady && !failureAlerts.error,
       openCount: failureAlerts.count || 0,
       items: alertRows,
+    },
+    performance: {
+      ready: reportingReady && !performance.error,
+      days: performanceDays,
+      totalRuns: performanceMetric("total_runs"),
+      preparedDrafts: performanceMetric("prepared_drafts"),
+      approvedDrafts: performanceMetric("approved_drafts"),
+      deliveredReplies: performanceMetric("delivered_replies"),
+      declinedDrafts: performanceMetric("declined_drafts"),
+      failedRuns: performanceMetric("failed_runs"),
+      activeRuns: performanceMetric("active_runs"),
+      averageSuccessSeconds: performanceMetric("average_success_seconds"),
     },
     worker: {
       ready: workerReady && !workerCycles.error,

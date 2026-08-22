@@ -205,6 +205,8 @@ The third slice adds an organization-wide rolling hourly limit for new automatio
 
 The fourth slice adds tenant-scoped failure alerts for automation runs and monitored worker cycles. Database triggers deduplicate alerts at the failure source, store only sanitized failure codes, and seed recent failures from the previous 30 days. Operators can acknowledge alerts without retrying or modifying failed work, and every acknowledgement remains visible in the append-only audit log. Migration `017_automation_failure_alerts.sql` was applied and verified on 2026-08-22.
 
+The fifth slice adds privacy-preserving automation performance reporting for selectable 7-day and 30-day periods. A membership-guarded aggregate function returns trigger, draft, approval, delivery, decline, failure, active-run, and average-success-time metrics without exposing message content, recipients, or provider errors. The dashboard presents exact KPI values and a text-labelled outcome funnel. Migration `018_automation_performance_reporting.sql` was applied and verified on 2026-08-22.
+
 - Automatic low-risk workflows
 - Idempotency and retries
 - Failure alerts

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Activity, AlertTriangle, ArrowRight, BellRing, CheckCheck, CircleStop, Clock3, Gauge, GitBranch, History, MailCheck, PauseCircle, PlayCircle, ShieldCheck, Workflow } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, BarChart3, BellRing, CheckCheck, CircleStop, Clock3, Gauge, GitBranch, History, MailCheck, PauseCircle, PlayCircle, Send, ShieldCheck, Timer, Workflow } from "lucide-react";
 import { AutomationAlertControl } from "../../components/automation-alert-control";
 import { AutomationRateLimitControl, AutomationRuntimeControl } from "../../components/automation-runtime-control";
 import { WorkflowBuilder, WorkflowControls } from "../../components/workflow-controls";
@@ -19,12 +19,26 @@ function delayLabel(minutes: number) {
   return `${minutes} minutes`;
 }
 
-export default async function AutomationsPage() {
+function performancePercent(value: number, total: number) {
+  return total ? `${Math.round((value / total) * 100)}%` : "—";
+}
+
+function durationLabel(seconds: number) {
+  if (!seconds) return "—";
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
+  return `${Math.round(seconds / 86400)}d`;
+}
+
+export default async function AutomationsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const { membership } = await requireMembership();
   if (!membership) return null;
+  const params = await searchParams;
+  const performanceDays: 7 | 30 = params.range === "7" ? 7 : 30;
   const supabase = await createSupabaseServerClient();
   if (!supabase) throw new Error("Dashboard authentication is not configured.");
-  const data = await getAutomationData(supabase, membership.organization.id);
+  const data = await getAutomationData(supabase, membership.organization.id, performanceDays);
   const isAdmin = membership.role === "admin";
   return <main className="dashboard-main" id="main-content">
     <header className="page-header"><div><p className="eyebrow">Structured workflows</p><h1>Automations</h1><p className="page-summary">Prepare repeatable work while keeping every external reply behind a human checkpoint.</p></div><div className="page-header-actions"><span className="record-count">{data.workflows.length} workflows</span><Link className="secondary-button compact-button header-action" href="/dashboard/approvals"><CheckCheck size={15} aria-hidden="true" />Review approvals</Link></div></header>
@@ -33,6 +47,7 @@ export default async function AutomationsPage() {
     {data.ready && !data.worker.ready ? <section className="panel setup-panel"><Activity size={20} aria-hidden="true" /><div><strong>Worker heartbeat monitoring is ready to install</strong><p>Apply migration 015 to record scheduled worker cycles and failures.</p></div></section> : null}
     {data.ready && !data.limits.ready ? <section className="panel setup-panel"><Gauge size={20} aria-hidden="true" /><div><strong>Automation rate limits are ready to install</strong><p>Apply migration 016 to enforce an organization-wide hourly run limit.</p></div></section> : null}
     {data.ready && !data.alerts.ready ? <section className="panel setup-panel"><BellRing size={20} aria-hidden="true" /><div><strong>Automation failure alerts are ready to install</strong><p>Apply migration 017 to surface and acknowledge failed runs and worker cycles.</p></div></section> : null}
+    {data.ready && !data.performance.ready ? <section className="panel setup-panel"><BarChart3 size={20} aria-hidden="true" /><div><strong>Automation performance reporting is ready to install</strong><p>Apply migration 018 to add tenant-scoped conversion and completion metrics.</p></div></section> : null}
 
     {data.runtime.ready ? <section className={`automation-runtime ${data.runtime.paused ? "paused" : "running"}`} aria-labelledby="runtime-heading"><div className="runtime-status-icon" aria-hidden="true">{data.runtime.paused ? <AlertTriangle size={22} /> : <ShieldCheck size={22} />}</div><div className="runtime-copy"><p className="eyebrow">Runtime status</p><h2 id="runtime-heading">{data.runtime.paused ? "All automations paused" : "Automation runtime enabled"}</h2><p>{data.runtime.paused ? data.runtime.reason : "New triggers and queued work can be claimed by active workflows."}</p><small>{data.runtime.pausedAt ? `Paused ${formatWhen(data.runtime.pausedAt)}` : data.runtime.updatedAt ? `Control updated ${formatWhen(data.runtime.updatedAt)}` : "Runtime control active"} · manual replies are unaffected</small></div><AutomationRuntimeControl paused={data.runtime.paused} isAdmin={isAdmin} /></section> : null}
 
@@ -48,6 +63,8 @@ export default async function AutomationsPage() {
       <article><ShieldCheck size={17} aria-hidden="true" /><span>Succeeded</span><strong>{data.metrics.succeeded}</strong></article>
       <article><CircleStop size={17} aria-hidden="true" /><span>Failed</span><strong>{data.metrics.failed}</strong></article>
     </section>
+
+    {data.performance.ready ? <section className="automation-performance" aria-labelledby="automation-performance-heading"><header><div><p className="eyebrow">Operational conversion</p><h2 id="automation-performance-heading">Automation performance</h2><p>Aggregate workflow outcomes for your organization. No message content or provider errors are included.</p></div><nav className="performance-range" aria-label="Performance reporting period"><Link href="/dashboard/automations?range=7" aria-current={data.performance.days === 7 ? "page" : undefined}>7 days</Link><Link href="/dashboard/automations?range=30" aria-current={data.performance.days === 30 ? "page" : undefined}>30 days</Link></nav></header><div className="performance-kpis"><article><BarChart3 size={17} aria-hidden="true" /><span>Triggered runs</span><strong>{data.performance.totalRuns.toLocaleString()}</strong><small>Last {data.performance.days} days</small></article><article><CheckCheck size={17} aria-hidden="true" /><span>Approval rate</span><strong>{performancePercent(data.performance.approvedDrafts, data.performance.preparedDrafts)}</strong><small>{data.performance.approvedDrafts.toLocaleString()} of {data.performance.preparedDrafts.toLocaleString()} prepared</small></article><article><Send size={17} aria-hidden="true" /><span>Delivery completion</span><strong>{performancePercent(data.performance.deliveredReplies, data.performance.approvedDrafts)}</strong><small>{data.performance.deliveredReplies.toLocaleString()} sent after approval</small></article><article><Timer size={17} aria-hidden="true" /><span>Average success time</span><strong>{durationLabel(data.performance.averageSuccessSeconds)}</strong><small>Trigger to successful send</small></article></div><div className="performance-funnel" aria-label={`Automation outcome funnel for the last ${data.performance.days} days`}><div className="performance-funnel-heading"><strong>Outcome funnel</strong><small>Each stage is measured against triggered runs.</small></div>{[{ label: "Triggered", value: data.performance.totalRuns }, { label: "Draft prepared", value: data.performance.preparedDrafts }, { label: "Approved", value: data.performance.approvedDrafts }, { label: "Delivered", value: data.performance.deliveredReplies }].map(stage => <div className="performance-stage" key={stage.label}><span>{stage.label}</span><progress max={Math.max(1, data.performance.totalRuns)} value={stage.value} aria-label={`${stage.label}: ${stage.value} of ${data.performance.totalRuns} triggered runs`} /><strong>{stage.value.toLocaleString()} <small>{performancePercent(stage.value, data.performance.totalRuns)}</small></strong></div>)}<footer><span><CircleStop size={14} aria-hidden="true" />{data.performance.failedRuns.toLocaleString()} failed</span><span><PauseCircle size={14} aria-hidden="true" />{data.performance.declinedDrafts.toLocaleString()} declined</span><span><Activity size={14} aria-hidden="true" />{data.performance.activeRuns.toLocaleString()} still active</span></footer></div></section> : null}
 
     <section className="automation-section" aria-labelledby="workflow-definitions-heading"><div className="section-heading"><div><p className="eyebrow">Definitions</p><h2 id="workflow-definitions-heading">Reply workflows</h2></div><span className="count-badge">{data.workflows.length}</span></div>
       {data.workflows.length ? <div className="workflow-list">{data.workflows.map(workflow => <article className="workflow-card" key={workflow.id}><header><span className={`workflow-state-icon ${workflow.status}`} aria-hidden="true">{workflow.status === "active" ? <PlayCircle size={19} /> : <PauseCircle size={19} />}</span><div><span className={`status-badge status-${workflow.status}`}>{workflow.status}</span><h3>{workflow.name}</h3><p>{workflow.description || "No description"}</p></div><div className="workflow-version"><span>Version</span><strong>v{workflow.currentVersion}</strong><small>{workflow.versions} immutable snapshot{workflow.versions === 1 ? "" : "s"}</small></div></header>
