@@ -203,6 +203,8 @@ The second slice records tenant-scoped outreach-worker heartbeats from both Verc
 
 The third slice adds an organization-wide rolling hourly limit for new automation runs. Enforcement is atomic under concurrent triggers, fails closed when runtime configuration is missing, and records both administrator limit changes and blocked triggers in the audit log. The dashboard shows current one-hour usage, the configured cap, and the number of blocked triggers in the last 24 hours. Migration `016_automation_rate_limits.sql` was applied and verified on 2026-08-22.
 
+The fourth slice adds tenant-scoped failure alerts for automation runs and monitored worker cycles. Database triggers deduplicate alerts at the failure source, store only sanitized failure codes, and seed recent failures from the previous 30 days. Operators can acknowledge alerts without retrying or modifying failed work, and every acknowledgement remains visible in the append-only audit log. Migration `017_automation_failure_alerts.sql` was applied and verified on 2026-08-22.
+
 - Automatic low-risk workflows
 - Idempotency and retries
 - Failure alerts

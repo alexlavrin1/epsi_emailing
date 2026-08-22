@@ -119,3 +119,16 @@ export async function setAutomationRateLimit(_state: WorkflowActionState, formDa
   revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");
   return { ok: true, message: `Hourly automation limit updated to ${hourlyLimit.toLocaleString()}.` };
 }
+
+export async function acknowledgeAutomationAlert(_state: WorkflowActionState, formData: FormData): Promise<WorkflowActionState> {
+  const { membership } = await requireMembership();
+  if (!membership) return { ok: false, message: "An active organization membership is required." };
+  const alertId = String(formData.get("alert_id") || "");
+  if (!uuidPattern.test(alertId)) return { ok: false, message: "Invalid automation alert." };
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { ok: false, message: "Unable to acknowledge this alert." };
+  const { error } = await supabase.rpc("dashboard_acknowledge_automation_alert", { target_alert_id: alertId });
+  if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "Automation failure alerts require migration 017." : "Unable to acknowledge this alert." };
+  revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");
+  return { ok: true, message: "Alert acknowledged and retained in the audit log." };
+}

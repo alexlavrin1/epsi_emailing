@@ -151,6 +151,16 @@ export type AutomationRun = {
   replyStatus: string | null;
 };
 
+export type AutomationFailureAlert = {
+  id: string;
+  sourceType: "automation_run" | "worker_cycle";
+  sourceId: string;
+  severity: "warning" | "critical";
+  failureCode: string;
+  workflowName: string | null;
+  createdAt: string;
+};
+
 export type AutomationData = {
   ready: boolean;
   workflows: AutomationWorkflow[];
@@ -158,6 +168,7 @@ export type AutomationData = {
   metrics: { active: number; waitingApproval: number; succeeded: number; failed: number };
   runtime: { ready: boolean; paused: boolean; reason: string | null; pausedAt: string | null; updatedAt: string | null };
   limits: { ready: boolean; hourlyLimit: number; usedThisHour: number; rateLimited24h: number };
+  alerts: { ready: boolean; openCount: number; items: AutomationFailureAlert[] };
   worker: { ready: boolean; state: "unknown" | "running" | "healthy" | "failed" | "stale"; latestStartedAt: string | null; lastSuccessAt: string | null; recentFailures: number; latestFailureCode: string | null };
 };
 
@@ -595,9 +606,9 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
 export async function getAutomationData(supabase: SupabaseClient, organizationId: string): Promise<AutomationData> {
   const readiness = await supabase.rpc("dashboard_automation_controls_ready");
   if (readiness.error || readiness.data !== true) {
-    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 }, runtime: { ready: false, paused: false, reason: null, pausedAt: null, updatedAt: null }, limits: { ready: false, hourlyLimit: 100, usedThisHour: 0, rateLimited24h: 0 }, worker: { ready: false, state: "unknown", latestStartedAt: null, lastSuccessAt: null, recentFailures: 0, latestFailureCode: null } };
+    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 }, runtime: { ready: false, paused: false, reason: null, pausedAt: null, updatedAt: null }, limits: { ready: false, hourlyLimit: 100, usedThisHour: 0, rateLimited24h: 0 }, alerts: { ready: false, openCount: 0, items: [] }, worker: { ready: false, state: "unknown", latestStartedAt: null, lastSuccessAt: null, recentFailures: 0, latestFailureCode: null } };
   }
-  const [workflows, runs, runtimeReadiness, workerReadiness, limitReadiness] = await Promise.all([
+  const [workflows, runs, runtimeReadiness, workerReadiness, limitReadiness, alertReadiness] = await Promise.all([
     supabase.from("automation_workflows")
       .select("id,name,description,status,trigger_type,approval_mode,delay_minutes,current_version,updated_at,versions:automation_workflow_versions(version,body_template,created_at)")
       .eq("organization_id", organizationId).order("updated_at", { ascending: false }).limit(100),
@@ -607,13 +618,15 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
     supabase.rpc("dashboard_automation_runtime_ready"),
     supabase.rpc("dashboard_automation_worker_health_ready"),
     supabase.rpc("dashboard_automation_rate_limits_ready"),
+    supabase.rpc("dashboard_automation_failure_alerts_ready"),
   ]);
   const runtimeReady = !runtimeReadiness.error && runtimeReadiness.data === true;
   const workerReady = !workerReadiness.error && workerReadiness.data === true;
   const limitsReady = !limitReadiness.error && limitReadiness.data === true;
+  const alertsReady = !alertReadiness.error && alertReadiness.data === true;
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const [runtime, workerCycles, rateControl, hourlyUsage, rateLimitedEvents] = await Promise.all([
+  const [runtime, workerCycles, rateControl, hourlyUsage, rateLimitedEvents, failureAlerts] = await Promise.all([
     runtimeReady
       ? supabase.from("automation_runtime_controls").select("globally_paused,pause_reason,paused_at,updated_at").eq("organization_id", organizationId).maybeSingle()
       : Promise.resolve({ data: null, error: runtimeReadiness.error }),
@@ -629,6 +642,9 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
     limitsReady
       ? supabase.from("audit_events").select("id", { count: "exact", head: true }).eq("organization_id", organizationId).eq("event_type", "automation.run.rate_limited").gte("created_at", dayAgo)
       : Promise.resolve({ count: null, error: limitReadiness.error }),
+    alertsReady
+      ? supabase.from("automation_failure_alerts").select("id,source_type,source_id,severity,failure_code,created_at,workflow:automation_workflows(name)", { count: "exact" }).eq("organization_id", organizationId).is("acknowledged_at", null).order("created_at", { ascending: false }).limit(20)
+      : Promise.resolve({ data: null, count: null, error: alertReadiness.error }),
   ]);
   logQueryError("automation workflows", workflows.error);
   logQueryError("automation runs", runs.error);
@@ -658,6 +674,18 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
   const workerState = !latestCycle ? "unknown" : latestCycle.status === "failed" ? "failed" : latestCycle.status === "running" && latestAge <= 30 * 60 * 1000 ? "running" : latestCycle.status === "succeeded" && latestAge <= 30 * 60 * 1000 ? "healthy" : "stale";
   const lastSuccess = cycleRows.find(cycle => cycle.status === "succeeded");
   const failureCutoff = Date.now() - 24 * 60 * 60 * 1000;
+  const alertRows: AutomationFailureAlert[] = (failureAlerts.data ?? []).map(alert => {
+    const workflow = one(alert.workflow as Related<{ name: string }>);
+    return {
+      id: alert.id,
+      sourceType: alert.source_type as AutomationFailureAlert["sourceType"],
+      sourceId: alert.source_id,
+      severity: alert.severity as AutomationFailureAlert["severity"],
+      failureCode: alert.failure_code,
+      workflowName: workflow?.name || null,
+      createdAt: alert.created_at,
+    };
+  });
   return {
     ready: !workflows.error && !runs.error,
     workflows: workflowRows,
@@ -680,6 +708,11 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
       hourlyLimit: rateControl.data?.hourly_run_limit || 100,
       usedThisHour: hourlyUsage.count || 0,
       rateLimited24h: rateLimitedEvents.count || 0,
+    },
+    alerts: {
+      ready: alertsReady && !failureAlerts.error,
+      openCount: failureAlerts.count || 0,
+      items: alertRows,
     },
     worker: {
       ready: workerReady && !workerCycles.error,

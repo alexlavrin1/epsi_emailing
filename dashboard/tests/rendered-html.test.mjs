@@ -374,3 +374,34 @@ test("atomically enforces audited tenant automation rate limits", async () => {
   assert.doesNotMatch(actions + control + page + data, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.doesNotMatch(actions + control, /\.from\("automation_runtime_controls"\)[\s\S]*\.(?:insert|update|delete)\(/);
 });
+
+test("surfaces deduplicated automation failure alerts with audited acknowledgement", async () => {
+  const [migration, actions, control, data, page, audit] = await Promise.all([
+    readFile(new URL("../database/migrations/017_automation_failure_alerts.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/automations/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/automation-alert-control.tsx", root), "utf8"),
+    readFile(new URL("lib/dashboard-data.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/automations/page.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/audit/page.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS automation_failure_alerts/i);
+  assert.match(migration, /UNIQUE \(organization_id, source_type, source_id\)/i);
+  assert.match(migration, /failure_code\s+TEXT NOT NULL CHECK \(failure_code ~ '\^\[A-Za-z0-9_/i);
+  assert.match(migration, /automation_runs_create_failure_alert/i);
+  assert.match(migration, /automation_worker_cycles_create_failure_alert/i);
+  assert.match(migration, /ON CONFLICT \(organization_id, source_type, source_id\) DO UPDATE[\s\S]*acknowledged_at = NULL/i);
+  assert.match(migration, /created_at >= NOW\(\) - INTERVAL '30 days'/i);
+  assert.match(migration, /dashboard_is_org_member\(target\.organization_id\)/i);
+  assert.match(migration, /automation\.alert\.acknowledged/i);
+  assert.match(migration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON automation_failure_alerts FROM authenticated, anon/i);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION dashboard_acknowledge_automation_alert\(UUID\) TO authenticated/i);
+  assert.match(actions, /\.rpc\("dashboard_acknowledge_automation_alert"/);
+  assert.match(control, /Acknowledge/);
+  assert.match(data, /\.from\("automation_failure_alerts"\)/);
+  assert.match(data, /\.is\("acknowledged_at", null\)/);
+  assert.match(page, /Failure alerts/);
+  assert.match(page, /does not retry or change failed work/i);
+  assert.match(audit, /Failure alert acknowledged/);
+  assert.doesNotMatch(page, /error\.message|SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(actions + control, /\.from\("automation_failure_alerts"\)[\s\S]*\.(?:insert|update|delete)\(/);
+});
