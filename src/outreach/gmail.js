@@ -178,6 +178,10 @@ function firstAddress(list) {
   return normalizeAddress(Array.isArray(list) ? list[0]?.address : null);
 }
 
+function addresses(list) {
+  return (Array.isArray(list) ? list : []).map(item => normalizeAddress(item?.address)).filter(Boolean);
+}
+
 function isBounceSender(from, subject) {
   return /(?:mailer-daemon|postmaster)/i.test(from) ||
     /(?:undeliver|delivery[ -](?:status|failure)|mail delivery failed|returned mail|failure notice)/i.test(subject || '');
@@ -267,6 +271,66 @@ async function findRecentInboundMessages(prospectEmails, since) {
   }
 }
 
+/**
+ * Match known client contacts against recent INBOX and Sent messages. The
+ * mailbox remains read-only and only matching message bodies are returned.
+ */
+async function findRecentClientCorrespondence(contactEmails, since) {
+  const targets = new Set(contactEmails.map(normalizeAddress).filter(Boolean));
+  if (!targets.size) return [];
+  const client = new ImapFlow({
+    host: config.yandex.imapHost,
+    port: 993,
+    secure: true,
+    auth: { user: config.yandex.email, pass: config.yandex.password },
+    logger: false,
+  });
+
+  try {
+    await client.connect();
+    const mailboxes = await client.list();
+    const sentMailbox = findSentMailbox(mailboxes);
+    const folders = [{ path: 'INBOX', direction: 'inbound' }];
+    if (sentMailbox) folders.push({ path: sentMailbox.path, direction: 'outbound' });
+    const results = [];
+
+    for (const folder of folders) {
+      const lock = await client.getMailboxLock(folder.path, { readOnly: true });
+      try {
+        const uids = await client.search({ since }, { uid: true });
+        if (!uids?.length) continue;
+        const recentUids = uids.slice(-500);
+        const messages = await client.fetchAll(recentUids, { uid: true, envelope: true }, { uid: true });
+        for (const message of messages) {
+          const counterparties = folder.direction === 'inbound'
+            ? [firstAddress(message.envelope?.from)]
+            : [...addresses(message.envelope?.to), ...addresses(message.envelope?.cc)];
+          const contactEmail = counterparties.find(email => targets.has(email));
+          if (!contactEmail) continue;
+          const sourceMessage = await client.fetchOne(String(message.uid), { source: true }, { uid: true });
+          if (!sourceMessage?.source) continue;
+          const parsed = await simpleParser(sourceMessage.source);
+          results.push({
+            messageId: message.envelope?.messageId || parsed.messageId || `${folder.path}-uid-${message.uid}`,
+            contactEmail,
+            direction: folder.direction,
+            mailboxEmail: normalizeAddress(config.yandex.email),
+            subject: String(message.envelope?.subject || parsed.subject || '').slice(0, 998) || null,
+            text: String(parsed.text || '').slice(0, 10000) || null,
+            occurredAt: message.envelope?.date || parsed.date || new Date(),
+          });
+        }
+      } finally {
+        lock.release();
+      }
+    }
+    return results;
+  } finally {
+    if (client.usable) await client.logout();
+    else client.close();
+  }
+}
+
 async function getUserEmail()      { return config.yandex.email; }
 
 module.exports = {
@@ -274,6 +338,7 @@ module.exports = {
   sendReply,
   sendTransactionalEmail,
   findRecentInboundMessages,
+  findRecentClientCorrespondence,
   getUserEmail,
   // Exported for unit tests; not part of the sending interface.
   isBounceSender,

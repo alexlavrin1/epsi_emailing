@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Archive, Building2, CheckCheck, Columns3, FileClock, Inbox, LayoutDashboard, Megaphone, Users, Workflow } from "lucide-react";
+import { Activity, Archive, BriefcaseBusiness, Building2, CheckCheck, Columns3, FileClock, Inbox, LayoutDashboard, Megaphone, Users, Workflow } from "lucide-react";
 
 const items = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/crm", label: "CRM", icon: Users },
+  { href: "/dashboard/clients", label: "Clients", icon: BriefcaseBusiness },
   { href: "/dashboard/pipeline", label: "Pipeline", icon: Columns3 },
   { href: "/dashboard/companies", label: "Companies", icon: Building2 },
   { href: "/dashboard/inbox", label: "Replies", icon: Inbox },

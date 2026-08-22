@@ -781,6 +781,7 @@ export async function getAuditEvents(
   filters: { query?: string; category?: string; period?: string } = {},
 ): Promise<AuditData> {
   const categoryPrefixes: Record<string, string> = {
+    client: "client.%",
     crm: "crm.%",
     outreach: "outreach.%",
     email: "email.%",

@@ -4,6 +4,7 @@ const { render, buildVars, pickSubject } = require('./templates');
 const config = require('../config');
 const logger = require('../utils/logger');
 const { randomUUID } = require('node:crypto');
+const slack = require('../integrations/slack/client');
 
 function isWeekend() {
   const day = new Intl.DateTimeFormat('en-US', {
@@ -54,6 +55,7 @@ async function runOutreachCycle() {
 
   // Replies, unsubscribes, and bounces are processed even when sending is
   // disabled or outside business hours.
+  await syncExistingClientWorkspace();
   await processReplyAutomationRuns();
   await deliverOperatorEmailReplies();
   await checkForReplies();
@@ -124,6 +126,83 @@ async function runOutreachCycle() {
   }
 
   logger.info('Outreach cycle completed.');
+}
+
+function isClientWorkspaceUnavailable(error) {
+  return error?.code === '42P01' || error?.code === 'PGRST202' || error?.code === 'PGRST205' ||
+    /client_(?:apps|contacts|email_messages)|service_(?:complete|fail)_client_slack_assignment|schema cache/i.test(error?.message || '');
+}
+
+function clientConnectionFailureCode(error) {
+  const candidate = String(error?.data?.error || error?.code || error?.name || 'client_connection_failed').slice(0, 100);
+  return /^[A-Za-z0-9_.:-]{1,100}$/.test(candidate) ? candidate : 'client_connection_failed';
+}
+
+async function syncExistingClientWorkspace(dependencies = {}) {
+  const database = dependencies.db || db;
+  const mailer = dependencies.mailer || gmail;
+  const slackClient = dependencies.slack || slack;
+  let contacts;
+  try {
+    contacts = await database.getClientContactsForEmailSync(500);
+  } catch (error) {
+    if (isClientWorkspaceUnavailable(error)) {
+      logger.warn('Existing-client workspace is not installed yet; continuing the outreach cycle');
+      return { enabled: false, contacts: 0, messages: 0, slackAssigned: 0, slackFailed: 0 };
+    }
+    throw error;
+  }
+
+  let messagesSaved = 0;
+  if (contacts.length) {
+    try {
+      const contactByEmail = new Map(contacts.map(contact => [String(contact.email).toLowerCase(), contact]));
+      const since = new Date(Date.now() - config.clientCorrespondenceLookbackDays * 24 * 60 * 60 * 1000);
+      const messages = await mailer.findRecentClientCorrespondence([...contactByEmail.keys()], since);
+      for (const message of messages) {
+        const contact = contactByEmail.get(String(message.contactEmail).toLowerCase());
+        if (!contact) continue;
+        const saved = await database.upsertClientEmailMessage({
+          organization_id: contact.organization_id,
+          client_app_id: contact.client_app_id,
+          client_contact_id: contact.id,
+          provider_message_id: String(message.messageId).slice(0, 500),
+          direction: message.direction,
+          mailbox_email: message.mailboxEmail,
+          counterparty_email: contact.email,
+          subject: message.subject,
+          body: message.text,
+          occurred_at: new Date(message.occurredAt).toISOString(),
+        });
+        if (saved?.id) messagesSaved++;
+      }
+      await database.markClientContactsEmailSynced(contacts.map(contact => contact.id));
+    } catch (error) {
+      logger.error(`Client correspondence sync failed: ${error.message}`);
+    }
+  }
+
+  let pending = [];
+  try {
+    pending = await database.getPendingClientSlackAssignments(25);
+  } catch (error) {
+    if (!isClientWorkspaceUnavailable(error)) throw error;
+  }
+  let slackAssigned = 0;
+  let slackFailed = 0;
+  for (const contact of pending) {
+    try {
+      const identity = await slackClient.lookupUserByEmailOrName(contact.email, contact.slack_name);
+      const conversation = await slackClient.openDirectConversation(identity.userId);
+      await database.completeClientSlackAssignment(contact.id, { ...identity, channelId: conversation.channelId });
+      slackAssigned++;
+    } catch (error) {
+      slackFailed++;
+      await database.failClientSlackAssignment(contact.id, clientConnectionFailureCode(error));
+      logger.error(`Client Slack assignment failed [id=${contact.id}]: ${error.message}`);
+    }
+  }
+  return { enabled: true, contacts: contacts.length, messages: messagesSaved, slackAssigned, slackFailed };
 }
 
 function isWorkerMonitoringUnavailable(error) {
@@ -399,4 +478,4 @@ async function deliverOperatorEmailReplies(dependencies = {}) {
   return { due: queued.length, sent, failed };
 }
 
-module.exports = { runOutreachCycle, runMonitoredOutreachCycle, deliverOperatorEmailReplies, processReplyAutomationRuns };
+module.exports = { runOutreachCycle, runMonitoredOutreachCycle, deliverOperatorEmailReplies, processReplyAutomationRuns, syncExistingClientWorkspace };

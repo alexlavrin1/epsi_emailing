@@ -31,6 +31,50 @@ async function lookupUserByEmail(email, slack = getSlackClient()) {
   };
 }
 
+async function lookupUserByEmailOrName(email, slackName, slack = getSlackClient()) {
+  try {
+    return await lookupUserByEmail(email, slack);
+  } catch (error) {
+    if (!slackName) throw error;
+  }
+
+  await validateWorkspace(slack);
+  const target = String(slackName).trim().replace(/^@/, '').toLowerCase();
+  const matches = [];
+  let cursor;
+  do {
+    const result = await slack.users.list({ limit: 200, cursor });
+    for (const user of result.members || []) {
+      if (!user.id || user.deleted || user.is_bot) continue;
+      const candidates = [user.name, user.profile?.display_name, user.profile?.real_name]
+        .map(value => String(value || '').trim().replace(/^@/, '').toLowerCase())
+        .filter(Boolean);
+      if (candidates.includes(target)) matches.push(user);
+    }
+    cursor = result.response_metadata?.next_cursor || null;
+  } while (cursor && matches.length < 2);
+
+  if (matches.length !== 1) {
+    const error = new Error(matches.length ? 'Slack name is ambiguous' : 'Slack user was not found');
+    error.code = matches.length ? 'slack_name_ambiguous' : 'slack_user_not_found';
+    throw error;
+  }
+  const user = matches[0];
+  return {
+    teamId: user.team_id || config.slack.teamId,
+    userId: user.id,
+    displayName: user.profile?.display_name || user.profile?.real_name || user.name || null,
+  };
+}
+
+async function openDirectConversation(userId, slack = getSlackClient()) {
+  await validateWorkspace(slack);
+  const opened = await slack.conversations.open({ users: userId });
+  const channelId = opened.channel?.id;
+  if (!channelId) throw new Error('Slack did not return a DM channel');
+  return { channelId };
+}
+
 async function sendDirectMessage(userId, text, slack = getSlackClient()) {
   await validateWorkspace(slack);
   const opened = await slack.conversations.open({ users: userId });
@@ -62,6 +106,8 @@ module.exports = {
   getSlackClient,
   validateWorkspace,
   lookupUserByEmail,
+  lookupUserByEmailOrName,
+  openDirectConversation,
   sendDirectMessage,
   sendChannelMessage,
 };

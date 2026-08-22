@@ -248,6 +248,16 @@ The eighth slice completes responsive and accessibility QA. The final pass keeps
 - Security review
 - Responsive and accessibility QA
 
+### Phase 7 — Existing-client workspace
+
+Status: in progress. The first slice adds a tenant-scoped Clients workspace organized by app, with a validated website and any number of named contacts. Contact emails are deterministically unique inside the organization so the server-side Yandex IMAP worker can match recent INBOX and Sent correspondence without exposing mailbox credentials to the dashboard. Optional Slack names queue a server-side lookup by email with an exact-name fallback; the bot opens and records a direct conversation but does not post a message. Client creation, contact creation, and Slack assignment are guarded and audited, while client apps, contacts, and correspondence are included in versioned organization exports and the disabled-by-default email retention preview. Migration `025_existing_client_workspace.sql` is ready to apply.
+
+- Client app registry and website links
+- Multiple contacts per app
+- Automatic email correspondence matching
+- Explicit Slack direct-chat assignment
+- Tenant isolation, auditing, export, and retention coverage
+
 ## MVP boundary
 
 The first usable release includes secure login, a dashboard, contact/company CRM, client timeline, email reply queue, pipeline stages, notes and tasks, outreach and payment-recovery visibility, pause/stop controls, an approval queue, automation run logs, and an audit trail.

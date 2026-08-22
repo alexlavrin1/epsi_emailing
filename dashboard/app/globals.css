@@ -653,6 +653,71 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .run-retry-link:hover { color: var(--text); }
 .run-error { display: block; max-width: 260px; color: var(--danger); overflow-wrap: anywhere; }
 
+.client-setup { margin-top: 24px; }
+.client-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 24px; }
+.client-summary article { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 10px; min-height: 84px; padding: 15px 17px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
+.client-summary svg { color: var(--accent); }
+.client-summary span { color: var(--muted); font-size: 11px; }
+.client-summary strong { grid-column: 2; font-family: var(--font-geist-mono), monospace; font-size: 22px; }
+.client-create-panel { margin-top: 12px; }
+.client-form-intro { margin: 16px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.client-create-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.client-create-form label:last-of-type { grid-column: 1 / -1; }
+.client-form-submit { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; }
+.client-form-submit small { max-width: 520px; color: var(--faint); font-size: 10px; line-height: 1.5; }
+.client-create-form .action-feedback { grid-column: 1 / -1; }
+.client-list-section { margin-top: 32px; }
+.client-app-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.client-app-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; min-height: 116px; padding: 18px; border: 1px solid var(--border); border-radius: 13px; background: var(--surface); transition: border-color 180ms ease, background 180ms ease; }
+.client-app-card:hover { border-color: var(--accent); background: var(--surface-soft); }
+.client-app-card > svg { color: var(--faint); }
+.client-app-icon, .client-detail-icon { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 11px; background: var(--accent-soft); color: var(--accent); }
+.client-app-card h3 { margin: 0; font-size: 15px; }
+.client-app-card p, .client-app-card small { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.client-app-card small { color: var(--faint); font-size: 10px; }
+.client-empty { margin-top: 12px; border: 1px dashed var(--border-strong); border-radius: 13px; }
+.client-detail-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; margin-top: 12px; padding: 24px 0; border-bottom: 1px solid var(--border); }
+.client-detail-header h1 { margin: 0; font-size: clamp(28px, 3vw, 38px); letter-spacing: -.045em; }
+.client-detail-header .eyebrow { margin-bottom: 7px; }
+.client-detail-header a { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; color: var(--accent-strong); font-size: 12px; overflow-wrap: anywhere; }
+.client-detail-layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); gap: 14px; margin-top: 22px; }
+.client-main-column { min-width: 0; }
+.client-side-column { display: grid; align-content: start; gap: 12px; }
+.client-contact-list { display: grid; gap: 10px; margin-top: 14px; }
+.client-contact-card { padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: #091310; }
+.client-contact-card > header { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; }
+.client-contact-card > header > span { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
+.client-contact-card strong, .client-contact-card a { display: flex; }
+.client-contact-card strong { font-size: 12px; }
+.client-contact-card header a { min-height: 44px; align-items: center; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.client-contact-sync, .client-slack-status { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--faint); font-size: 10px; line-height: 1.45; }
+.client-slack-status.status-failed { color: var(--danger); }
+.client-slack-status.status-pending { color: #f0bd65; }
+.client-slack-link { min-height: 44px; align-items: center; gap: 7px; margin-top: 8px; color: var(--accent-strong); font-size: 11px; font-weight: 650; }
+.client-slack-form { display: grid; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.client-slack-form label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; }
+.client-slack-form input { width: 100%; min-height: 44px; padding: 0 11px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--surface); color: var(--text); font-size: 16px; }
+.client-slack-form input:focus { border-color: var(--accent); outline: 0; box-shadow: 0 0 0 3px var(--accent-soft); }
+.client-slack-form .action-feedback { margin: 0; }
+.client-add-contact summary { min-height: 44px; color: var(--accent-strong); font-size: 12px; font-weight: 650; line-height: 44px; cursor: pointer; }
+.client-contact-form { display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.client-contact-form .action-feedback { margin: 0; }
+.client-message-list { display: grid; margin: 12px 0 0; padding: 0; list-style: none; overflow: hidden; border: 1px solid var(--border); border-radius: 13px; background: var(--surface); }
+.client-message-list > li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding: 17px; border-bottom: 1px solid var(--border); }
+.client-message-list > li:last-child { border-bottom: 0; }
+.client-message-icon { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 9px; background: rgba(139,185,255,.1); color: #8bb9ff; }
+.client-message-icon.inbound { background: var(--accent-soft); color: var(--accent); }
+.client-message-list article { min-width: 0; }
+.client-message-list article > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.client-message-list article > header > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.client-message-list article strong { font-size: 12px; }
+.client-message-list time { color: var(--faint); font-size: 10px; white-space: nowrap; }
+.client-message-list h3 { margin: 9px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+.client-message-list details { margin-top: 7px; }
+.client-message-list summary { width: fit-content; min-height: 44px; color: var(--accent-strong); font-size: 11px; font-weight: 650; line-height: 44px; cursor: pointer; }
+.client-message-list details p, .client-message-list article > p { margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: #091310; color: var(--muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
+.client-correspondence-empty { margin-top: 12px; border: 1px dashed var(--border-strong); border-radius: 13px; }
+
 .loading-line, .loading-card, .loading-panel { overflow: hidden; background: linear-gradient(90deg, var(--surface) 25%, var(--surface-soft) 50%, var(--surface) 75%); background-size: 200% 100%; animation: loading-shimmer 1.4s infinite linear; }
 .loading-line { height: 13px; margin-top: 14px; border-radius: 5px; }
 .loading-line-short { width: 130px; }
@@ -701,6 +766,7 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .automation-alert-control .action-feedback { text-align: left; }
   .automation-rate-limits { grid-template-columns: minmax(0, 1fr) minmax(220px, .75fr); }
   .rate-limit-control, .rate-limit-role-note { grid-column: 1 / -1; justify-items: start; width: 100%; text-align: left; }
+  .client-detail-layout { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 640px) {
@@ -818,6 +884,13 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .workflow-controls { justify-items: stretch; min-width: 0; }
   .workflow-controls .action-feedback, .workflow-editor summary { text-align: left; }
   .workflow-editor { width: 100%; }
+  .client-summary, .client-app-grid, .client-create-form { grid-template-columns: 1fr; }
+  .client-create-form label:last-of-type, .client-form-submit, .client-create-form .action-feedback { grid-column: auto; }
+  .client-form-submit { align-items: stretch; flex-direction: column; }
+  .client-detail-header { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+  .client-detail-header > .status-badge { grid-column: 2; justify-self: start; }
+  .client-message-list article > header { align-items: flex-start; flex-direction: column; }
+  .client-message-list time { white-space: normal; }
 
   small { font-size: 12px !important; }
 }

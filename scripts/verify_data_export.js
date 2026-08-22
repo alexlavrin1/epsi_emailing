@@ -7,7 +7,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const expectedDatasets = ['prospects', 'customers', 'notes', 'tasks', 'recoveryCases', 'auditEvents'];
+const legacyDatasets = ['prospects', 'customers', 'notes', 'tasks', 'recoveryCases', 'auditEvents'];
+const expectedDatasets = [...legacyDatasets, 'clientApps', 'clientContacts', 'clientEmailMessages'];
 const forbiddenKeys = /(?:password|secret|access_token|refresh_token|oauth_token|last_error|ip_address|request_id)/i;
 
 function assert(condition, message) { if (!condition) throw new Error(message); }
@@ -19,7 +20,7 @@ function duplicateIds(rows) {
 
 function validateExport(payload) {
   assert(payload && typeof payload === 'object' && !Array.isArray(payload), 'Export root must be an object.');
-  assert(payload.schemaVersion === 1, 'Unsupported export schema version.');
+  assert([1, 2].includes(payload.schemaVersion), 'Unsupported export schema version.');
   assert(Number.isFinite(Date.parse(payload.generatedAt)), 'Export timestamp is invalid.');
   assert(Date.parse(payload.generatedAt) <= Date.now() + 300000, 'Export timestamp is in the future.');
   assert(payload.organization && typeof payload.organization.id === 'string' && typeof payload.organization.slug === 'string', 'Organization identity is missing.');
@@ -27,7 +28,8 @@ function validateExport(payload) {
   assert(payload.datasets && typeof payload.datasets === 'object', 'Datasets are missing.');
 
   const counts = {}; const truncated = {};
-  for (const name of expectedDatasets) {
+  const datasetsForVersion = payload.schemaVersion === 1 ? legacyDatasets : expectedDatasets;
+  for (const name of datasetsForVersion) {
     const rows = payload.datasets[name];
     assert(Array.isArray(rows), `Dataset ${name} is missing.`);
     assert(rows.length <= 5000, `Dataset ${name} exceeds its declared limit.`);
@@ -50,7 +52,17 @@ function validateExport(payload) {
     for (const row of payload.datasets.recoveryCases) assert(customerIds.has(row.crm_customer_id), 'A recovery case references a customer missing from the export.');
   }
 
-  const safeAuditKeys = new Set(['previous_stage', 'new_stage', 'note_id', 'task_id', 'due_at', 'previous_status', 'new_status', 'contact_kind', 'contact_id', 'workflow_id', 'automation_run_id', 'version', 'status', 'failure_code', 'retry_count', 'previous_days', 'new_days', 'dataset', 'row_count', 'truncated']);
+  if (payload.schemaVersion === 2 && !truncated.clientApps && !truncated.clientContacts) {
+    const appIds = new Set(payload.datasets.clientApps.map(row => row.id));
+    const contactIds = new Set(payload.datasets.clientContacts.map(row => row.id));
+    for (const row of payload.datasets.clientContacts) assert(appIds.has(row.client_app_id), 'A client contact references an app missing from the export.');
+    for (const row of payload.datasets.clientEmailMessages) {
+      assert(appIds.has(row.client_app_id), 'A client message references an app missing from the export.');
+      assert(contactIds.has(row.client_contact_id), 'A client message references a contact missing from the export.');
+    }
+  }
+
+  const safeAuditKeys = new Set(['previous_stage', 'new_stage', 'note_id', 'task_id', 'due_at', 'previous_status', 'new_status', 'contact_kind', 'contact_id', 'workflow_id', 'automation_run_id', 'version', 'status', 'failure_code', 'retry_count', 'previous_days', 'new_days', 'dataset', 'row_count', 'truncated', 'client_app_id', 'contact_count', 'slack_requested']);
   for (const event of payload.datasets.auditEvents) {
     assert(event.metadata && typeof event.metadata === 'object' && !Array.isArray(event.metadata), 'Audit metadata is invalid.');
     for (const [key, value] of Object.entries(event.metadata)) {

@@ -677,3 +677,59 @@ test("keeps every dashboard destination reachable and touch-friendly on mobile",
   assert.match(css, /:focus-visible \{ outline: 3px solid var\(--focus\)/);
   assert.match(css, /small \{ font-size: 12px !important; \}/);
 });
+
+test("adds a tenant-scoped existing-client workspace with server-side email and Slack matching", async () => {
+  const [migration, nav, listPage, detailPage, forms, actions, data, engine, mailbox, slack, database, exportRoute, verifier, readiness, rlsRegression, css] = await Promise.all([
+    readFile(new URL("../database/migrations/025_existing_client_workspace.sql", root), "utf8"),
+    readFile(new URL("app/components/dashboard-nav.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/clients/page.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/clients/[id]/page.tsx", root), "utf8"),
+    readFile(new URL("app/components/client-forms.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/clients/actions.ts", root), "utf8"),
+    readFile(new URL("lib/client-data.ts", root), "utf8"),
+    readFile(new URL("../src/outreach/engine.js", root), "utf8"),
+    readFile(new URL("../src/outreach/gmail.js", root), "utf8"),
+    readFile(new URL("../src/integrations/slack/client.js", root), "utf8"),
+    readFile(new URL("../src/db/supabase.js", root), "utf8"),
+    readFile(new URL("app/api/data-export/route.ts", root), "utf8"),
+    readFile(new URL("../scripts/verify_data_export.js", root), "utf8"),
+    readFile(new URL("../database/tests/002_recovery_readiness.sql", root), "utf8"),
+    readFile(new URL("../database/tests/001_dashboard_rls_regression.sql", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
+  for (const table of ["client_apps", "client_contacts", "client_email_messages"]) assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`, "i"));
+  assert.match(migration, /FOREIGN KEY \(client_app_id, organization_id\)/i);
+  assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS idx_client_contacts_org_email ON client_contacts \(organization_id, LOWER\(email\)\)/i);
+  assert.match(migration, /dashboard_is_org_member\(organization_id\)/i);
+  assert.match(migration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON client_apps, client_contacts, client_email_messages FROM authenticated, anon/i);
+  assert.match(migration, /auth\.role\(\) IS DISTINCT FROM 'service_role'/i);
+  assert.match(migration, /client\.app\.created|client\.contact\.created|client\.slack\.assignment_requested|client\.slack\.assigned/);
+  assert.match(nav, /href: "\/dashboard\/clients", label: "Clients"/);
+  assert.match(listPage, /Add an existing client/);
+  assert.match(detailPage, /Email correspondence/);
+  assert.match(detailPage, /app\.slack\.com\/client/);
+  assert.match(forms, /Primary contact/);
+  assert.match(forms, /Add another contact|Assign Slack chat/);
+  assert.match(actions, /dashboard_create_client_app/);
+  assert.match(actions, /dashboard_add_client_contact/);
+  assert.match(actions, /dashboard_request_client_slack_assignment/);
+  assert.match(data, /\.eq\("organization_id", organizationId\)/);
+  assert.match(engine, /syncExistingClientWorkspace/);
+  assert.match(mailbox, /findRecentClientCorrespondence/);
+  assert.match(mailbox, /folders = \[\{ path: 'INBOX', direction: 'inbound' \}\]/);
+  assert.match(slack, /lookupUserByEmailOrName/);
+  assert.match(slack, /openDirectConversation/);
+  assert.doesNotMatch(slack.match(/async function openDirectConversation[\s\S]*?\n\}/)?.[0] || "", /postMessage/);
+  assert.match(database, /service_complete_client_slack_assignment/);
+  for (const dataset of ["clientApps", "clientContacts", "clientEmailMessages"]) {
+    assert.match(exportRoute, new RegExp(`${dataset}:`));
+    assert.match(verifier, new RegExp(`'${dataset}'`));
+  }
+  assert.match(exportRoute, /schemaVersion: 2/);
+  assert.match(readiness, /orphan client correspondence/i);
+  assert.match(rlsRegression, /anon can read existing-client data/i);
+  assert.match(rlsRegression, /authenticated can write directly to existing-client tables/i);
+  assert.match(css, /\.client-create-form/);
+  assert.match(css, /\.client-detail-layout/);
+  assert.match(css, /\.client-message-list summary \{[^}]*min-height: 44px/);
+});

@@ -5,6 +5,8 @@ const config = require('../src/config');
 const {
   validateWorkspace,
   lookupUserByEmail,
+  lookupUserByEmailOrName,
+  openDirectConversation,
   sendDirectMessage,
   sendChannelMessage,
 } = require('../src/integrations/slack/client');
@@ -47,6 +49,33 @@ test('validates that the bot token belongs to the configured workspace', async (
       () => validateWorkspace({ auth: { test: async () => ({ team_id: 'T_OTHER' }) } }),
       /different workspace/
     );
+  } finally {
+    config.slack.teamId = original;
+  }
+});
+
+test('falls back to one exact Slack display-name match and opens a DM without posting', async () => {
+  const original = config.slack.teamId;
+  config.slack.teamId = 'T_EXPECTED';
+  let posted = false;
+  const slack = {
+    auth: { test: async () => ({ team_id: 'T_EXPECTED' }) },
+    users: {
+      lookupByEmail: async () => { throw new Error('email lookup unavailable'); },
+      list: async () => ({ members: [
+        { id: 'U_MATCH', name: 'sam', team_id: 'T_EXPECTED', profile: { display_name: 'Sam Rivera' } },
+        { id: 'U_OTHER', name: 'alex', team_id: 'T_EXPECTED', profile: { display_name: 'Alex Doe' } },
+      ], response_metadata: { next_cursor: '' } }),
+    },
+    conversations: { open: async ({ users }) => ({ channel: { id: users === 'U_MATCH' ? 'D_MATCH' : null } }) },
+    chat: { postMessage: async () => { posted = true; } },
+  };
+  try {
+    const identity = await lookupUserByEmailOrName('sam@example.com', '@Sam Rivera', slack);
+    const conversation = await openDirectConversation(identity.userId, slack);
+    assert.deepEqual(identity, { teamId: 'T_EXPECTED', userId: 'U_MATCH', displayName: 'Sam Rivera' });
+    assert.deepEqual(conversation, { channelId: 'D_MATCH' });
+    assert.equal(posted, false);
   } finally {
     config.slack.teamId = original;
   }

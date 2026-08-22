@@ -800,6 +800,68 @@ async function recordApplicationError(source, errorCode, fingerprint, severity =
   return data;
 }
 
+async function getClientContactsForEmailSync(limit = 500) {
+  const { data, error } = await supabase
+    .from('client_contacts')
+    .select('id,organization_id,client_app_id,email,app:client_apps!inner(status)')
+    .eq('app.status', 'active')
+    .order('last_email_sync_at', { ascending: true, nullsFirst: true })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
+async function upsertClientEmailMessage(record) {
+  const { data, error } = await supabase
+    .from('client_email_messages')
+    .upsert(record, { onConflict: 'organization_id,provider_message_id', ignoreDuplicates: true })
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function markClientContactsEmailSynced(contactIds, syncedAt = new Date()) {
+  if (!contactIds.length) return [];
+  const { data, error } = await supabase
+    .from('client_contacts')
+    .update({ last_email_sync_at: syncedAt.toISOString(), updated_at: syncedAt.toISOString() })
+    .in('id', contactIds)
+    .select('id');
+  if (error) throw error;
+  return data || [];
+}
+
+async function getPendingClientSlackAssignments(limit = 25) {
+  const { data, error } = await supabase
+    .from('client_contacts')
+    .select('id,email,slack_name')
+    .eq('slack_assignment_status', 'pending')
+    .order('updated_at', { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
+async function completeClientSlackAssignment(contactId, assignment) {
+  const { error } = await supabase.rpc('service_complete_client_slack_assignment', {
+    target_contact_id: contactId,
+    target_team_id: assignment.teamId,
+    target_user_id: assignment.userId,
+    target_channel_id: assignment.channelId,
+    target_display_name: assignment.displayName || null,
+  });
+  if (error) throw error;
+}
+
+async function failClientSlackAssignment(contactId, failureCode) {
+  const { error } = await supabase.rpc('service_fail_client_slack_assignment', {
+    target_contact_id: contactId,
+    target_failure_code: failureCode,
+  });
+  if (error) throw error;
+}
+
 module.exports = {
   supabase,
   getMailboxByEmail,
@@ -858,4 +920,10 @@ module.exports = {
   markOperatorEmailReplySent,
   markOperatorEmailReplyFailed,
   recordApplicationError,
+  getClientContactsForEmailSync,
+  upsertClientEmailMessage,
+  markClientContactsEmailSynced,
+  getPendingClientSlackAssignments,
+  completeClientSlackAssignment,
+  failClientSlackAssignment,
 };

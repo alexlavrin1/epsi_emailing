@@ -13,6 +13,10 @@ const eventLabels: Record<string, string> = {
   "auth.logout": "Dashboard session signed out",
   "auth.password.updated": "Account password updated",
   "auth.mfa.verified": "Administrator MFA verified",
+  "client.app.created": "Existing client app added",
+  "client.contact.created": "Client contact added",
+  "client.slack.assignment_requested": "Client Slack assignment requested",
+  "client.slack.assigned": "Client Slack chat assigned",
   "crm.lifecycle.changed": "Lifecycle changed",
   "crm.note.created": "Contact note created",
   "crm.task.created": "Follow-up task created",
@@ -49,6 +53,7 @@ const safeMetadataKeys = new Set([
   "workflow_id", "automation_run_id", "version", "previous_version", "trigger_type", "status",
   "previous_limit", "new_limit", "hourly_limit", "runs_in_window",
   "source_type", "source_id", "failure_code", "retry_count", "occurrence_count", "previous_due_hours", "new_due_hours", "due_hours", "previous_days", "new_days", "dataset", "row_count", "truncated",
+  "client_app_id", "contact_count", "slack_requested",
 ]);
 
 function readable(value: string) {
@@ -77,6 +82,10 @@ function eventSummary(event: AuditEvent) {
     case "crm.note.created": return "An internal note was added to this CRM record.";
     case "crm.task.created": return meta.due_at ? `A follow-up task was created with a due date.` : "A follow-up task was created without a due date.";
     case "crm.task.status_changed": return `Task changed from ${meta.previous_status || "its previous state"} to ${meta.new_status || "a new state"}.`;
+    case "client.app.created": return "An existing client app and its primary contact were added.";
+    case "client.contact.created": return "Another contact was added to an existing client app.";
+    case "client.slack.assignment_requested": return "A server-side Slack user lookup and DM assignment was queued.";
+    case "client.slack.assigned": return "The Slack bot resolved the contact and assigned a direct conversation.";
     case "outreach.campaign.status_changed": return `Campaign changed from ${meta.previous_status || "its previous state"} to ${meta.new_status || "a new state"}.`;
     case "outreach.prospect.stopped": return `${meta.scheduled_sends_stopped || 0} scheduled send(s) were stopped.`;
     case "email.reply.draft_created": return "A manual reply was saved as an inert draft for review.";
@@ -111,6 +120,8 @@ function targetHref(event: AuditEvent) {
   if (event.targetType === "automation_workflow" || event.targetType === "automation_run" || event.targetType === "automation_runtime") return "/dashboard/automations";
   if (event.targetType === "automation_failure_alert") return "/dashboard/automations";
   if (event.targetType === "automation_internal_task") return "/dashboard/automations";
+  if (event.targetType === "client_app" && event.targetId) return `/dashboard/clients/${event.targetId}`;
+  if (event.targetType === "client_contact" && typeof event.metadata.client_app_id === "string") return `/dashboard/clients/${event.metadata.client_app_id}`;
   return null;
 }
 
@@ -123,7 +134,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   if (!membership) return null;
   const params = await searchParams;
   const query = params.q?.trim() || "";
-  const category = ["all", "crm", "outreach", "email", "recovery", "automation"].includes(params.category || "") ? params.category! : "all";
+  const category = ["all", "client", "crm", "outreach", "email", "recovery", "automation"].includes(params.category || "") ? params.category! : "all";
   const period = ["day", "week", "month", "all"].includes(params.period || "") ? params.period! : "month";
   const supabase = await createSupabaseServerClient();
   if (!supabase) throw new Error("Dashboard authentication is not configured.");
@@ -141,7 +152,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
 
     <form className="filter-bar audit-filters" method="get" role="search">
       <label className="search-field"><Search size={17} aria-hidden="true" /><span className="sr-only">Search audit events</span><input name="q" defaultValue={query} placeholder="Search action or target ID…" /></label>
-      <label><span className="sr-only">Filter by event category</span><select name="category" defaultValue={category}><option value="all">All actions</option><option value="crm">CRM</option><option value="outreach">Outreach</option><option value="email">Email</option><option value="recovery">Recovery</option><option value="automation">Automation</option></select></label>
+      <label><span className="sr-only">Filter by event category</span><select name="category" defaultValue={category}><option value="all">All actions</option><option value="client">Clients</option><option value="crm">CRM</option><option value="outreach">Outreach</option><option value="email">Email</option><option value="recovery">Recovery</option><option value="automation">Automation</option></select></label>
       <label><span className="sr-only">Filter by time period</span><select name="period" defaultValue={period}><option value="day">Last 24 hours</option><option value="week">Last 7 days</option><option value="month">Last 30 days</option><option value="all">All time</option></select></label>
       <button className="secondary-button compact-button" type="submit">Apply</button>
       {filtered ? <Link className="clear-filter" href="/dashboard/audit">Clear</Link> : null}

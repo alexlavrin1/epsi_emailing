@@ -55,6 +55,11 @@ BEGIN
   IF has_table_privilege('authenticated', 'crm_contact_tasks', 'INSERT,UPDATE,DELETE,TRUNCATE') THEN
     RAISE EXCEPTION 'RLS TEST FAILED: authenticated can write directly to crm_contact_tasks';
   END IF;
+  IF has_table_privilege('authenticated', 'client_apps', 'INSERT,UPDATE,DELETE,TRUNCATE')
+     OR has_table_privilege('authenticated', 'client_contacts', 'INSERT,UPDATE,DELETE,TRUNCATE')
+     OR has_table_privilege('authenticated', 'client_email_messages', 'INSERT,UPDATE,DELETE,TRUNCATE') THEN
+    RAISE EXCEPTION 'RLS TEST FAILED: authenticated can write directly to existing-client tables';
+  END IF;
 
   FOREACH worker_function IN ARRAY ARRAY[
     'enqueue_reply_automation(uuid)',
@@ -64,7 +69,9 @@ BEGIN
     'claim_operator_email_reply(uuid)',
     'start_automation_worker_cycle(uuid,text)',
     'finish_automation_worker_cycle(uuid,text,text)',
-    'create_reply_followup_task(uuid)'
+    'create_reply_followup_task(uuid)',
+    'service_complete_client_slack_assignment(uuid,text,text,text,text)',
+    'service_fail_client_slack_assignment(uuid,text)'
   ] LOOP
     worker_signature := to_regprocedure(worker_function);
     IF worker_signature IS NULL THEN
@@ -105,6 +112,9 @@ BEGIN
   IF EXISTS (SELECT 1 FROM audit_events) THEN
     RAISE EXCEPTION 'RLS TEST FAILED: anon can read audit_events';
   END IF;
+  IF EXISTS (SELECT 1 FROM client_apps) OR EXISTS (SELECT 1 FROM client_contacts) OR EXISTS (SELECT 1 FROM client_email_messages) THEN
+    RAISE EXCEPTION 'RLS TEST FAILED: anon can read existing-client data';
+  END IF;
 END;
 $$;
 
@@ -141,6 +151,9 @@ BEGIN
   END IF;
   IF EXISTS (SELECT 1 FROM audit_events WHERE organization_id = target_org) THEN
     RAISE EXCEPTION 'RLS TEST FAILED: AAL1 administrator can read tenant audit history';
+  END IF;
+  IF EXISTS (SELECT 1 FROM client_apps WHERE organization_id = target_org) THEN
+    RAISE EXCEPTION 'RLS TEST FAILED: AAL1 administrator can read existing-client data';
   END IF;
 END;
 $$;
@@ -186,6 +199,11 @@ BEGIN
     )
   ) THEN
     RAISE EXCEPTION 'RLS TEST FAILED: administrator can see a different organization';
+  END IF;
+  IF EXISTS (SELECT 1 FROM client_apps WHERE organization_id <> target_org)
+     OR EXISTS (SELECT 1 FROM client_contacts WHERE organization_id <> target_org)
+     OR EXISTS (SELECT 1 FROM client_email_messages WHERE organization_id <> target_org) THEN
+    RAISE EXCEPTION 'RLS TEST FAILED: administrator can see another organization client workspace';
   END IF;
 END;
 $$;

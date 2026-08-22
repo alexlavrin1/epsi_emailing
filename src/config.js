@@ -96,6 +96,7 @@ module.exports = {
   sendStartHour:  parseInt(process.env.SEND_START_HOUR || '9', 10),
   sendEndHour:    parseInt(process.env.SEND_END_HOUR || '18', 10),
   replyLookbackDays: parseInt(process.env.REPLY_LOOKBACK_DAYS || '30', 10),
+  clientCorrespondenceLookbackDays: parseInt(process.env.CLIENT_CORRESPONDENCE_LOOKBACK_DAYS || '90', 10),
   localCampaignName: process.env.LOCAL_CAMPAIGN_NAME || 'Epsi Test v1 - Local',
   cronSecret:     process.env.CRON_SECRET,
   env:            process.env.NODE_ENV  || 'development',
