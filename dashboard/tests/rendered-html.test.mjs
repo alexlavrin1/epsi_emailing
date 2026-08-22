@@ -711,6 +711,8 @@ test("adds a tenant-scoped existing-client workspace with server-side email and 
   assert.match(forms, /Primary contact/);
   assert.match(forms, /Add another contact|Assign Slack chat/);
   assert.match(actions, /dashboard_create_client_app/);
+  assert.doesNotMatch(actions, /export\s+const\s+initialClientActionState/, "use-server modules must not export non-function runtime values");
+  assert.match(forms, /const\s+initialClientActionState:\s*ClientActionState/, "form state must remain client-local");
   assert.match(actions, /dashboard_add_client_contact/);
   assert.match(actions, /dashboard_request_client_slack_assignment/);
   assert.match(data, /\.eq\("organization_id", organizationId\)/);

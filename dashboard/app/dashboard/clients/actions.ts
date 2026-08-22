@@ -6,7 +6,6 @@ import { requireMembership } from "../../../lib/auth";
 import { createSupabaseServerClient } from "../../../lib/supabase-server";
 
 export type ClientActionState = { ok: boolean; message: string };
-export const initialClientActionState: ClientActionState = { ok: false, message: "" };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function formValue(form: FormData, key: string) { return String(form.get(key) || "").trim(); }

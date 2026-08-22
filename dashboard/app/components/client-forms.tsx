@@ -2,7 +2,9 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { addClientContactAction, createClientAppAction, initialClientActionState, requestClientSlackAction } from "../dashboard/clients/actions";
+import { addClientContactAction, createClientAppAction, requestClientSlackAction, type ClientActionState } from "../dashboard/clients/actions";
+
+const initialClientActionState: ClientActionState = { ok: false, message: "" };
 
 function Submit({ idle, pending }: { idle: string; pending: string }) {
   const status = useFormStatus();
