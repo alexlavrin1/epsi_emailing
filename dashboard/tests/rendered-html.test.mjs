@@ -264,3 +264,27 @@ test("allows operators to edit drafts before approval without direct table write
   assert.match(controls, /Edit draft/);
   assert.doesNotMatch(actions + controls, /\.from\("operator_email_replies"\)[\s\S]*\.(?:insert|update|delete)\(/);
 });
+
+test("supports tenant-guarded, audited skip and cancel approval decisions", async () => {
+  const [migration, actions, controls, audit] = await Promise.all([
+    readFile(new URL("../database/migrations/013_approval_dispositions.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/approvals/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/approval-controls.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/audit/page.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /dashboard_is_org_member\(target_reply\.organization_id\)/i);
+  assert.match(migration, /target_decision IS NULL OR target_decision NOT IN \('skip', 'cancel'\)/i);
+  assert.match(migration, /status = 'cancelled'[\s\S]*queued_at = NULL/i);
+  assert.match(migration, /resulting_run_status := CASE WHEN target_decision = 'skip' THEN 'stopped' ELSE 'cancelled' END/i);
+  assert.match(migration, /INSERT INTO audit_events/i);
+  assert.match(migration, /REVOKE ALL ON FUNCTION dashboard_dispose_email_reply\(UUID, TEXT\) FROM PUBLIC, anon, authenticated/i);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION dashboard_dispose_email_reply\(UUID, TEXT\) TO authenticated/i);
+  assert.match(actions, /\.rpc\("dashboard_dispose_email_reply"/);
+  assert.match(controls, /Skip reply/);
+  assert.match(controls, /Cancel/);
+  assert.match(controls, /window\.confirm/);
+  assert.match(audit, /email\.reply\.skipped/);
+  assert.match(audit, /email\.reply\.cancelled/);
+  assert.doesNotMatch(actions + controls, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(actions + controls, /\.from\("operator_email_replies"\)[\s\S]*\.(?:insert|update|delete)\(/);
+});

@@ -52,6 +52,20 @@ export async function updateReplyDraft(_state: ApprovalActionState, formData: Fo
   return { ok: true, message: "Draft updated. Review the final text before approving it." };
 }
 
+export async function disposeReply(_state: ApprovalActionState, formData: FormData): Promise<ApprovalActionState> {
+  const { membership } = await requireMembership();
+  if (!membership) return { ok: false, message: "An active organization membership is required." };
+  const replyId = String(formData.get("reply_id") || "");
+  const decision = String(formData.get("decision") || "");
+  if (!uuidPattern.test(replyId) || !["skip", "cancel"].includes(decision)) return { ok: false, message: "Invalid reply decision." };
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { ok: false, message: "Unable to close this draft." };
+  const { error } = await supabase.rpc("dashboard_dispose_email_reply", { target_reply_id: replyId, target_decision: decision });
+  if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "Skip and cancel controls require migration 013." : "Unable to close this draft." };
+  revalidatePath("/dashboard/approvals"); revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");
+  return { ok: true, message: decision === "skip" ? "Reply skipped. Nothing will be sent." : "Reply cancelled. Nothing will be sent." };
+}
+
 export async function retryRecoveryMessage(_state: ApprovalActionState, formData: FormData): Promise<ApprovalActionState> {
   const { membership } = await requireMembership();
   if (!membership) return { ok: false, message: "An active organization membership is required." };

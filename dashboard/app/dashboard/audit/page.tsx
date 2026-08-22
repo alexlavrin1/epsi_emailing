@@ -18,6 +18,8 @@ const eventLabels: Record<string, string> = {
   "email.reply.draft_created": "Reply draft created",
   "email.reply.draft_updated": "Reply draft updated",
   "email.reply.queued": "Email reply approved",
+  "email.reply.skipped": "Email reply skipped",
+  "email.reply.cancelled": "Email reply cancelled",
   "recovery.delivery.retry_queued": "Recovery retry approved",
   "automation.workflow.created": "Workflow created",
   "automation.workflow.version_created": "Workflow version created",
@@ -63,6 +65,8 @@ function eventSummary(event: AuditEvent) {
     case "email.reply.draft_created": return "A manual reply was saved as an inert draft for review.";
     case "email.reply.draft_updated": return "A reply draft was edited before approval.";
     case "email.reply.queued": return "A reviewed reply was approved for server-side delivery.";
+    case "email.reply.skipped": return "A prepared reply was intentionally skipped without sending.";
+    case "email.reply.cancelled": return "A prepared reply was cancelled without sending.";
     case "recovery.delivery.retry_queued": return `A failed ${meta.channel || "recovery"} delivery was approved for retry.`;
     case "automation.workflow.created": return "A versioned workflow was saved as an inactive draft.";
     case "automation.workflow.version_created": return `Workflow version ${meta.version || "new"} was created.`;

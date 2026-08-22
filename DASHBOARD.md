@@ -183,6 +183,8 @@ Outcome: the platform becomes an operational CRM rather than only a reporting vi
 
 Status: in progress. The first slice adds a structured incoming-reply workflow: administrators can create versioned templates, configure a delay, activate or pause one reply trigger, and observe version-pinned run history. New eligible replies prepare inert drafts through the backend worker; operators can edit and approve those drafts, and the existing delivery worker sends only after approval. Runs recheck workflow and prospect state before preparing work. Migrations `011_reply_draft_automations.sql` and `012_lock_automation_worker_functions.sql` were applied and verified on 2026-08-22. Browser roles cannot invoke worker functions; backend enqueue and atomic claim access remains active.
 
+The second slice adds explicit skip and cancel dispositions to the approval queue. Both close the draft without delivery, record distinct stopped or cancelled automation outcomes, and append tenant-scoped audit history through guarded database functions. Migration `013_approval_dispositions.sql` was applied and verified on 2026-08-22.
+
 - Workflow definitions
 - Triggers and conditions
 - Approval queue
