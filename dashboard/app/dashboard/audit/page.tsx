@@ -9,6 +9,10 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Audit log" };
 
 const eventLabels: Record<string, string> = {
+  "auth.login.succeeded": "Dashboard sign-in succeeded",
+  "auth.logout": "Dashboard session signed out",
+  "auth.password.updated": "Account password updated",
+  "auth.mfa.verified": "Administrator MFA verified",
   "crm.lifecycle.changed": "Lifecycle changed",
   "crm.note.created": "Contact note created",
   "crm.task.created": "Follow-up task created",

@@ -3,8 +3,10 @@ import { createSupabaseRouteClient } from "../../../lib/supabase-route";
 const limit = 5000;
 const safeAuditKeys = new Set(["previous_stage", "new_stage", "note_id", "task_id", "due_at", "previous_status", "new_status", "contact_kind", "contact_id", "workflow_id", "automation_run_id", "version", "status", "failure_code", "retry_count", "previous_days", "new_days", "dataset", "row_count", "truncated"]);
 function sanitizeAuditMetadata(value: unknown) { if (!value || typeof value !== "object" || Array.isArray(value)) return {}; return Object.fromEntries(Object.entries(value).filter(([key, item]) => safeAuditKeys.has(key) && ["string", "number", "boolean"].includes(typeof item)).slice(0, 12)); }
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
+    const origin = request.headers.get("origin");
+    if (origin && origin !== request.nextUrl.origin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const { client, applyCookies } = createSupabaseRouteClient(request);
     const { data: userData } = await client.auth.getUser();
     if (!userData.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
 
     const { error } = await client.auth.mfa.challengeAndVerify({ factorId, code });
     if (error) return NextResponse.json({ error: "That code is incorrect or expired. Try the current code." }, { status: 400 });
+    await client.rpc("dashboard_record_auth_event", { target_event_type: "auth.mfa.verified" });
     return applyCookies(NextResponse.json({ ok: true }));
   } catch {
     return NextResponse.json({ error: "Authentication is unavailable. Please try again." }, { status: 503 });

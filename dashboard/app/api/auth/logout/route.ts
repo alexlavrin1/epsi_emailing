@@ -20,12 +20,7 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .maybeSingle();
     if (membership?.organization_id) {
-      await supabase.from("audit_events").insert({
-        organization_id: membership.organization_id,
-        actor_user_id: userData.user.id,
-        event_type: "auth.logout",
-        metadata: { channel: "dashboard" },
-      });
+      await supabase.rpc("dashboard_record_auth_event", { target_event_type: "auth.logout" });
     }
   }
   await supabase.auth.signOut();

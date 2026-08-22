@@ -207,7 +207,10 @@ test("renders the audit trail from tenant-scoped, append-only records", async ()
   ]);
   assert.match(page, /Append-only history/);
   assert.match(page, /safeMetadataKeys/);
-  assert.doesNotMatch(page, /password|oauth_token|authorization|cookie/i);
+  assert.doesNotMatch(
+    page,
+    /password_hash|password_value|oauth_token|authorization|cookie/i,
+  );
   assert.match(data, /\.from\("audit_events"\)/);
   assert.match(data, /\.eq\("organization_id", organizationId\)/);
   assert.doesNotMatch(page + data, /SUPABASE_SERVICE_ROLE_KEY/);
@@ -621,4 +624,33 @@ test("captures deduplicated production errors without raw exception content", as
   assert.match(stripe, /stripe_webhook_ingestion_failed/);
   assert.doesNotMatch(route + boundary + page + actions, /SUPABASE_SERVICE_ROLE_KEY|last_error|raw_exception|error_stack/i);
   assert.doesNotMatch(page, /error\.message|error\.stack/i);
+});
+
+test("applies reviewed browser, export, authentication-audit, and dependency safeguards", async () => {
+  const [config, exportRoute, exportPage, login, logout, password, mfa, migration, rootPackage, rootLock] = await Promise.all([
+    readFile(new URL("next.config.ts", root), "utf8"),
+    readFile(new URL("app/api/data-export/route.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/data-governance/page.tsx", root), "utf8"),
+    readFile(new URL("app/api/auth/login/route.ts", root), "utf8"),
+    readFile(new URL("app/api/auth/logout/route.ts", root), "utf8"),
+    readFile(new URL("app/api/auth/update-password/route.ts", root), "utf8"),
+    readFile(new URL("app/api/auth/mfa/verify/route.ts", root), "utf8"),
+    readFile(new URL("../database/migrations/024_guarded_auth_audit.sql", root), "utf8"),
+    readFile(new URL("../package.json", root), "utf8"),
+    readFile(new URL("../package-lock.json", root), "utf8"),
+  ]);
+  for (const header of ["Content-Security-Policy", "Referrer-Policy", "X-Content-Type-Options", "X-Frame-Options", "Permissions-Policy", "Strict-Transport-Security"]) assert.match(config, new RegExp(header));
+  assert.match(config, /frame-ancestors 'none'/);
+  assert.match(config, /object-src 'none'/);
+  assert.match(exportRoute, /export async function POST/);
+  assert.doesNotMatch(exportRoute, /export async function GET/);
+  assert.match(exportRoute, /origin !== request\.nextUrl\.origin/);
+  assert.match(exportPage, /<form action="\/api\/data-export" method="post">/);
+  for (const source of [login, logout, password, mfa]) assert.match(source, /dashboard_record_auth_event/);
+  assert.doesNotMatch(login + logout + password + mfa, /\.from\("audit_events"\)\.insert/);
+  assert.match(migration, /target_event_type NOT IN \('auth\.login\.succeeded', 'auth\.logout', 'auth\.password\.updated', 'auth\.mfa\.verified'\)/i);
+  assert.match(migration, /REVOKE ALL ON FUNCTION dashboard_record_auth_event\(TEXT\) FROM PUBLIC, anon, authenticated/i);
+  assert.match(rootPackage, /"html-to-text": "10\.0\.1"/);
+  assert.match(rootLock, /"node_modules\/html-to-text"[\s\S]{0,100}"version": "10\.0\.1"/);
+  assert.match(rootLock, /"node_modules\/deepmerge-ts"[\s\S]{0,100}"version": "8\.0\.2"/);
 });

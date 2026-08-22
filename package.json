@@ -38,5 +38,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
+  },
+  "overrides": {
+    "mailparser": { "html-to-text": "10.0.1" }
   }
 }
