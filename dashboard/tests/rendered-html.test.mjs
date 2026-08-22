@@ -542,3 +542,21 @@ test("requires AAL2 for administrator dashboard access and database privileges",
   assert.match(verify, /challengeAndVerify/);
   assert.doesNotMatch(auth + login + session + page + form + enroll + verify, /SUPABASE_SERVICE_ROLE_KEY/);
 });
+
+test("ships rollback-only production permission and RLS regression checks", async () => {
+  const sql = await readFile(new URL("../database/tests/001_dashboard_rls_regression.sql", root), "utf8");
+  assert.match(sql, /^BEGIN;/m);
+  assert.match(sql, /^ROLLBACK;/m);
+  assert.doesNotMatch(sql, /^\s*(?:INSERT\s+INTO|UPDATE\s+[a-z_]|DELETE\s+FROM|TRUNCATE\s+TABLE)\b/im);
+  assert.match(sql, /SET LOCAL ROLE anon/i);
+  assert.match(sql, /SET LOCAL ROLE authenticated/i);
+  assert.match(sql, /'aal', 'aal1'/i);
+  assert.match(sql, /'aal', 'aal2'/i);
+  assert.match(sql, /AAL1 administrator passed member check/i);
+  assert.match(sql, /AAL2 administrator failed member check/i);
+  assert.match(sql, /administrator can see a different organization/i);
+  assert.match(sql, /AAL1 operator failed member check/i);
+  assert.match(sql, /has_table_privilege\('authenticated', 'audit_events'/i);
+  assert.match(sql, /has_function_privilege\('service_role'/i);
+  assert.match(sql, /EpsiFlow permission and RLS regression checks passed/i);
+});
