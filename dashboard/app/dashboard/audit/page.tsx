@@ -30,6 +30,7 @@ const eventLabels: Record<string, string> = {
   "automation.runtime.resumed": "All automations resumed",
   "automation.runtime.limit_changed": "Automation limit changed",
   "automation.run.rate_limited": "Automation trigger rate limited",
+  "automation.run.retry_queued": "Automation retry queued",
   "automation.alert.acknowledged": "Failure alert acknowledged",
 };
 
@@ -38,7 +39,7 @@ const safeMetadataKeys = new Set([
   "contact_kind", "contact_id", "scheduled_sends_stopped", "prospect_reply_id", "channel", "previous_attempt_count",
   "workflow_id", "automation_run_id", "version", "previous_version", "trigger_type", "status",
   "previous_limit", "new_limit", "hourly_limit", "runs_in_window",
-  "source_type", "source_id", "failure_code",
+  "source_type", "source_id", "failure_code", "retry_count",
 ]);
 
 function readable(value: string) {
@@ -84,6 +85,7 @@ function eventSummary(event: AuditEvent) {
     case "automation.runtime.resumed": return "An administrator allowed queued automation work to continue.";
     case "automation.runtime.limit_changed": return `The hourly run limit changed from ${meta.previous_limit || "its previous value"} to ${meta.new_limit || "a new value"}.`;
     case "automation.run.rate_limited": return `A trigger was blocked after ${meta.runs_in_window || 0} run(s) reached the hourly limit of ${meta.hourly_limit || "the configured value"}.`;
+    case "automation.run.retry_queued": return `Retry ${meta.retry_count || "new"} was queued after eligibility and stop conditions were rechecked.`;
     case "automation.alert.acknowledged": return `A ${String(meta.source_type || "automation").replaceAll("_", " ")} failure alert was reviewed and cleared from the active list.`;
     default: return "An operator action was recorded by EpsiFlow.";
   }

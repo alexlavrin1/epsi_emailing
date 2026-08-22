@@ -132,3 +132,24 @@ export async function acknowledgeAutomationAlert(_state: WorkflowActionState, fo
   revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");
   return { ok: true, message: "Alert acknowledged and retained in the audit log." };
 }
+
+export async function retryAutomationRun(_state: WorkflowActionState, formData: FormData): Promise<WorkflowActionState> {
+  const { membership } = await requireMembership();
+  if (!membership) return { ok: false, message: "An active organization membership is required." };
+  const runId = String(formData.get("run_id") || "");
+  if (!uuidPattern.test(runId)) return { ok: false, message: "Invalid automation run." };
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { ok: false, message: "Unable to retry this automation run." };
+  const { data, error } = await supabase.rpc("dashboard_retry_automation_run", { target_run_id: runId });
+  if (error) {
+    if (/schema cache|Could not find|does not exist/i.test(error.message)) return { ok: false, message: "Automation retries require migration 019." };
+    if (/retry limit reached/i.test(error.message)) return { ok: false, message: "This run has reached its three-retry limit." };
+    if (/approval queue/i.test(error.message)) return { ok: false, message: "Retry this delivery from the approval queue to avoid creating a duplicate reply." };
+    if (/Workflow must be active/i.test(error.message)) return { ok: false, message: "Activate the workflow before retrying this run." };
+    if (/runtime is paused/i.test(error.message)) return { ok: false, message: "Resume the automation runtime before retrying this run." };
+    if (/no longer eligible/i.test(error.message)) return { ok: false, message: "This reply or prospect is no longer eligible for automation." };
+    return { ok: false, message: "Unable to retry this automation run." };
+  }
+  revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");
+  return { ok: true, message: `Retry ${Number(data) || 1} queued. The worker will recheck the run before preparing a new draft.` };
+}

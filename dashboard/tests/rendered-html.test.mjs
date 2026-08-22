@@ -434,3 +434,39 @@ test("reports tenant-scoped automation conversion metrics without sensitive cont
   assert.match(page, /\?range=30/);
   assert.doesNotMatch(page + data, /SUPABASE_SERVICE_ROLE_KEY/);
 });
+
+test("retries failed automation preparation without duplicating approved replies", async () => {
+  const [migration, actions, control, data, page, audit] = await Promise.all([
+    readFile(new URL("../database/migrations/019_automation_run_retries.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/automations/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/automation-run-retry-control.tsx", root), "utf8"),
+    readFile(new URL("lib/dashboard-data.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/automations/page.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/audit/page.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /retry_count INTEGER NOT NULL DEFAULT 0/i);
+  assert.match(migration, /retry_count BETWEEN 0 AND 3/i);
+  assert.match(migration, /SELECT \* INTO target FROM automation_runs WHERE id = target_run_id FOR UPDATE/i);
+  assert.match(migration, /dashboard_is_org_member\(target\.organization_id\)/i);
+  assert.match(migration, /target\.status <> 'failed'/i);
+  assert.match(migration, /EXISTS \(SELECT 1 FROM operator_email_replies WHERE automation_run_id = target\.id\)/i);
+  assert.match(migration, /status = 'active'/i);
+  assert.match(migration, /NOT globally_paused/i);
+  assert.match(migration, /prospect\.status = 'active'/i);
+  assert.match(migration, /SET status = 'queued'[\s\S]*retry_count = next_retry_count/i);
+  assert.match(migration, /UPDATE automation_failure_alerts[\s\S]*acknowledged_at = NOW\(\)/i);
+  assert.match(migration, /automation\.run\.retry_queued/i);
+  assert.match(migration, /REVOKE ALL ON FUNCTION dashboard_retry_automation_run\(UUID\) FROM PUBLIC, anon, authenticated/i);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION dashboard_retry_automation_run\(UUID\) TO authenticated/i);
+  assert.match(actions, /\.rpc\("dashboard_retry_automation_run"/);
+  assert.match(control, /Retry preparation/);
+  assert.match(control, /window\.confirm/);
+  assert.match(control, /retry.*of 3/i);
+  assert.match(data, /dashboard_automation_retries_ready/);
+  assert.match(data, /select\("id,retry_count"\)/);
+  assert.match(page, /Retry delivery in approvals/);
+  assert.match(page, /run\.canRetryPreparation/);
+  assert.match(audit, /Automation retry queued/);
+  assert.doesNotMatch(actions + control + page + data, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(actions + control, /\.from\("automation_runs"\)[\s\S]*\.(?:insert|update|delete)\(/);
+});

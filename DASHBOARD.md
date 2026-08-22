@@ -207,6 +207,8 @@ The fourth slice adds tenant-scoped failure alerts for automation runs and monit
 
 The fifth slice adds privacy-preserving automation performance reporting for selectable 7-day and 30-day periods. A membership-guarded aggregate function returns trigger, draft, approval, delivery, decline, failure, active-run, and average-success-time metrics without exposing message content, recipients, or provider errors. The dashboard presents exact KPI values and a text-labelled outcome funnel. Migration `018_automation_performance_reporting.sql` was applied and verified on 2026-08-22.
 
+The sixth slice adds guarded retries for failed draft-preparation runs. Operators can requeue the same version-pinned run up to three times after the database rechecks membership, workflow state, the global runtime, reply provenance, and prospect eligibility. Runs that already created a reply remain routed through the approval queue, preventing duplicate drafts and deliveries. Retry actions clear the active failure alert, retain repeated-failure reopening, and append audit history. Migration `019_automation_run_retries.sql` was applied and verified on 2026-08-22.
+
 - Automatic low-risk workflows
 - Idempotency and retries
 - Failure alerts

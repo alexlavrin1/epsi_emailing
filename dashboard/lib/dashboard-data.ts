@@ -149,6 +149,8 @@ export type AutomationRun = {
   completedAt: string | null;
   lastError: string | null;
   replyStatus: string | null;
+  retryCount: number;
+  canRetryPreparation: boolean;
 };
 
 export type AutomationFailureAlert = {
@@ -170,6 +172,7 @@ export type AutomationData = {
   limits: { ready: boolean; hourlyLimit: number; usedThisHour: number; rateLimited24h: number };
   alerts: { ready: boolean; openCount: number; items: AutomationFailureAlert[] };
   performance: { ready: boolean; days: 7 | 30; totalRuns: number; preparedDrafts: number; approvedDrafts: number; deliveredReplies: number; declinedDrafts: number; failedRuns: number; activeRuns: number; averageSuccessSeconds: number };
+  retries: { ready: boolean };
   worker: { ready: boolean; state: "unknown" | "running" | "healthy" | "failed" | "stale"; latestStartedAt: string | null; lastSuccessAt: string | null; recentFailures: number; latestFailureCode: string | null };
 };
 
@@ -607,9 +610,9 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
 export async function getAutomationData(supabase: SupabaseClient, organizationId: string, performanceDays: 7 | 30 = 30): Promise<AutomationData> {
   const readiness = await supabase.rpc("dashboard_automation_controls_ready");
   if (readiness.error || readiness.data !== true) {
-    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 }, runtime: { ready: false, paused: false, reason: null, pausedAt: null, updatedAt: null }, limits: { ready: false, hourlyLimit: 100, usedThisHour: 0, rateLimited24h: 0 }, alerts: { ready: false, openCount: 0, items: [] }, performance: { ready: false, days: performanceDays, totalRuns: 0, preparedDrafts: 0, approvedDrafts: 0, deliveredReplies: 0, declinedDrafts: 0, failedRuns: 0, activeRuns: 0, averageSuccessSeconds: 0 }, worker: { ready: false, state: "unknown", latestStartedAt: null, lastSuccessAt: null, recentFailures: 0, latestFailureCode: null } };
+    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 }, runtime: { ready: false, paused: false, reason: null, pausedAt: null, updatedAt: null }, limits: { ready: false, hourlyLimit: 100, usedThisHour: 0, rateLimited24h: 0 }, alerts: { ready: false, openCount: 0, items: [] }, performance: { ready: false, days: performanceDays, totalRuns: 0, preparedDrafts: 0, approvedDrafts: 0, deliveredReplies: 0, declinedDrafts: 0, failedRuns: 0, activeRuns: 0, averageSuccessSeconds: 0 }, retries: { ready: false }, worker: { ready: false, state: "unknown", latestStartedAt: null, lastSuccessAt: null, recentFailures: 0, latestFailureCode: null } };
   }
-  const [workflows, runs, runtimeReadiness, workerReadiness, limitReadiness, alertReadiness, reportingReadiness] = await Promise.all([
+  const [workflows, runs, runtimeReadiness, workerReadiness, limitReadiness, alertReadiness, reportingReadiness, retryReadiness] = await Promise.all([
     supabase.from("automation_workflows")
       .select("id,name,description,status,trigger_type,approval_mode,delay_minutes,current_version,updated_at,versions:automation_workflow_versions(version,body_template,created_at)")
       .eq("organization_id", organizationId).order("updated_at", { ascending: false }).limit(100),
@@ -621,15 +624,17 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
     supabase.rpc("dashboard_automation_rate_limits_ready"),
     supabase.rpc("dashboard_automation_failure_alerts_ready"),
     supabase.rpc("dashboard_automation_reporting_ready"),
+    supabase.rpc("dashboard_automation_retries_ready"),
   ]);
   const runtimeReady = !runtimeReadiness.error && runtimeReadiness.data === true;
   const workerReady = !workerReadiness.error && workerReadiness.data === true;
   const limitsReady = !limitReadiness.error && limitReadiness.data === true;
   const alertsReady = !alertReadiness.error && alertReadiness.data === true;
   const reportingReady = !reportingReadiness.error && reportingReadiness.data === true;
+  const retriesReady = !retryReadiness.error && retryReadiness.data === true;
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const [runtime, workerCycles, rateControl, hourlyUsage, rateLimitedEvents, failureAlerts, performance] = await Promise.all([
+  const [runtime, workerCycles, rateControl, hourlyUsage, rateLimitedEvents, failureAlerts, performance, retryMetadata] = await Promise.all([
     runtimeReady
       ? supabase.from("automation_runtime_controls").select("globally_paused,pause_reason,paused_at,updated_at").eq("organization_id", organizationId).maybeSingle()
       : Promise.resolve({ data: null, error: runtimeReadiness.error }),
@@ -651,6 +656,9 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
     reportingReady
       ? supabase.rpc("dashboard_get_automation_performance", { target_organization_id: organizationId, target_period_days: performanceDays })
       : Promise.resolve({ data: null, error: reportingReadiness.error }),
+    retriesReady
+      ? supabase.from("automation_runs").select("id,retry_count").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100)
+      : Promise.resolve({ data: null, error: retryReadiness.error }),
   ]);
   logQueryError("automation workflows", workflows.error);
   logQueryError("automation runs", runs.error);
@@ -663,15 +671,19 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
       currentVersion: workflow.current_version, currentTemplate: current?.body_template || "", versions: versions.length, updatedAt: workflow.updated_at,
     };
   });
+  const retryCounts = new Map((retryMetadata.data ?? []).map(run => [run.id, Number(run.retry_count) || 0] as const));
   const runRows: AutomationRun[] = (runs.data ?? []).map(run => {
     const workflow = one(run.workflow as Related<{ name: string }>);
     const prospect = one(run.prospect as Related<ProspectIdentity>);
     const replies = (run.replies ?? []) as Array<{ status: string }>;
+    const retryCount = retryCounts.get(run.id) || 0;
     return {
       id: run.id, workflowName: workflow?.name || "Unknown workflow", workflowVersion: run.workflow_version,
       status: run.status, contact: displayProspect(prospect), prospectId: run.prospect_id,
       scheduledFor: run.scheduled_for, createdAt: run.created_at, completedAt: run.completed_at,
       lastError: run.last_error, replyStatus: replies[0]?.status || null,
+      retryCount,
+      canRetryPreparation: retriesReady && !retryMetadata.error && run.status === "failed" && replies.length === 0 && retryCount < 3,
     };
   });
   const cycleRows = workerCycles.data ?? [];
@@ -734,6 +746,7 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
       activeRuns: performanceMetric("active_runs"),
       averageSuccessSeconds: performanceMetric("average_success_seconds"),
     },
+    retries: { ready: retriesReady && !retryMetadata.error },
     worker: {
       ready: workerReady && !workerCycles.error,
       state: workerState,
