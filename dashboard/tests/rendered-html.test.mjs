@@ -654,3 +654,26 @@ test("applies reviewed browser, export, authentication-audit, and dependency saf
   assert.match(rootLock, /"node_modules\/html-to-text"[\s\S]{0,100}"version": "10\.0\.1"/);
   assert.match(rootLock, /"node_modules\/deepmerge-ts"[\s\S]{0,100}"version": "8\.0\.2"/);
 });
+
+test("keeps every dashboard destination reachable and touch-friendly on mobile", async () => {
+  const [layout, nav, css] = await Promise.all([
+    readFile(new URL("app/dashboard/layout.tsx", root), "utf8"),
+    readFile(new URL("app/components/dashboard-nav.tsx", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
+  for (const destination of ["Approvals", "Campaigns", "Audit log", "Automations", "Data governance", "Monitoring"]) {
+    assert.match(nav, new RegExp(`>${destination}<`));
+  }
+  assert.match(layout, />Sign out<\/button>/);
+  assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.sidebar \.automation-link, \.sidebar \.administration-link \{ display: flex; \}/);
+  assert.doesNotMatch(css, /\.sidebar \.nav-link\.disabled, \.sidebar \.automation-link, \.sidebar-footer \{ display: none; \}/);
+  assert.match(css, /\.sidebar nav \{[^}]*overflow-x: auto/);
+  assert.match(css, /\.sidebar \.nav-link \{[^}]*min-width: 44px/);
+  for (const selector of ["inline-link, .back-link", "mfa-enrollment summary", "panel-link, .clear-filter, .back-row", "contact-cell", "text-button", "row-action", "approval-editor summary", "channel-activity li > a", "identity-email", "audit-event-context > a", "audit-details summary", "workflow-editor summary"]) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assert.match(css, new RegExp(`\\.${escaped} \\{[^}]*?(?:min-height|height): 44px`));
+  }
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(css, /:focus-visible \{ outline: 3px solid var\(--focus\)/);
+  assert.match(css, /small \{ font-size: 12px !important; \}/);
+});
