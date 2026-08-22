@@ -13,7 +13,7 @@
   "crons": [
     {
       "path": "/api/cron/outreach",
-      "schedule": "*/15 * * * 1-5"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/payment-recovery",

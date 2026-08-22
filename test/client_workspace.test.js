@@ -1,6 +1,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
 const { syncExistingClientWorkspace } = require('../src/outreach/engine');
+
+test('runs client mailbox matching every day while retaining the engine weekend send guard', () => {
+  const deployment = require('../vercel.json');
+  const outreachCron = deployment.crons.find(cron => cron.path === '/api/cron/outreach');
+  const engine = readFileSync(require.resolve('../src/outreach/engine'), 'utf8');
+  assert.equal(outreachCron?.schedule, '*/15 * * * *');
+  assert.match(engine, /if \(isWeekend\(\)\)[\s\S]*Sending skipped|if \(isWeekend\(\)\)[\s\S]*Outreach cycle skipped/);
+  assert.ok(engine.indexOf('syncExistingClientWorkspace()') < engine.indexOf('if (isWeekend())'));
+});
 
 test('matches existing-client email and assigns a Slack DM without posting', async () => {
   const saved = []; const completed = []; const synced = [];
