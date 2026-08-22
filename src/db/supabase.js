@@ -296,13 +296,79 @@ async function updateProspectStatus(prospectId, status) {
 }
 
 async function saveProspectReply({ outreach_send_id, campaign_id, prospect_id, gmail_message_id, subject, body, received_at }) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('prospect_replies')
     .upsert(
       { outreach_send_id, campaign_id, prospect_id, gmail_message_id, subject, body, received_at },
       { onConflict: 'gmail_message_id', ignoreDuplicates: true }
-    );
+    )
+    .select('id')
+    .maybeSingle();
   if (error) logger.error('Error saving prospect reply', error.message);
+  return data;
+}
+
+// ─── Semi-automations ────────────────────────────────────────────────────────
+
+async function enqueueReplyAutomation(prospectReplyId) {
+  const { data, error } = await supabase
+    .rpc('enqueue_reply_automation', { target_prospect_reply_id: prospectReplyId });
+  if (error) throw error;
+  return Number(data || 0);
+}
+
+async function getDueReplyAutomationRuns(limit = 25) {
+  const { data, error } = await supabase
+    .from('automation_runs')
+    .select('id,workflow_id,workflow_version,trigger_ref_id,prospect_id,scheduled_for')
+    .eq('status', 'queued')
+    .lte('scheduled_for', new Date().toISOString())
+    .order('scheduled_for', { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
+async function claimReplyAutomationRun(id) {
+  const { data, error } = await supabase
+    .rpc('claim_reply_automation_run', { target_run_id: id })
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function getReplyAutomationVersion(workflowId, version) {
+  const { data, error } = await supabase
+    .from('automation_workflow_versions')
+    .select('body_template')
+    .eq('workflow_id', workflowId)
+    .eq('version', version)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function getReplyAutomationContext(prospectReplyId) {
+  const { data, error } = await supabase
+    .from('prospect_replies')
+    .select('id,subject,prospect:prospect_id(id,email,first_name,last_name,company,status)')
+    .eq('id', prospectReplyId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function completeReplyAutomationRun(id, body) {
+  const { data, error } = await supabase
+    .rpc('complete_reply_automation_run', { target_run_id: id, reply_body: body });
+  if (error) throw error;
+  return data;
+}
+
+async function failReplyAutomationRun(id, errorMessage) {
+  const { error } = await supabase
+    .rpc('fail_reply_automation_run', { target_run_id: id, failure_message: String(errorMessage || 'Unknown automation error').slice(0, 1000) });
+  if (error) throw error;
 }
 
 // ─── Stripe webhook ingestion ────────────────────────────────────────────────
@@ -718,6 +784,13 @@ module.exports = {
   stopAllProspectSequences,
   updateProspectStatus,
   saveProspectReply,
+  enqueueReplyAutomation,
+  getDueReplyAutomationRuns,
+  claimReplyAutomationRun,
+  getReplyAutomationVersion,
+  getReplyAutomationContext,
+  completeReplyAutomationRun,
+  failReplyAutomationRun,
   enqueueStripeWebhookEvent,
   claimStripeWebhookEvents,
   markStripeWebhookEventProcessed,

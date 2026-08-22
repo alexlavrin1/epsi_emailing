@@ -119,8 +119,43 @@ export type ReplyRow = {
 
 export type ApprovalData = {
   ready: boolean;
-  replies: Array<{ id: string; status: string; body: string; lastError: string | null; createdAt: string; contact: string; email: string; subject: string }>;
+  replies: Array<{ id: string; status: string; body: string; lastError: string | null; createdAt: string; contact: string; email: string; subject: string; automationName: string | null }>;
   retries: Array<{ id: string; channel: string; attempts: number; error: string; updatedAt: string; customer: string }>;
+};
+
+export type AutomationWorkflow = {
+  id: string;
+  name: string;
+  description: string;
+  status: "draft" | "active" | "paused";
+  triggerType: string;
+  approvalMode: "required";
+  delayMinutes: number;
+  currentVersion: number;
+  currentTemplate: string;
+  versions: number;
+  updatedAt: string;
+};
+
+export type AutomationRun = {
+  id: string;
+  workflowName: string;
+  workflowVersion: number;
+  status: string;
+  contact: string;
+  prospectId: string;
+  scheduledFor: string;
+  createdAt: string;
+  completedAt: string | null;
+  lastError: string | null;
+  replyStatus: string | null;
+};
+
+export type AutomationData = {
+  ready: boolean;
+  workflows: AutomationWorkflow[];
+  runs: AutomationRun[];
+  metrics: { active: number; waitingApproval: number; succeeded: number; failed: number };
 };
 
 export type AuditEvent = {
@@ -519,12 +554,22 @@ export async function getReplies(supabase: SupabaseClient): Promise<ReplyRow[]> 
 }
 
 export async function getApprovalData(supabase: SupabaseClient, organizationId: string): Promise<ApprovalData> {
+  const automationReadiness = await supabase.rpc("dashboard_automation_controls_ready");
+  const automationReady = !automationReadiness.error && automationReadiness.data === true;
   const [readiness, replies, retries] = await Promise.all([
     supabase.rpc("dashboard_reply_controls_ready"),
     supabase.from("operator_email_replies").select("id,body,status,last_error,created_at,source_reply:prospect_replies(subject,prospect:prospects(first_name,last_name,email))").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
     supabase.from("payment_recovery_messages").select("id,channel,attempt_count,last_error,updated_at,recovery_case:payment_recovery_cases(customer:crm_customers(name,email,organization_id))").eq("status", "failed").order("updated_at", { ascending: false }).limit(100),
   ]);
   const ready = !readiness.error && readiness.data === true && !replies.error;
+  const automationSources = automationReady
+    ? await supabase.from("operator_email_replies").select("id,automation_run:automation_runs(workflow:automation_workflows(name))").eq("organization_id", organizationId).not("automation_run_id", "is", null).limit(100)
+    : { data: null, error: null };
+  const automationNames = new Map((automationSources.data ?? []).map(item => {
+    const run = one(item.automation_run as Related<{ workflow: Related<{ name: string }> }>);
+    const workflow = one(run?.workflow ?? null);
+    return [item.id, workflow?.name || null] as const;
+  }));
   const retryRows = (retries.data ?? []).filter(message => {
     const recovery = one(message.recovery_case as Related<{ customer: Related<CustomerIdentity & { organization_id: string }> }>);
     const customer = one(recovery?.customer ?? null);
@@ -535,12 +580,60 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
     replies: (replies.data ?? []).map(item => {
       const source = one(item.source_reply as Related<{ subject: string | null; prospect: Related<ProspectIdentity> }>);
       const prospect = one(source?.prospect ?? null);
-      return { id: item.id, status: item.status, body: item.body, lastError: item.last_error, createdAt: item.created_at, contact: displayProspect(prospect), email: prospect?.email || "Unknown email", subject: source?.subject || "No subject" };
+      return { id: item.id, status: item.status, body: item.body, lastError: item.last_error, createdAt: item.created_at, contact: displayProspect(prospect), email: prospect?.email || "Unknown email", subject: source?.subject || "No subject", automationName: automationNames.get(item.id) || null };
     }),
     retries: retryRows.map(message => {
       const recovery = one(message.recovery_case as Related<{ customer: Related<CustomerIdentity> }>);
       return { id: message.id, channel: message.channel, attempts: message.attempt_count, error: message.last_error || "Unknown delivery error", updatedAt: message.updated_at, customer: displayCustomer(one(recovery?.customer ?? null)) };
     }),
+  };
+}
+
+export async function getAutomationData(supabase: SupabaseClient, organizationId: string): Promise<AutomationData> {
+  const readiness = await supabase.rpc("dashboard_automation_controls_ready");
+  if (readiness.error || readiness.data !== true) {
+    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 } };
+  }
+  const [workflows, runs] = await Promise.all([
+    supabase.from("automation_workflows")
+      .select("id,name,description,status,trigger_type,approval_mode,delay_minutes,current_version,updated_at,versions:automation_workflow_versions(version,body_template,created_at)")
+      .eq("organization_id", organizationId).order("updated_at", { ascending: false }).limit(100),
+    supabase.from("automation_runs")
+      .select("id,workflow_version,status,prospect_id,scheduled_for,created_at,completed_at,last_error,workflow:automation_workflows(name),prospect:prospects(first_name,last_name,email),replies:operator_email_replies(status)")
+      .eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
+  ]);
+  logQueryError("automation workflows", workflows.error);
+  logQueryError("automation runs", runs.error);
+  const workflowRows: AutomationWorkflow[] = (workflows.data ?? []).map(workflow => {
+    const versions = (workflow.versions ?? []) as Array<{ version: number; body_template: string; created_at: string }>;
+    const current = versions.find(item => item.version === workflow.current_version);
+    return {
+      id: workflow.id, name: workflow.name, description: workflow.description, status: workflow.status,
+      triggerType: workflow.trigger_type, approvalMode: workflow.approval_mode, delayMinutes: workflow.delay_minutes,
+      currentVersion: workflow.current_version, currentTemplate: current?.body_template || "", versions: versions.length, updatedAt: workflow.updated_at,
+    };
+  });
+  const runRows: AutomationRun[] = (runs.data ?? []).map(run => {
+    const workflow = one(run.workflow as Related<{ name: string }>);
+    const prospect = one(run.prospect as Related<ProspectIdentity>);
+    const replies = (run.replies ?? []) as Array<{ status: string }>;
+    return {
+      id: run.id, workflowName: workflow?.name || "Unknown workflow", workflowVersion: run.workflow_version,
+      status: run.status, contact: displayProspect(prospect), prospectId: run.prospect_id,
+      scheduledFor: run.scheduled_for, createdAt: run.created_at, completedAt: run.completed_at,
+      lastError: run.last_error, replyStatus: replies[0]?.status || null,
+    };
+  });
+  return {
+    ready: !workflows.error && !runs.error,
+    workflows: workflowRows,
+    runs: runRows,
+    metrics: {
+      active: workflowRows.filter(item => item.status === "active").length,
+      waitingApproval: runRows.filter(item => item.status === "waiting_approval").length,
+      succeeded: runRows.filter(item => item.status === "succeeded").length,
+      failed: runRows.filter(item => item.status === "failed").length,
+    },
   };
 }
 
@@ -554,6 +647,7 @@ export async function getAuditEvents(
     outreach: "outreach.%",
     email: "email.%",
     recovery: "recovery.%",
+    automation: "automation.%",
   };
   const periodDays: Record<string, number> = { day: 1, week: 7, month: 30 };
   let request = supabase

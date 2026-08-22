@@ -214,3 +214,53 @@ test("renders the audit trail from tenant-scoped, append-only records", async ()
   assert.match(navigation, /\/dashboard\/audit/);
   assert.match(migration, /no UPDATE or DELETE policy: audit events are append-only/i);
 });
+
+test("keeps reply automations versioned, approval-gated, and server-executed", async () => {
+  const [migration, actions, controls, page, engine] = await Promise.all([
+    readFile(new URL("../database/migrations/011_reply_draft_automations.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/automations/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/workflow-controls.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/automations/page.tsx", root), "utf8"),
+    readFile(new URL("../src/outreach/engine.js", root), "utf8"),
+  ]);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS automation_workflow_versions/i);
+  assert.match(migration, /approval_mode\s+TEXT NOT NULL DEFAULT 'required' CHECK \(approval_mode = 'required'\)/i);
+  assert.match(migration, /ONE_ACTIVE_REPLY|one_active_reply/i);
+  assert.match(migration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON automation_workflows[\s\S]*FROM authenticated, anon/i);
+  assert.match(migration, /dashboard_has_org_role\(target_organization_id, ARRAY\['admin'\]\)/i);
+  assert.match(migration, /REVOKE ALL ON FUNCTION enqueue_reply_automation\(UUID\) FROM PUBLIC, anon, authenticated/i);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION enqueue_reply_automation\(UUID\) TO service_role/i);
+  assert.doesNotMatch(migration, /GRANT EXECUTE ON FUNCTION enqueue_reply_automation\(UUID\) TO authenticated/i);
+  assert.match(migration, /INSERT INTO operator_email_replies[\s\S]*automation_run_id/i);
+  assert.match(migration, /fail_reply_automation_run[\s\S]*AS \$\$\s*BEGIN[\s\S]*UPDATE automation_runs[\s\S]*END;\s*\$\$/i);
+  assert.match(actions, /dashboard_create_reply_workflow/);
+  assert.match(actions, /dashboard_update_reply_workflow/);
+  assert.match(actions, /dashboard_set_workflow_status/);
+  assert.match(controls, /window\.confirm/);
+  assert.match(page, /No automatic sending/);
+  assert.match(page, /Recent run history/);
+  assert.match(engine, /processReplyAutomationRuns/);
+  assert.doesNotMatch(actions + controls + page, /SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test("locks automation worker functions to the backend service role", async () => {
+  const migration = await readFile(new URL("../database/migrations/012_lock_automation_worker_functions.sql", root), "utf8");
+  for (const name of ["enqueue_reply_automation", "claim_reply_automation_run", "complete_reply_automation_run", "fail_reply_automation_run"]) {
+    assert.match(migration, new RegExp(`REVOKE ALL ON FUNCTION ${name}\\([^;]+ FROM anon`, "i"));
+    assert.match(migration, new RegExp(`REVOKE ALL ON FUNCTION ${name}\\([^;]+ FROM authenticated`, "i"));
+    assert.match(migration, new RegExp(`GRANT EXECUTE ON FUNCTION ${name}\\([^;]+ TO service_role`, "i"));
+  }
+});
+
+test("allows operators to edit drafts before approval without direct table writes", async () => {
+  const [migration, actions, controls] = await Promise.all([
+    readFile(new URL("../database/migrations/011_reply_draft_automations.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/approvals/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/approval-controls.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /dashboard_update_email_reply_draft/);
+  assert.match(migration, /target\.status NOT IN \('draft', 'failed'\)/i);
+  assert.match(actions, /\.rpc\("dashboard_update_email_reply_draft"/);
+  assert.match(controls, /Edit draft/);
+  assert.doesNotMatch(actions + controls, /\.from\("operator_email_replies"\)[\s\S]*\.(?:insert|update|delete)\(/);
+});

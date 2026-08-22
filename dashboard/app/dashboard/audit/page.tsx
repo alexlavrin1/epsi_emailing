@@ -16,13 +16,20 @@ const eventLabels: Record<string, string> = {
   "outreach.campaign.status_changed": "Campaign status changed",
   "outreach.prospect.stopped": "Contact outreach stopped",
   "email.reply.draft_created": "Reply draft created",
+  "email.reply.draft_updated": "Reply draft updated",
   "email.reply.queued": "Email reply approved",
   "recovery.delivery.retry_queued": "Recovery retry approved",
+  "automation.workflow.created": "Workflow created",
+  "automation.workflow.version_created": "Workflow version created",
+  "automation.workflow.status_changed": "Workflow status changed",
+  "automation.run.queued": "Automation run queued",
+  "automation.run.waiting_approval": "Automation draft prepared",
 };
 
 const safeMetadataKeys = new Set([
   "previous_stage", "new_stage", "note_id", "task_id", "due_at", "previous_status", "new_status",
   "contact_kind", "contact_id", "scheduled_sends_stopped", "prospect_reply_id", "channel", "previous_attempt_count",
+  "workflow_id", "automation_run_id", "version", "previous_version", "trigger_type", "status",
 ]);
 
 function readable(value: string) {
@@ -54,8 +61,14 @@ function eventSummary(event: AuditEvent) {
     case "outreach.campaign.status_changed": return `Campaign changed from ${meta.previous_status || "its previous state"} to ${meta.new_status || "a new state"}.`;
     case "outreach.prospect.stopped": return `${meta.scheduled_sends_stopped || 0} scheduled send(s) were stopped.`;
     case "email.reply.draft_created": return "A manual reply was saved as an inert draft for review.";
+    case "email.reply.draft_updated": return "A reply draft was edited before approval.";
     case "email.reply.queued": return "A reviewed reply was approved for server-side delivery.";
     case "recovery.delivery.retry_queued": return `A failed ${meta.channel || "recovery"} delivery was approved for retry.`;
+    case "automation.workflow.created": return "A versioned workflow was saved as an inactive draft.";
+    case "automation.workflow.version_created": return `Workflow version ${meta.version || "new"} was created.`;
+    case "automation.workflow.status_changed": return `Workflow changed from ${meta.previous_status || "its previous state"} to ${meta.new_status || "a new state"}.`;
+    case "automation.run.queued": return "A reply-triggered automation run was scheduled.";
+    case "automation.run.waiting_approval": return "A version-pinned reply draft was prepared for human review.";
     default: return "An operator action was recorded by EpsiFlow.";
   }
 }
@@ -66,6 +79,7 @@ function targetHref(event: AuditEvent) {
   if (event.targetType === "campaign") return "/dashboard/campaigns";
   if (event.targetType === "operator_email_reply") return "/dashboard/approvals";
   if (event.targetType === "payment_recovery_message") return "/dashboard/approvals#recovery-retries";
+  if (event.targetType === "automation_workflow" || event.targetType === "automation_run") return "/dashboard/automations";
   return null;
 }
 
@@ -78,7 +92,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   if (!membership) return null;
   const params = await searchParams;
   const query = params.q?.trim() || "";
-  const category = ["all", "crm", "outreach", "email", "recovery"].includes(params.category || "") ? params.category! : "all";
+  const category = ["all", "crm", "outreach", "email", "recovery", "automation"].includes(params.category || "") ? params.category! : "all";
   const period = ["day", "week", "month", "all"].includes(params.period || "") ? params.period! : "month";
   const supabase = await createSupabaseServerClient();
   if (!supabase) throw new Error("Dashboard authentication is not configured.");
@@ -96,7 +110,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
 
     <form className="filter-bar audit-filters" method="get" role="search">
       <label className="search-field"><Search size={17} aria-hidden="true" /><span className="sr-only">Search audit events</span><input name="q" defaultValue={query} placeholder="Search action or target ID…" /></label>
-      <label><span className="sr-only">Filter by event category</span><select name="category" defaultValue={category}><option value="all">All actions</option><option value="crm">CRM</option><option value="outreach">Outreach</option><option value="email">Email</option><option value="recovery">Recovery</option></select></label>
+      <label><span className="sr-only">Filter by event category</span><select name="category" defaultValue={category}><option value="all">All actions</option><option value="crm">CRM</option><option value="outreach">Outreach</option><option value="email">Email</option><option value="recovery">Recovery</option><option value="automation">Automation</option></select></label>
       <label><span className="sr-only">Filter by time period</span><select name="period" defaultValue={period}><option value="day">Last 24 hours</option><option value="week">Last 7 days</option><option value="month">Last 30 days</option><option value="all">All time</option></select></label>
       <button className="secondary-button compact-button" type="submit">Apply</button>
       {filtered ? <Link className="clear-filter" href="/dashboard/audit">Clear</Link> : null}

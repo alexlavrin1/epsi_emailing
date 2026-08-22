@@ -24,7 +24,7 @@ export function DashboardNav() {
       <Link className={`nav-link automation-link${pathname.startsWith("/dashboard/approvals") ? " active" : ""}`} href="/dashboard/approvals" aria-current={pathname.startsWith("/dashboard/approvals") ? "page" : undefined}><CheckCheck size={18} aria-hidden="true" /><span>Approvals</span></Link>
       <Link className={`nav-link automation-link${pathname.startsWith("/dashboard/campaigns") ? " active" : ""}`} href="/dashboard/campaigns" aria-current={pathname.startsWith("/dashboard/campaigns") ? "page" : undefined}><Megaphone size={18} aria-hidden="true" /><span>Campaigns</span></Link>
       <Link className={`nav-link automation-link${pathname.startsWith("/dashboard/audit") ? " active" : ""}`} href="/dashboard/audit" aria-current={pathname.startsWith("/dashboard/audit") ? "page" : undefined}><FileClock size={18} aria-hidden="true" /><span>Audit log</span></Link>
-      <span className="nav-link disabled" aria-disabled="true"><Workflow size={18} aria-hidden="true" /><span>Automations</span></span>
+      <Link className={`nav-link automation-link${pathname.startsWith("/dashboard/automations") ? " active" : ""}`} href="/dashboard/automations" aria-current={pathname.startsWith("/dashboard/automations") ? "page" : undefined}><Workflow size={18} aria-hidden="true" /><span>Automations</span></Link>
     </nav>
   );
 }

@@ -53,6 +53,7 @@ async function runOutreachCycle() {
 
   // Replies, unsubscribes, and bounces are processed even when sending is
   // disabled or outside business hours.
+  await processReplyAutomationRuns();
   await deliverOperatorEmailReplies();
   await checkForReplies();
 
@@ -219,7 +220,7 @@ async function checkForReplies() {
           await db.updateProspectStatus(send.prospect_id, 'unsubscribed');
           await db.stopAllProspectSequences(send.prospect_id);
         }
-        await db.saveProspectReply({
+        const savedReply = await db.saveProspectReply({
           outreach_send_id: send.id,
           campaign_id: send.campaign_id,
           prospect_id: send.prospect_id,
@@ -228,11 +229,72 @@ async function checkForReplies() {
           body: message.text,
           received_at: message.receivedAt,
         });
+        if (savedReply?.id) {
+          try {
+            await db.enqueueReplyAutomation(savedReply.id);
+          } catch (error) {
+            if (isAutomationUnavailable(error)) logger.warn('Reply automations are not installed yet; reply saved without a prepared draft');
+            else throw error;
+          }
+        }
       }
     } catch (err) {
       logger.error(`Reply check failed for mailbox ${mailboxEmail}: ${err.message}`);
     }
   }
+}
+
+function isAutomationUnavailable(error) {
+  return error?.code === '42P01' || error?.code === 'PGRST202' || error?.code === 'PGRST205' ||
+    /automation_(?:runs|workflows|workflow_versions)|enqueue_reply_automation|schema cache/i.test(error?.message || '');
+}
+
+async function processReplyAutomationRuns(dependencies = {}) {
+  const database = dependencies.db || db;
+  let due;
+  try {
+    due = await database.getDueReplyAutomationRuns(25);
+  } catch (error) {
+    if (isAutomationUnavailable(error)) {
+      logger.warn('Reply automations are not installed yet; continuing the outreach cycle');
+      return { enabled: false, due: 0, prepared: 0, stopped: 0, failed: 0 };
+    }
+    throw error;
+  }
+
+  let prepared = 0;
+  let stopped = 0;
+  let failed = 0;
+  for (const run of due) {
+    const claimed = await database.claimReplyAutomationRun(run.id);
+    if (!claimed) continue;
+    try {
+      const [version, context] = await Promise.all([
+        database.getReplyAutomationVersion(run.workflow_id, run.workflow_version),
+        database.getReplyAutomationContext(run.trigger_ref_id),
+      ]);
+      const prospect = context?.prospect;
+      if (!version?.body_template || !context || !prospect || prospect.status !== 'active') {
+        throw new Error('Reply context is incomplete or the prospect is not active');
+      }
+      const body = render(version.body_template, {
+        firstName: prospect.first_name || '',
+        lastName: prospect.last_name || '',
+        company: prospect.company || '',
+        email: prospect.email || '',
+        subject: context.subject || '',
+      }).trim();
+      if (!body || body.length > 10000) throw new Error('Rendered automation template must contain 1 to 10000 characters');
+      const replyId = await database.completeReplyAutomationRun(run.id, body);
+      if (replyId) prepared++;
+      else stopped++;
+    } catch (error) {
+      failed++;
+      await database.failReplyAutomationRun(run.id, error.message);
+      logger.error(`Reply automation failed [id=${run.id}]: ${error.message}`);
+    }
+  }
+  return { enabled: true, due: due.length, prepared, stopped, failed };
 }
 
 async function deliverOperatorEmailReplies(dependencies = {}) {
@@ -284,4 +346,4 @@ async function deliverOperatorEmailReplies(dependencies = {}) {
   return { due: queued.length, sent, failed };
 }
 
-module.exports = { runOutreachCycle, deliverOperatorEmailReplies };
+module.exports = { runOutreachCycle, deliverOperatorEmailReplies, processReplyAutomationRuns };

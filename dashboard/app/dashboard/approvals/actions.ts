@@ -38,6 +38,20 @@ export async function queueReply(_state: ApprovalActionState, formData: FormData
   return { ok: true, message: "Reply approved and queued for the backend delivery worker." };
 }
 
+export async function updateReplyDraft(_state: ApprovalActionState, formData: FormData): Promise<ApprovalActionState> {
+  const { membership } = await requireMembership();
+  if (!membership) return { ok: false, message: "An active organization membership is required." };
+  const replyId = String(formData.get("reply_id") || "");
+  const body = String(formData.get("body") || "").trim();
+  if (!uuidPattern.test(replyId) || body.length < 1 || body.length > 10000) return { ok: false, message: "Enter a reply between 1 and 10,000 characters." };
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { ok: false, message: "Unable to update this draft." };
+  const { error } = await supabase.rpc("dashboard_update_email_reply_draft", { target_reply_id: replyId, reply_body: body });
+  if (error) return { ok: false, message: /schema cache|Could not find/i.test(error.message) ? "Draft editing requires migration 011." : "Unable to update this draft." };
+  revalidatePath("/dashboard/approvals"); revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");
+  return { ok: true, message: "Draft updated. Review the final text before approving it." };
+}
+
 export async function retryRecoveryMessage(_state: ApprovalActionState, formData: FormData): Promise<ApprovalActionState> {
   const { membership } = await requireMembership();
   if (!membership) return { ok: false, message: "An active organization membership is required." };
