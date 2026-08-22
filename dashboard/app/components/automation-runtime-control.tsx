@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { setAutomationRuntimePause, type WorkflowActionState } from "../dashboard/automations/actions";
+import { setAutomationRateLimit, setAutomationRuntimePause, type WorkflowActionState } from "../dashboard/automations/actions";
 
 const initialState: WorkflowActionState = { ok: false, message: "" };
 
@@ -23,6 +23,22 @@ export function AutomationRuntimeControl({ paused, isAdmin }: { paused: boolean;
     <input type="hidden" name="paused" value={paused ? "false" : "true"} />
     {!paused ? <label>Reason for emergency pause <span>(required)</span><input name="reason" required minLength={3} maxLength={500} placeholder="Example: investigating unexpected draft volume" /></label> : null}
     <RuntimeSubmit paused={paused} />
+    {state.message ? <p className={state.ok ? "action-feedback success" : "action-feedback error"} role={state.ok ? "status" : "alert"}>{state.message}</p> : null}
+  </form>;
+}
+
+function RateLimitSubmit() {
+  const { pending } = useFormStatus();
+  return <button className="secondary-button compact-button" disabled={pending} type="submit">{pending ? "Saving…" : "Save limit"}</button>;
+}
+
+export function AutomationRateLimitControl({ hourlyLimit, isAdmin }: { hourlyLimit: number; isAdmin: boolean }) {
+  const [state, action] = useActionState(setAutomationRateLimit, initialState);
+  if (!isAdmin) return <p className="rate-limit-role-note">Only organization administrators can change this limit.</p>;
+  return <form className="rate-limit-control" action={action}>
+    <label htmlFor="hourly-run-limit">Maximum automation runs per hour</label>
+    <div><input id="hourly-run-limit" name="hourly_limit" type="number" min={1} max={1000} step={1} defaultValue={hourlyLimit} required /><RateLimitSubmit /></div>
+    <small>Applies to new runs only. Existing queued work is unchanged.</small>
     {state.message ? <p className={state.ok ? "action-feedback success" : "action-feedback error"} role={state.ok ? "status" : "alert"}>{state.message}</p> : null}
   </form>;
 }

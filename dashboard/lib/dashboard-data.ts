@@ -157,6 +157,7 @@ export type AutomationData = {
   runs: AutomationRun[];
   metrics: { active: number; waitingApproval: number; succeeded: number; failed: number };
   runtime: { ready: boolean; paused: boolean; reason: string | null; pausedAt: string | null; updatedAt: string | null };
+  limits: { ready: boolean; hourlyLimit: number; usedThisHour: number; rateLimited24h: number };
   worker: { ready: boolean; state: "unknown" | "running" | "healthy" | "failed" | "stale"; latestStartedAt: string | null; lastSuccessAt: string | null; recentFailures: number; latestFailureCode: string | null };
 };
 
@@ -594,9 +595,9 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
 export async function getAutomationData(supabase: SupabaseClient, organizationId: string): Promise<AutomationData> {
   const readiness = await supabase.rpc("dashboard_automation_controls_ready");
   if (readiness.error || readiness.data !== true) {
-    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 }, runtime: { ready: false, paused: false, reason: null, pausedAt: null, updatedAt: null }, worker: { ready: false, state: "unknown", latestStartedAt: null, lastSuccessAt: null, recentFailures: 0, latestFailureCode: null } };
+    return { ready: false, workflows: [], runs: [], metrics: { active: 0, waitingApproval: 0, succeeded: 0, failed: 0 }, runtime: { ready: false, paused: false, reason: null, pausedAt: null, updatedAt: null }, limits: { ready: false, hourlyLimit: 100, usedThisHour: 0, rateLimited24h: 0 }, worker: { ready: false, state: "unknown", latestStartedAt: null, lastSuccessAt: null, recentFailures: 0, latestFailureCode: null } };
   }
-  const [workflows, runs, runtimeReadiness, workerReadiness] = await Promise.all([
+  const [workflows, runs, runtimeReadiness, workerReadiness, limitReadiness] = await Promise.all([
     supabase.from("automation_workflows")
       .select("id,name,description,status,trigger_type,approval_mode,delay_minutes,current_version,updated_at,versions:automation_workflow_versions(version,body_template,created_at)")
       .eq("organization_id", organizationId).order("updated_at", { ascending: false }).limit(100),
@@ -605,16 +606,29 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
       .eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
     supabase.rpc("dashboard_automation_runtime_ready"),
     supabase.rpc("dashboard_automation_worker_health_ready"),
+    supabase.rpc("dashboard_automation_rate_limits_ready"),
   ]);
   const runtimeReady = !runtimeReadiness.error && runtimeReadiness.data === true;
   const workerReady = !workerReadiness.error && workerReadiness.data === true;
-  const [runtime, workerCycles] = await Promise.all([
+  const limitsReady = !limitReadiness.error && limitReadiness.data === true;
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const [runtime, workerCycles, rateControl, hourlyUsage, rateLimitedEvents] = await Promise.all([
     runtimeReady
       ? supabase.from("automation_runtime_controls").select("globally_paused,pause_reason,paused_at,updated_at").eq("organization_id", organizationId).maybeSingle()
       : Promise.resolve({ data: null, error: runtimeReadiness.error }),
     workerReady
       ? supabase.from("automation_worker_cycles").select("status,failure_code,started_at,completed_at").eq("organization_id", organizationId).order("started_at", { ascending: false }).limit(100)
       : Promise.resolve({ data: null, error: workerReadiness.error }),
+    limitsReady
+      ? supabase.from("automation_runtime_controls").select("hourly_run_limit").eq("organization_id", organizationId).maybeSingle()
+      : Promise.resolve({ data: null, error: limitReadiness.error }),
+    limitsReady
+      ? supabase.from("automation_runs").select("id", { count: "exact", head: true }).eq("organization_id", organizationId).gte("created_at", hourAgo)
+      : Promise.resolve({ count: null, error: limitReadiness.error }),
+    limitsReady
+      ? supabase.from("audit_events").select("id", { count: "exact", head: true }).eq("organization_id", organizationId).eq("event_type", "automation.run.rate_limited").gte("created_at", dayAgo)
+      : Promise.resolve({ count: null, error: limitReadiness.error }),
   ]);
   logQueryError("automation workflows", workflows.error);
   logQueryError("automation runs", runs.error);
@@ -660,6 +674,12 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
       reason: runtime.data?.pause_reason || null,
       pausedAt: runtime.data?.paused_at || null,
       updatedAt: runtime.data?.updated_at || null,
+    },
+    limits: {
+      ready: limitsReady && !rateControl.error && !hourlyUsage.error && !rateLimitedEvents.error && !!rateControl.data,
+      hourlyLimit: rateControl.data?.hourly_run_limit || 100,
+      usedThisHour: hourlyUsage.count || 0,
+      rateLimited24h: rateLimitedEvents.count || 0,
     },
     worker: {
       ready: workerReady && !workerCycles.error,

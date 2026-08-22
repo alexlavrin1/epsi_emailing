@@ -436,6 +436,28 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .worker-health-grid strong { margin-top: 6px; font-size: 11px; }
 .worker-failure { display: flex; align-items: center; gap: 7px; margin: 12px 0 0; color: var(--danger); font-size: 10px; }
 .worker-health-note { margin: 12px 0 0; color: var(--faint); font-size: 9px; line-height: 1.5; }
+.automation-rate-limits { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, .75fr) minmax(260px, .65fr); align-items: center; gap: 22px; margin-top: 12px; padding: 18px; border: 1px solid var(--border); border-radius: 13px; background: var(--surface); }
+.automation-rate-limits > header { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; }
+.rate-limit-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 11px; background: var(--accent-soft); color: var(--accent); }
+.automation-rate-limits h2 { margin: 0; font-size: 15px; }
+.automation-rate-limits header p:not(.eyebrow) { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.rate-limit-usage { display: grid; gap: 8px; min-width: 0; }
+.rate-limit-usage > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.rate-limit-usage span { color: var(--muted); font-size: 10px; }
+.rate-limit-usage strong { font-family: var(--font-geist-mono), monospace; font-size: 18px; font-variant-numeric: tabular-nums; }
+.rate-limit-usage strong small { color: var(--faint); font-size: 10px; }
+.rate-limit-usage progress { width: 100%; height: 8px; overflow: hidden; border: 0; border-radius: 999px; background: #091310; color: var(--accent); accent-color: var(--accent); }
+.rate-limit-usage progress::-webkit-progress-bar { border-radius: 999px; background: #091310; }
+.rate-limit-usage progress::-webkit-progress-value { border-radius: 999px; background: var(--accent); }
+.rate-limit-usage progress::-moz-progress-bar { border-radius: 999px; background: var(--accent); }
+.rate-limit-usage > small, .rate-limit-control > small { color: var(--faint); font-size: 9px; line-height: 1.5; }
+.rate-limit-control { display: grid; justify-items: end; gap: 7px; }
+.rate-limit-control > label { width: 100%; color: var(--muted); font-size: 10px; }
+.rate-limit-control > div { display: grid; grid-template-columns: minmax(90px, 1fr) auto; gap: 7px; width: 100%; }
+.rate-limit-control input { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 9px; background: #091310; color: var(--text); font-size: 12px; }
+.rate-limit-control input:focus { border-color: var(--accent); outline: 0; box-shadow: 0 0 0 3px var(--accent-soft); }
+.rate-limit-control .action-feedback, .rate-limit-role-note { margin: 0; max-width: 360px; text-align: right; }
+.rate-limit-role-note { color: var(--faint); font-size: 10px; line-height: 1.5; }
 .automation-metrics article { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 70px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
 .automation-metrics svg { color: var(--accent); }
 .automation-metrics span { color: var(--muted); font-size: 11px; }
@@ -524,6 +546,8 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .automation-layout { grid-template-columns: 1fr; }
   .automation-runtime { grid-template-columns: auto minmax(0, 1fr); }
   .runtime-control-form, .runtime-role-note { grid-column: 2; justify-items: start; width: 100%; text-align: left; }
+  .automation-rate-limits { grid-template-columns: minmax(0, 1fr) minmax(220px, .75fr); }
+  .rate-limit-control, .rate-limit-role-note { grid-column: 1 / -1; justify-items: start; width: 100%; text-align: left; }
 }
 
 @media (max-width: 640px) {
@@ -594,6 +618,9 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .runtime-control-form { justify-items: stretch; }
   .runtime-control-form label { width: 100%; }
   .worker-health-grid { grid-template-columns: 1fr; }
+  .automation-rate-limits { grid-template-columns: 1fr; }
+  .rate-limit-control, .rate-limit-role-note { grid-column: auto; justify-items: stretch; }
+  .rate-limit-control .action-feedback { text-align: left; }
   .workflow-card > header { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
   .workflow-version { grid-column: 2; justify-items: start; text-align: left; }
   .workflow-path { grid-template-columns: repeat(2, minmax(0, 1fr)); }

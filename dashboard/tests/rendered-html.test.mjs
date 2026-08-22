@@ -344,3 +344,33 @@ test("shows tenant-scoped worker heartbeats without exposing raw provider errors
   assert.doesNotMatch(page, /last_error|error\.message|SUPABASE_SERVICE_ROLE_KEY/);
   assert.doesNotMatch(migration, /last_error|error_message/i);
 });
+
+test("atomically enforces audited tenant automation rate limits", async () => {
+  const [migration, actions, control, data, page, audit] = await Promise.all([
+    readFile(new URL("../database/migrations/016_automation_rate_limits.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/automations/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/automation-runtime-control.tsx", root), "utf8"),
+    readFile(new URL("lib/dashboard-data.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/automations/page.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/audit/page.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /hourly_run_limit INTEGER NOT NULL DEFAULT 100/i);
+  assert.match(migration, /hourly_run_limit BETWEEN 1 AND 1000/i);
+  assert.match(migration, /dashboard_has_org_role\(target_organization_id, ARRAY\['admin'\]\)/i);
+  assert.match(migration, /SELECT \* INTO control[\s\S]*FOR UPDATE/i);
+  assert.match(migration, /created_at >= NOW\(\) - INTERVAL '1 hour'/i);
+  assert.match(migration, /automation\.run\.rate_limited/i);
+  assert.match(migration, /IF NOT FOUND OR control\.globally_paused THEN RETURN NULL/i);
+  assert.match(migration, /REVOKE ALL ON FUNCTION dashboard_set_automation_rate_limit\(UUID, INTEGER\) FROM PUBLIC, anon, authenticated/i);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION dashboard_set_automation_rate_limit\(UUID, INTEGER\) TO authenticated/i);
+  assert.match(actions, /\.rpc\("dashboard_set_automation_rate_limit"/);
+  assert.match(control, /Maximum automation runs per hour/);
+  assert.match(page, /Hourly automation capacity/);
+  assert.match(page, /<progress/);
+  assert.match(data, /dashboard_automation_rate_limits_ready/);
+  assert.match(data, /\.from\("automation_runs"\)\.select\("id", \{ count: "exact", head: true \}\)/);
+  assert.match(audit, /automation\.runtime\.limit_changed/);
+  assert.match(audit, /automation\.run\.rate_limited/);
+  assert.doesNotMatch(actions + control + page + data, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(actions + control, /\.from\("automation_runtime_controls"\)[\s\S]*\.(?:insert|update|delete)\(/);
+});

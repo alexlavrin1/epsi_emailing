@@ -105,3 +105,17 @@ export async function setAutomationRuntimePause(_state: WorkflowActionState, for
   revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");
   return { ok: true, message: targetPaused ? "All automations paused. Queued work is preserved but cannot be claimed." : "Automations resumed. Queued work can continue on the next worker cycle." };
 }
+
+export async function setAutomationRateLimit(_state: WorkflowActionState, formData: FormData): Promise<WorkflowActionState> {
+  const context = await adminContext();
+  if (!context) return { ok: false, message: "Administrator access is required to change automation limits." };
+  const hourlyLimit = Number(formData.get("hourly_limit"));
+  if (!Number.isInteger(hourlyLimit) || hourlyLimit < 1 || hourlyLimit > 1000) return { ok: false, message: "Hourly run limit must be a whole number between 1 and 1,000." };
+  const { error } = await context.supabase.rpc("dashboard_set_automation_rate_limit", {
+    target_organization_id: context.membership.organization.id,
+    target_hourly_limit: hourlyLimit,
+  });
+  if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "Automation rate limits require migration 016." : actionError(error.message) };
+  revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");
+  return { ok: true, message: `Hourly automation limit updated to ${hourlyLimit.toLocaleString()}.` };
+}

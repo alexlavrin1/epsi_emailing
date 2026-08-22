@@ -201,6 +201,8 @@ Status: in progress. The first slice adds an organization-wide emergency pause w
 
 The second slice records tenant-scoped outreach-worker heartbeats from both Vercel cron and the local scheduler. The Automations dashboard shows the latest cycle, last success, 24-hour failure count, and stale state. Only sanitized failure codes are stored; monitoring remains best-effort and cannot prevent the outreach cycle from running. Migration `015_automation_worker_heartbeats.sql` was applied and verified on 2026-08-22.
 
+The third slice adds an organization-wide rolling hourly limit for new automation runs. Enforcement is atomic under concurrent triggers, fails closed when runtime configuration is missing, and records both administrator limit changes and blocked triggers in the audit log. The dashboard shows current one-hour usage, the configured cap, and the number of blocked triggers in the last 24 hours. Migration `016_automation_rate_limits.sql` was applied and verified on 2026-08-22.
+
 - Automatic low-risk workflows
 - Idempotency and retries
 - Failure alerts
