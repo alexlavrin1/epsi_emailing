@@ -13,6 +13,7 @@
     "sync:instantly:dry": "node scripts/sync_instantly_leads.js --dry-run",
     "preflight": "node scripts/preflight.js",
     "secrets:check": "node scripts/check_secrets.js",
+    "export:verify": "node scripts/verify_data_export.js",
     "import:prospects": "node scripts/import_prospects.js",
     "import:prospects:dry": "node scripts/import_prospects.js --dry-run",
     "enroll:prospects": "node scripts/enroll_prospects.js",
