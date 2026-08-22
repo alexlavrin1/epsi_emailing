@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Archive, Building2, CheckCheck, Columns3, FileClock, Inbox, LayoutDashboard, Megaphone, Users, Workflow } from "lucide-react";
+import { Activity, Archive, Building2, CheckCheck, Columns3, FileClock, Inbox, LayoutDashboard, Megaphone, Users, Workflow } from "lucide-react";
 
 const items = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
@@ -27,6 +27,7 @@ export function DashboardNav() {
       <Link className={`nav-link automation-link${pathname.startsWith("/dashboard/automations") ? " active" : ""}`} href="/dashboard/automations" aria-current={pathname.startsWith("/dashboard/automations") ? "page" : undefined}><Workflow size={18} aria-hidden="true" /><span>Automations</span></Link>
       <span className="nav-section">Administration</span>
       <Link className={`nav-link administration-link${pathname.startsWith("/dashboard/data-governance") ? " active" : ""}`} href="/dashboard/data-governance" aria-current={pathname.startsWith("/dashboard/data-governance") ? "page" : undefined}><Archive size={18} aria-hidden="true" /><span>Data governance</span></Link>
+      <Link className={`nav-link administration-link${pathname.startsWith("/dashboard/monitoring") ? " active" : ""}`} href="/dashboard/monitoring" aria-current={pathname.startsWith("/dashboard/monitoring") ? "page" : undefined}><Activity size={18} aria-hidden="true" /><span>Monitoring</span></Link>
     </nav>
   );
 }

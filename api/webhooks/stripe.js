@@ -60,6 +60,7 @@ async function handler(req, res) {
     }
 
     logger.error(`Stripe webhook ingestion failed: ${error.message}`);
+    try { await db.recordApplicationError('stripe_webhook', 'stripe_webhook_ingestion_failed', 'stripe_webhook_ingestion_failed', 'critical'); } catch (monitoringError) { logger.warn(`Stripe error monitoring unavailable: ${monitoringError.message}`); }
     return res.status(500).json({ error: 'Stripe webhook ingestion failed' });
   }
 }

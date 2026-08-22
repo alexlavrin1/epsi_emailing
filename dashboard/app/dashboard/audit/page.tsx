@@ -36,6 +36,7 @@ const eventLabels: Record<string, string> = {
   "automation.internal_task.created": "Automatic follow-up task created",
   "data.retention.period_changed": "Retention period changed",
   "data.export.downloaded": "Organization data exported",
+  "monitoring.error.acknowledged": "Production error acknowledged",
 };
 
 const safeMetadataKeys = new Set([
@@ -43,7 +44,7 @@ const safeMetadataKeys = new Set([
   "contact_kind", "contact_id", "scheduled_sends_stopped", "prospect_reply_id", "channel", "previous_attempt_count",
   "workflow_id", "automation_run_id", "version", "previous_version", "trigger_type", "status",
   "previous_limit", "new_limit", "hourly_limit", "runs_in_window",
-  "source_type", "source_id", "failure_code", "retry_count", "previous_due_hours", "new_due_hours", "due_hours", "previous_days", "new_days", "dataset", "row_count", "truncated",
+  "source_type", "source_id", "failure_code", "retry_count", "occurrence_count", "previous_due_hours", "new_due_hours", "due_hours", "previous_days", "new_days", "dataset", "row_count", "truncated",
 ]);
 
 function readable(value: string) {

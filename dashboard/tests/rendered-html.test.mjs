@@ -589,3 +589,36 @@ test("exports tenant data and previews retention without enabling deletion", asy
   assert.match(nav, /Data governance/);
   assert.match(audit, /Organization data exported/);
 });
+
+test("captures deduplicated production errors without raw exception content", async () => {
+  const [migration, route, boundary, page, actions, database, outreach, recovery, stripe] = await Promise.all([
+    readFile(new URL("../database/migrations/023_production_error_monitoring.sql", root), "utf8"),
+    readFile(new URL("app/api/monitoring/error/route.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/error.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/monitoring/page.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/monitoring/actions.ts", root), "utf8"),
+    readFile(new URL("../src/db/supabase.js", root), "utf8"),
+    readFile(new URL("../api/cron/outreach.js", root), "utf8"),
+    readFile(new URL("../api/cron/payment-recovery.js", root), "utf8"),
+    readFile(new URL("../api/webhooks/stripe.js", root), "utf8"),
+  ]);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS application_error_events/i);
+  assert.match(migration, /UNIQUE \(organization_id, source, fingerprint\)/i);
+  assert.match(migration, /occurrence_count = application_error_events\.occurrence_count \+ 1/i);
+  assert.match(migration, /acknowledged_at = NULL, acknowledged_by_user_id = NULL/i);
+  assert.match(migration, /auth\.role\(\) IS DISTINCT FROM 'service_role'/i);
+  assert.match(migration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON application_error_events FROM authenticated, anon/i);
+  assert.match(migration, /monitoring\.error\.acknowledged/i);
+  assert.match(route, /dashboard_record_render_error/);
+  assert.match(boundary, /No page content or client data was included/i);
+  assert.match(page, /Codes only/);
+  assert.match(page, /matching Vercel log window/i);
+  assert.match(actions, /dashboard_acknowledge_application_error/);
+  assert.match(database, /record_application_error/);
+  assert.match(outreach, /outreach_cycle_failed/);
+  assert.doesNotMatch(outreach, /json\(\{ error: err\.message \}\)/);
+  assert.match(recovery, /payment_recovery_cycle_failed/);
+  assert.match(stripe, /stripe_webhook_ingestion_failed/);
+  assert.doesNotMatch(route + boundary + page + actions, /SUPABASE_SERVICE_ROLE_KEY|last_error|raw_exception|error_stack/i);
+  assert.doesNotMatch(page, /error\.message|error\.stack/i);
+});

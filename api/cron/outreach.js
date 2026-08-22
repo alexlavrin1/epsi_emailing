@@ -15,6 +15,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ ok: true, ts: new Date().toISOString() });
   } catch (err) {
     logger.error('Cron handler error', err);
-    return res.status(500).json({ error: err.message });
+    try { await require('../../src/db/supabase').recordApplicationError('outreach_cron', 'outreach_cycle_failed', 'outreach_cycle_failed', 'critical'); } catch (monitoringError) { logger.warn(`Outreach error monitoring unavailable: ${monitoringError.message}`); }
+    return res.status(500).json({ error: 'Outreach cycle failed' });
   }
 };

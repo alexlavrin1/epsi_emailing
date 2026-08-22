@@ -791,6 +791,15 @@ async function markOperatorEmailReplyFailed(id, errorMessage) {
   return data;
 }
 
+async function recordApplicationError(source, errorCode, fingerprint, severity = 'critical') {
+  const { data, error } = await supabase.rpc('record_application_error', {
+    target_source: source, target_error_code: errorCode,
+    target_fingerprint: fingerprint, target_severity: severity,
+  });
+  if (error) throw error;
+  return data;
+}
+
 module.exports = {
   supabase,
   getMailboxByEmail,
@@ -848,4 +857,5 @@ module.exports = {
   claimOperatorEmailReply,
   markOperatorEmailReplySent,
   markOperatorEmailReplyFailed,
+  recordApplicationError,
 };

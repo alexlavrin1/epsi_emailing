@@ -20,6 +20,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ ok: true, result, ts: new Date().toISOString() });
   } catch (error) {
     logger.error(`Payment recovery cron failed: ${error.message}`);
+    try { await require('../../src/db/supabase').recordApplicationError('payment_recovery_cron', 'payment_recovery_cycle_failed', 'payment_recovery_cycle_failed', 'critical'); } catch (monitoringError) { logger.warn(`Payment recovery error monitoring unavailable: ${monitoringError.message}`); }
     return res.status(500).json({ error: 'Payment recovery cycle failed' });
   }
 };
