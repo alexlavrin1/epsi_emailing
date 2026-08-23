@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireMembership } from "../../../lib/auth";
 import { createSupabaseServerClient } from "../../../lib/supabase-server";
+import { triggerClientWorkspaceSync } from "../../../lib/client-sync";
 
 export type ClientActionState = { ok: boolean; message: string };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -34,6 +35,7 @@ export async function createClientAppAction(_previous: ClientActionState, form: 
     target_contact_name: contactName, target_contact_email: email, target_slack_name: slackName || null,
   });
   if (error || !data) return { ok: false, message: actionError(error?.message) };
+  await triggerClientWorkspaceSync(supabase, String(data));
   revalidatePath("/dashboard/clients");
   redirect(`/dashboard/clients/${data}`);
 }
@@ -49,8 +51,9 @@ export async function addClientContactAction(_previous: ClientActionState, form:
     target_name: name, target_email: email, target_slack_name: slackName || null,
   });
   if (error) return { ok: false, message: actionError(error.message) };
+  const sync = await triggerClientWorkspaceSync(supabase, appId);
   revalidatePath(`/dashboard/clients/${appId}`); revalidatePath("/dashboard/clients");
-  return { ok: true, message: "Contact added. Email matching will run on the next engine cycle." };
+  return { ok: true, message: sync.completed ? "Contact added and correspondence synchronized." : "Contact added. Email matching will run on the next engine cycle." };
 }
 
 export async function requestClientSlackAction(_previous: ClientActionState, form: FormData): Promise<ClientActionState> {
@@ -60,6 +63,7 @@ export async function requestClientSlackAction(_previous: ClientActionState, for
   const supabase = await createSupabaseServerClient(); if (!supabase) return { ok: false, message: "Slack assignment is unavailable." };
   const { error } = await supabase.rpc("dashboard_request_client_slack_assignment", { target_contact_id: contactId, target_slack_name: slackName });
   if (error) return { ok: false, message: actionError(error.message) };
+  const sync = await triggerClientWorkspaceSync(supabase, appId);
   revalidatePath(`/dashboard/clients/${appId}`);
-  return { ok: true, message: "Slack chat assignment queued for the next engine cycle." };
+  return { ok: true, message: sync.completed ? "Slack chat assignment processed." : "Slack chat assignment queued for the next engine cycle." };
 }

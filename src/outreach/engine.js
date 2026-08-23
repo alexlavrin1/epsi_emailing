@@ -142,9 +142,10 @@ async function syncExistingClientWorkspace(dependencies = {}) {
   const database = dependencies.db || db;
   const mailer = dependencies.mailer || gmail;
   const slackClient = dependencies.slack || slack;
+  const clientAppIds = dependencies.clientAppIds || [];
   let contacts;
   try {
-    contacts = await database.getClientContactsForEmailSync(500);
+    contacts = await database.getClientContactsForEmailSync(500, clientAppIds);
   } catch (error) {
     if (isClientWorkspaceUnavailable(error)) {
       logger.warn('Existing-client workspace is not installed yet; continuing the outreach cycle');
@@ -185,7 +186,7 @@ async function syncExistingClientWorkspace(dependencies = {}) {
 
   let pending = [];
   try {
-    pending = await database.getPendingClientSlackAssignments(25);
+    pending = await database.getPendingClientSlackAssignments(25, clientAppIds);
   } catch (error) {
     if (!isClientWorkspaceUnavailable(error)) throw error;
   }

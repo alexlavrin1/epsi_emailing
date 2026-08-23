@@ -800,13 +800,35 @@ async function recordApplicationError(source, errorCode, fingerprint, severity =
   return data;
 }
 
-async function getClientContactsForEmailSync(limit = 500) {
-  const { data, error } = await supabase
+async function authorizeClientSync(accessToken, clientAppId) {
+  const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
+  if (userError || !userData.user) return null;
+  const { data: memberships, error: membershipError } = await supabase
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', userData.user.id)
+    .eq('status', 'active');
+  if (membershipError || !memberships?.length) return null;
+  const organizationIds = memberships.map(membership => membership.organization_id);
+  const { data: app, error: appError } = await supabase
+    .from('client_apps')
+    .select('id,organization_id')
+    .eq('id', clientAppId)
+    .in('organization_id', organizationIds)
+    .maybeSingle();
+  if (appError) throw appError;
+  return app;
+}
+
+async function getClientContactsForEmailSync(limit = 500, clientAppIds = []) {
+  let query = supabase
     .from('client_contacts')
     .select('id,organization_id,client_app_id,email,app:client_apps!inner(status)')
     .eq('app.status', 'active')
     .order('last_email_sync_at', { ascending: true, nullsFirst: true })
     .limit(limit);
+  if (clientAppIds.length) query = query.in('client_app_id', clientAppIds);
+  const { data, error } = await query;
   if (error) throw error;
   return data || [];
 }
@@ -832,13 +854,15 @@ async function markClientContactsEmailSynced(contactIds, syncedAt = new Date()) 
   return data || [];
 }
 
-async function getPendingClientSlackAssignments(limit = 25) {
-  const { data, error } = await supabase
+async function getPendingClientSlackAssignments(limit = 25, clientAppIds = []) {
+  let query = supabase
     .from('client_contacts')
     .select('id,email,slack_name')
     .eq('slack_assignment_status', 'pending')
     .order('updated_at', { ascending: true })
     .limit(limit);
+  if (clientAppIds.length) query = query.in('client_app_id', clientAppIds);
+  const { data, error } = await query;
   if (error) throw error;
   return data || [];
 }
@@ -920,6 +944,7 @@ module.exports = {
   markOperatorEmailReplySent,
   markOperatorEmailReplyFailed,
   recordApplicationError,
+  authorizeClientSync,
   getClientContactsForEmailSync,
   upsertClientEmailMessage,
   markClientContactsEmailSynced,

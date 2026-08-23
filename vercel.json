@@ -8,6 +8,9 @@
     },
     "api/cron/payment-recovery.js": {
       "maxDuration": 60
+    },
+    "api/client-sync.js": {
+      "maxDuration": 60
     }
   },
   "crons": [

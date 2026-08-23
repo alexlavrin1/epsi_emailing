@@ -679,7 +679,7 @@ test("keeps every dashboard destination reachable and touch-friendly on mobile",
 });
 
 test("adds a tenant-scoped existing-client workspace with server-side email and Slack matching", async () => {
-  const [migration, threadMigration, nav, listPage, detailPage, forms, actions, data, engine, mailbox, slack, database, exportRoute, verifier, readiness, rlsRegression, css] = await Promise.all([
+  const [migration, threadMigration, nav, listPage, detailPage, forms, actions, clientSync, syncEndpoint, data, engine, mailbox, slack, database, exportRoute, verifier, readiness, rlsRegression, css] = await Promise.all([
     readFile(new URL("../database/migrations/025_existing_client_workspace.sql", root), "utf8"),
     readFile(new URL("../database/migrations/026_client_email_threads.sql", root), "utf8"),
     readFile(new URL("app/components/dashboard-nav.tsx", root), "utf8"),
@@ -687,6 +687,8 @@ test("adds a tenant-scoped existing-client workspace with server-side email and 
     readFile(new URL("app/dashboard/clients/[id]/page.tsx", root), "utf8"),
     readFile(new URL("app/components/client-forms.tsx", root), "utf8"),
     readFile(new URL("app/dashboard/clients/actions.ts", root), "utf8"),
+    readFile(new URL("lib/client-sync.ts", root), "utf8"),
+    readFile(new URL("../api/client-sync.js", root), "utf8"),
     readFile(new URL("lib/client-data.ts", root), "utf8"),
     readFile(new URL("../src/outreach/engine.js", root), "utf8"),
     readFile(new URL("../src/outreach/gmail.js", root), "utf8"),
@@ -720,6 +722,13 @@ test("adds a tenant-scoped existing-client workspace with server-side email and 
   assert.match(forms, /const\s+initialClientActionState:\s*ClientActionState/, "form state must remain client-local");
   assert.match(actions, /dashboard_add_client_contact/);
   assert.match(actions, /dashboard_request_client_slack_assignment/);
+  assert.equal((actions.match(/triggerClientWorkspaceSync\(/g) || []).length, 3);
+  assert.match(clientSync, /supabase\.auth\.getSession\(\)/);
+  assert.match(clientSync, /authorization: `Bearer \$\{accessToken\}`/);
+  assert.doesNotMatch(clientSync, /CRON_SECRET|SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(syncEndpoint, /authorizeClientSync/);
+  assert.match(syncEndpoint, /clientAppIds: \[clientAppId\]/);
+  assert.doesNotMatch(syncEndpoint, /runOutreachCycle|processSend/);
   assert.match(data, /\.eq\("organization_id", organizationId\)/);
   assert.match(engine, /syncExistingClientWorkspace/);
   assert.match(mailbox, /findRecentClientCorrespondence/);

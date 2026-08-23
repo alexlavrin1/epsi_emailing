@@ -9,6 +9,7 @@ import { getClientAppDetail } from "../../../../lib/client-data";
 import { ClientContactForm, ClientSlackAssignment } from "../../../components/client-forms";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 export const metadata: Metadata = { title: "Client workspace" };
 
 export default async function ClientAppPage({ params }: { params: Promise<{ id: string }> }) {

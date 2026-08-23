@@ -7,6 +7,7 @@ import { getClientApps } from "../../../lib/client-data";
 import { ClientCreateForm } from "../../components/client-forms";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 export const metadata: Metadata = { title: "Clients" };
 
 export default async function ClientsPage() {

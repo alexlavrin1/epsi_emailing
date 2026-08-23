@@ -256,6 +256,7 @@ Status: in progress. The first slice adds a tenant-scoped Clients workspace orga
 - Multiple contacts per app
 - Automatic email correspondence matching
 - Expandable correspondence grouped by email thread
+- Immediate client-only mailbox and Slack sync after client/contact changes
 - Explicit Slack direct-chat assignment
 - Tenant isolation, auditing, export, and retention coverage
 
