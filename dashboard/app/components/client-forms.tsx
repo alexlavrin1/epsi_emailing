@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { addClientContactAction, createClientAppAction, requestClientSlackAction, type ClientActionState } from "../dashboard/clients/actions";
+import { addClientContactAction, createClientAppAction, requestClientSlackAction, setClientSlackChatLinkAction, type ClientActionState } from "../dashboard/clients/actions";
 
 const initialClientActionState: ClientActionState = { ok: false, message: "" };
 
@@ -48,4 +48,18 @@ export function ClientSlackAssignment({ clientAppId, contactId, slackName, statu
     <Submit idle={status === "failed" ? "Retry chat assignment" : "Assign Slack chat"} pending="Queueing…" />
     <Feedback state={state} />
   </form>;
+}
+
+export function ClientSlackConnectLink({ clientAppId, contactId }: { clientAppId: string; contactId: string }) {
+  const [state, action] = useActionState(setClientSlackChatLinkAction, initialClientActionState);
+  return <details className="client-slack-connect">
+    <summary>Connect a shared Slack channel</summary>
+    <form className="client-slack-form" action={action}>
+      <input type="hidden" name="client_app_id" value={clientAppId} /><input type="hidden" name="contact_id" value={contactId} />
+      <label htmlFor={`slack-chat-url-${contactId}`}>Conversation link<input id={`slack-chat-url-${contactId}`} name="slack_chat_url" type="url" maxLength={2048} placeholder="https://workspace.slack.com/archives/C…" required /></label>
+      <label htmlFor={`slack-chat-label-${contactId}`}>Label <span>(optional)</span><input id={`slack-chat-label-${contactId}`} name="slack_chat_label" maxLength={120} placeholder="SidePanda shared channel" /></label>
+      <Submit idle="Save shared chat" pending="Saving…" />
+      <Feedback state={state} />
+    </form>
+  </details>;
 }

@@ -199,6 +199,12 @@ function clientThreadKey(parsed, envelope = {}) {
   return createHash('sha256').update(String(root).trim().toLowerCase()).digest('hex');
 }
 
+function clientSearchCriteria(direction, email, since) {
+  return direction === 'inbound'
+    ? { since, from: email }
+    : { since, or: [{ to: email }, { cc: email }] };
+}
+
 function isBounceSender(from, subject) {
   return /(?:mailer-daemon|postmaster)/i.test(from) ||
     /(?:undeliver|delivery[ -](?:status|failure)|mail delivery failed|returned mail|failure notice)/i.test(subject || '');
@@ -314,9 +320,19 @@ async function findRecentClientCorrespondence(contactEmails, since) {
     for (const folder of folders) {
       const lock = await client.getMailboxLock(folder.path, { readOnly: true });
       try {
-        const uids = await client.search({ since }, { uid: true });
+        let uids;
+        if (targets.size <= 20) {
+          const targetedUids = new Set();
+          for (const email of targets) {
+            const matches = await client.search(clientSearchCriteria(folder.direction, email, since), { uid: true });
+            for (const uid of (matches || []).slice(-250)) targetedUids.add(uid);
+          }
+          uids = [...targetedUids];
+        } else {
+          uids = await client.search({ since }, { uid: true });
+        }
         if (!uids?.length) continue;
-        const recentUids = uids.slice(-500);
+        const recentUids = uids.slice(-1000);
         const messages = await client.fetchAll(recentUids, { uid: true, envelope: true }, { uid: true });
         for (const message of messages) {
           const counterparties = folder.direction === 'inbound'
@@ -364,4 +380,5 @@ module.exports = {
   composeRawMessage,
   findSentMailbox,
   clientThreadKey,
+  clientSearchCriteria,
 };

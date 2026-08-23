@@ -17,6 +17,7 @@ const eventLabels: Record<string, string> = {
   "client.contact.created": "Client contact added",
   "client.slack.assignment_requested": "Client Slack assignment requested",
   "client.slack.assigned": "Client Slack chat assigned",
+  "client.slack.chat_linked": "Slack Connect chat linked",
   "crm.lifecycle.changed": "Lifecycle changed",
   "crm.note.created": "Contact note created",
   "crm.task.created": "Follow-up task created",
@@ -86,6 +87,7 @@ function eventSummary(event: AuditEvent) {
     case "client.contact.created": return "Another contact was added to an existing client app.";
     case "client.slack.assignment_requested": return "A server-side Slack user lookup and DM assignment was queued.";
     case "client.slack.assigned": return "The Slack bot resolved the contact and assigned a direct conversation.";
+    case "client.slack.chat_linked": return "An existing shared Slack conversation was linked to the client contact.";
     case "outreach.campaign.status_changed": return `Campaign changed from ${meta.previous_status || "its previous state"} to ${meta.new_status || "a new state"}.`;
     case "outreach.prospect.stopped": return `${meta.scheduled_sends_stopped || 0} scheduled send(s) were stopped.`;
     case "email.reply.draft_created": return "A manual reply was saved as an inert draft for review.";

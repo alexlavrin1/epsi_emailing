@@ -44,18 +44,18 @@ test('matches existing-client email and assigns a Slack DM without posting', asy
 
 test('immediate client sync requires a valid user token and scopes work to an authorized app', async () => {
   const appId = 'c8301c4c-6399-45a3-b577-95d14b32ba3a';
-  const syncScopes = [];
+  const syncOptions = [];
   const handler = createClientSyncHandler({
     db: { authorizeClientSync: async (token, target) => token === 'valid-user-token' && target === appId ? { id: appId, organization_id: 'org-1' } : null },
-    sync: async options => { syncScopes.push(options.clientAppIds); return { contacts: 1, messages: 3, slackAssigned: 1, slackFailed: 0 }; },
+    sync: async options => { syncOptions.push(options); return { contacts: 1, messages: 3, slackAssigned: 1, slackFailed: 0 }; },
   });
   const unauthorized = responseRecorder();
   await handler({ method: 'POST', headers: {}, body: { client_app_id: appId } }, unauthorized);
   assert.equal(unauthorized.statusCode, 401);
   const accepted = responseRecorder();
-  await handler({ method: 'POST', headers: { authorization: 'Bearer valid-user-token' }, body: { client_app_id: appId } }, accepted);
+  await handler({ method: 'POST', headers: { authorization: 'Bearer valid-user-token' }, body: { client_app_id: appId, mode: 'historical' } }, accepted);
   assert.equal(accepted.statusCode, 200);
-  assert.deepEqual(syncScopes, [[appId]]);
+  assert.deepEqual(syncOptions, [{ clientAppIds: [appId], lookbackDays: 730 }]);
   assert.deepEqual(accepted.body.result, { contacts: 1, messages: 3, slackAssigned: 1, slackFailed: 0 });
 });
 

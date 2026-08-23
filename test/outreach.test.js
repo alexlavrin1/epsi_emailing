@@ -8,6 +8,7 @@ const {
   composeRawMessage,
   findSentMailbox,
   clientThreadKey,
+  clientSearchCriteria,
 } = require('../src/outreach/gmail');
 const { normalizeEmail, normalizeLead } = require('../scripts/sync_instantly_leads');
 const { SUBJECT, STEPS, UNSUBSCRIBE_COPY } = require('../scripts/setup_campaign_steps');
@@ -87,6 +88,12 @@ test('groups an original email and its replies under one privacy-safe thread key
   assert.equal(reply, original);
   assert.match(original, /^[a-f0-9]{64}$/);
   assert.doesNotMatch(original, /root-message/);
+});
+
+test('builds exact-address IMAP searches for old inbound and sent client mail', () => {
+  const since = new Date('2024-08-23T00:00:00Z');
+  assert.deepEqual(clientSearchCriteria('inbound', 'tarang@sidepanda.com', since), { since, from: 'tarang@sidepanda.com' });
+  assert.deepEqual(clientSearchCriteria('outbound', 'tarang@sidepanda.com', since), { since, or: [{ to: 'tarang@sidepanda.com' }, { cc: 'tarang@sidepanda.com' }] });
 });
 
 test('local sequence matches the approved Instantly cadence and safety footer', () => {

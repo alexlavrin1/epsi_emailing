@@ -699,6 +699,10 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .client-slack-form input { width: 100%; min-height: 44px; padding: 0 11px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--surface); color: var(--text); font-size: 16px; }
 .client-slack-form input:focus { border-color: var(--accent); outline: 0; box-shadow: 0 0 0 3px var(--accent-soft); }
 .client-slack-form .action-feedback { margin: 0; }
+.client-slack-connect { margin-top: 8px; }
+.client-slack-connect > summary { min-height: 44px; color: var(--accent-strong); font-size: 10px; font-weight: 650; line-height: 44px; cursor: pointer; }
+.client-slack-connect[open] > summary { color: var(--text); }
+.client-slack-connect .client-slack-form { margin-top: 0; }
 .client-add-contact summary { min-height: 44px; color: var(--accent-strong); font-size: 12px; font-weight: 650; line-height: 44px; cursor: pointer; }
 .client-contact-form { display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .client-contact-form .action-feedback { margin: 0; }

@@ -679,9 +679,10 @@ test("keeps every dashboard destination reachable and touch-friendly on mobile",
 });
 
 test("adds a tenant-scoped existing-client workspace with server-side email and Slack matching", async () => {
-  const [migration, threadMigration, nav, listPage, detailPage, forms, actions, clientSync, syncEndpoint, data, engine, mailbox, slack, database, exportRoute, verifier, readiness, rlsRegression, css] = await Promise.all([
+  const [migration, threadMigration, slackConnectMigration, nav, listPage, detailPage, forms, actions, clientSync, syncEndpoint, data, engine, mailbox, slack, database, exportRoute, verifier, readiness, rlsRegression, css] = await Promise.all([
     readFile(new URL("../database/migrations/025_existing_client_workspace.sql", root), "utf8"),
     readFile(new URL("../database/migrations/026_client_email_threads.sql", root), "utf8"),
+    readFile(new URL("../database/migrations/027_slack_connect_links.sql", root), "utf8"),
     readFile(new URL("app/components/dashboard-nav.tsx", root), "utf8"),
     readFile(new URL("app/dashboard/clients/page.tsx", root), "utf8"),
     readFile(new URL("app/dashboard/clients/[id]/page.tsx", root), "utf8"),
@@ -709,6 +710,9 @@ test("adds a tenant-scoped existing-client workspace with server-side email and 
   assert.match(migration, /client\.app\.created|client\.contact\.created|client\.slack\.assignment_requested|client\.slack\.assigned/);
   assert.match(threadMigration, /ADD COLUMN IF NOT EXISTS thread_key/i);
   assert.match(threadMigration, /ALTER COLUMN thread_key SET NOT NULL/i);
+  assert.match(slackConnectMigration, /dashboard_set_client_slack_chat_link/i);
+  assert.match(slackConnectMigration, /client\.slack\.chat_linked/i);
+  assert.match(slackConnectMigration, /\*slack\\\.com/i);
   assert.match(nav, /href: "\/dashboard\/clients", label: "Clients"/);
   assert.match(listPage, /Add an existing client/);
   assert.match(detailPage, /Email correspondence/);
@@ -717,32 +721,41 @@ test("adds a tenant-scoped existing-client workspace with server-side email and 
   assert.match(detailPage, /app\.slack\.com\/client/);
   assert.match(forms, /Primary contact/);
   assert.match(forms, /Add another contact|Assign Slack chat/);
+  assert.match(forms, /Connect a shared Slack channel/);
+  assert.match(forms, /workspace\.slack\.com\/archives/);
   assert.match(actions, /dashboard_create_client_app/);
   assert.doesNotMatch(actions, /export\s+const\s+initialClientActionState/, "use-server modules must not export non-function runtime values");
   assert.match(forms, /const\s+initialClientActionState:\s*ClientActionState/, "form state must remain client-local");
   assert.match(actions, /dashboard_add_client_contact/);
   assert.match(actions, /dashboard_request_client_slack_assignment/);
+  assert.match(actions, /dashboard_set_client_slack_chat_link/);
   assert.equal((actions.match(/triggerClientWorkspaceSync\(/g) || []).length, 3);
+  assert.equal((actions.match(/"historical"/g) || []).length, 2);
   assert.match(clientSync, /supabase\.auth\.getSession\(\)/);
   assert.match(clientSync, /authorization: `Bearer \$\{accessToken\}`/);
   assert.doesNotMatch(clientSync, /CRON_SECRET|SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(syncEndpoint, /authorizeClientSync/);
   assert.match(syncEndpoint, /clientAppIds: \[clientAppId\]/);
+  assert.match(syncEndpoint, /clientInitialCorrespondenceLookbackDays/);
   assert.doesNotMatch(syncEndpoint, /runOutreachCycle|processSend/);
   assert.match(data, /\.eq\("organization_id", organizationId\)/);
   assert.match(engine, /syncExistingClientWorkspace/);
   assert.match(mailbox, /findRecentClientCorrespondence/);
   assert.match(mailbox, /clientThreadKey/);
+  assert.match(mailbox, /clientSearchCriteria/);
+  assert.match(mailbox, /targets\.size <= 20/);
   assert.match(mailbox, /folders = \[\{ path: 'INBOX', direction: 'inbound' \}\]/);
   assert.match(slack, /lookupUserByEmailOrName/);
   assert.match(slack, /openDirectConversation/);
   assert.doesNotMatch(slack.match(/async function openDirectConversation[\s\S]*?\n\}/)?.[0] || "", /postMessage/);
   assert.match(database, /service_complete_client_slack_assignment/);
+  assert.match(database, /authorizeClientSync/);
   for (const dataset of ["clientApps", "clientContacts", "clientEmailMessages"]) {
     assert.match(exportRoute, new RegExp(`${dataset}:`));
     assert.match(verifier, new RegExp(`'${dataset}'`));
   }
   assert.match(exportRoute, /schemaVersion: 2/);
+  assert.match(exportRoute, /slack_chat_url/);
   assert.match(readiness, /orphan client correspondence/i);
   assert.match(rlsRegression, /anon can read existing-client data/i);
   assert.match(rlsRegression, /authenticated can write directly to existing-client tables/i);
@@ -750,4 +763,5 @@ test("adds a tenant-scoped existing-client workspace with server-side email and 
   assert.match(css, /\.client-detail-layout/);
   assert.match(css, /\.client-message-list summary \{[^}]*min-height: 44px/);
   assert.match(css, /\.client-thread-summary \{[^}]*min-height: 68px/);
+  assert.match(css, /\.client-slack-connect > summary \{[^}]*min-height: 44px/);
 });

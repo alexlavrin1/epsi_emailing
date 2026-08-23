@@ -6,9 +6,11 @@ export type ClientContact = {
   email: string;
   slackName: string | null;
   slackDisplayName: string | null;
-  slackStatus: "unassigned" | "pending" | "assigned" | "failed";
+  slackStatus: "unassigned" | "pending" | "assigned" | "failed" | "linked";
   slackTeamId: string | null;
   slackChannelId: string | null;
+  slackChatUrl: string | null;
+  slackChatLabel: string | null;
   slackFailureCode: string | null;
   lastEmailSyncAt: string | null;
 };
@@ -36,6 +38,7 @@ type ContactRecord = {
   id: string; name: string; email: string; slack_name: string | null;
   slack_display_name: string | null; slack_assignment_status: ClientContact["slackStatus"];
   slack_team_id: string | null; slack_channel_id: string | null;
+  slack_chat_url: string | null; slack_chat_label: string | null;
   slack_failure_code: string | null; last_email_sync_at: string | null;
 };
 
@@ -44,13 +47,14 @@ function contact(record: ContactRecord): ClientContact {
     id: record.id, name: record.name, email: record.email, slackName: record.slack_name,
     slackDisplayName: record.slack_display_name, slackStatus: record.slack_assignment_status,
     slackTeamId: record.slack_team_id, slackChannelId: record.slack_channel_id,
+    slackChatUrl: record.slack_chat_url, slackChatLabel: record.slack_chat_label,
     slackFailureCode: record.slack_failure_code, lastEmailSyncAt: record.last_email_sync_at,
   };
 }
 
 export async function getClientApps(supabase: SupabaseClient, organizationId: string) {
   const { data, error } = await supabase.from("client_apps")
-    .select("id,name,website_url,status,updated_at,contacts:client_contacts(id,name,email,slack_name,slack_display_name,slack_assignment_status,slack_team_id,slack_channel_id,slack_failure_code,last_email_sync_at)")
+    .select("id,name,website_url,status,updated_at,contacts:client_contacts(id,name,email,slack_name,slack_display_name,slack_assignment_status,slack_team_id,slack_channel_id,slack_chat_url,slack_chat_label,slack_failure_code,last_email_sync_at)")
     .eq("organization_id", organizationId).order("updated_at", { ascending: false });
   if (error) return { ready: false, apps: [] as ClientAppSummary[] };
   const apps = (data ?? []).map(row => ({
@@ -63,7 +67,7 @@ export async function getClientApps(supabase: SupabaseClient, organizationId: st
 export async function getClientAppDetail(supabase: SupabaseClient, organizationId: string, clientAppId: string) {
   const [appResult, messagesResult] = await Promise.all([
     supabase.from("client_apps")
-      .select("id,name,website_url,status,updated_at,contacts:client_contacts(id,name,email,slack_name,slack_display_name,slack_assignment_status,slack_team_id,slack_channel_id,slack_failure_code,last_email_sync_at)")
+      .select("id,name,website_url,status,updated_at,contacts:client_contacts(id,name,email,slack_name,slack_display_name,slack_assignment_status,slack_team_id,slack_channel_id,slack_chat_url,slack_chat_label,slack_failure_code,last_email_sync_at)")
       .eq("organization_id", organizationId).eq("id", clientAppId).maybeSingle(),
     supabase.from("client_email_messages")
       .select("id,client_contact_id,thread_key,direction,subject,body,occurred_at")

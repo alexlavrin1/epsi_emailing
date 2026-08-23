@@ -22,6 +22,7 @@ BEGIN
     'dashboard_set_automation_pause(uuid,boolean,text)', 'claim_reply_automation_run(uuid)',
     'dashboard_record_data_export(uuid,text,integer,boolean)',
     'dashboard_create_client_app(uuid,text,text,text,text,text)',
+    'dashboard_set_client_slack_chat_link(uuid,text,text)',
     'service_complete_client_slack_assignment(uuid,text,text,text,text)'
   ] LOOP
     IF to_regprocedure(expected_function) IS NULL THEN RAISE EXCEPTION 'RECOVERY TEST FAILED: function % is missing', expected_function; END IF;
@@ -32,7 +33,10 @@ BEGIN
   IF NOT has_function_privilege('service_role', 'claim_reply_automation_run(uuid)', 'EXECUTE') THEN RAISE EXCEPTION 'RECOVERY TEST FAILED: service worker access is missing'; END IF;
   IF has_function_privilege('authenticated', 'service_complete_client_slack_assignment(uuid,text,text,text,text)', 'EXECUTE') THEN RAISE EXCEPTION 'RECOVERY TEST FAILED: browser Slack worker access was restored incorrectly'; END IF;
   IF NOT has_function_privilege('service_role', 'service_complete_client_slack_assignment(uuid,text,text,text,text)', 'EXECUTE') THEN RAISE EXCEPTION 'RECOVERY TEST FAILED: client Slack worker access is missing'; END IF;
+  IF NOT has_function_privilege('authenticated', 'dashboard_set_client_slack_chat_link(uuid,text,text)', 'EXECUTE') THEN RAISE EXCEPTION 'RECOVERY TEST FAILED: client Slack Connect link access is missing'; END IF;
+  IF has_function_privilege('anon', 'dashboard_set_client_slack_chat_link(uuid,text,text)', 'EXECUTE') THEN RAISE EXCEPTION 'RECOVERY TEST FAILED: anonymous Slack Connect link access was restored incorrectly'; END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'client_email_messages' AND column_name = 'thread_key' AND is_nullable = 'NO') THEN RAISE EXCEPTION 'RECOVERY TEST FAILED: client email thread key is missing or nullable'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'client_contacts' AND column_name = 'slack_chat_url') THEN RAISE EXCEPTION 'RECOVERY TEST FAILED: Slack Connect chat link is missing'; END IF;
 END; $$;
 
 DO $$

@@ -35,7 +35,7 @@ export async function createClientAppAction(_previous: ClientActionState, form: 
     target_contact_name: contactName, target_contact_email: email, target_slack_name: slackName || null,
   });
   if (error || !data) return { ok: false, message: actionError(error?.message) };
-  await triggerClientWorkspaceSync(supabase, String(data));
+  await triggerClientWorkspaceSync(supabase, String(data), "historical");
   revalidatePath("/dashboard/clients");
   redirect(`/dashboard/clients/${data}`);
 }
@@ -51,7 +51,7 @@ export async function addClientContactAction(_previous: ClientActionState, form:
     target_name: name, target_email: email, target_slack_name: slackName || null,
   });
   if (error) return { ok: false, message: actionError(error.message) };
-  const sync = await triggerClientWorkspaceSync(supabase, appId);
+  const sync = await triggerClientWorkspaceSync(supabase, appId, "historical");
   revalidatePath(`/dashboard/clients/${appId}`); revalidatePath("/dashboard/clients");
   return { ok: true, message: sync.completed ? "Contact added and correspondence synchronized." : "Contact added. Email matching will run on the next engine cycle." };
 }
@@ -66,4 +66,18 @@ export async function requestClientSlackAction(_previous: ClientActionState, for
   const sync = await triggerClientWorkspaceSync(supabase, appId);
   revalidatePath(`/dashboard/clients/${appId}`);
   return { ok: true, message: sync.completed ? "Slack chat assignment processed." : "Slack chat assignment queued for the next engine cycle." };
+}
+
+export async function setClientSlackChatLinkAction(_previous: ClientActionState, form: FormData): Promise<ClientActionState> {
+  const { membership } = await requireMembership(); if (!membership) return { ok: false, message: "An active workspace membership is required." };
+  const contactId = formValue(form, "contact_id"); const appId = formValue(form, "client_app_id");
+  const chatUrl = formValue(form, "slack_chat_url"); const chatLabel = formValue(form, "slack_chat_label");
+  let parsed: URL;
+  try { parsed = new URL(chatUrl); } catch { return { ok: false, message: "Paste a valid Slack conversation link." }; }
+  if (!uuidPattern.test(contactId) || !uuidPattern.test(appId) || parsed.protocol !== "https:" || !(parsed.hostname === "slack.com" || parsed.hostname.endsWith(".slack.com")) || chatUrl.length > 2048 || chatLabel.length > 120) return { ok: false, message: "Paste a valid Slack conversation link." };
+  const supabase = await createSupabaseServerClient(); if (!supabase) return { ok: false, message: "Slack linking is unavailable." };
+  const { error } = await supabase.rpc("dashboard_set_client_slack_chat_link", { target_contact_id: contactId, target_chat_url: chatUrl, target_chat_label: chatLabel || null });
+  if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "Slack Connect links require migration 027." : actionError(error.message) };
+  revalidatePath(`/dashboard/clients/${appId}`); revalidatePath("/dashboard/audit");
+  return { ok: true, message: "Slack Connect conversation linked." };
 }

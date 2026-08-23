@@ -143,6 +143,7 @@ async function syncExistingClientWorkspace(dependencies = {}) {
   const mailer = dependencies.mailer || gmail;
   const slackClient = dependencies.slack || slack;
   const clientAppIds = dependencies.clientAppIds || [];
+  const lookbackDays = dependencies.lookbackDays || config.clientCorrespondenceLookbackDays;
   let contacts;
   try {
     contacts = await database.getClientContactsForEmailSync(500, clientAppIds);
@@ -158,7 +159,7 @@ async function syncExistingClientWorkspace(dependencies = {}) {
   if (contacts.length) {
     try {
       const contactByEmail = new Map(contacts.map(contact => [String(contact.email).toLowerCase(), contact]));
-      const since = new Date(Date.now() - config.clientCorrespondenceLookbackDays * 24 * 60 * 60 * 1000);
+      const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
       const messages = await mailer.findRecentClientCorrespondence([...contactByEmail.keys()], since);
       for (const message of messages) {
         const contact = contactByEmail.get(String(message.contactEmail).toLowerCase());
