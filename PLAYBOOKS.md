@@ -134,6 +134,17 @@ Migration 033 implements the disabled-by-default Slice 5 agent queue. The bounde
 
 Wise balance and top-up tracking is deferred until the core CRM automation, approvals, and delivery loop is operational.
 
+### Slice 6 — EpsiFlow playbook library
+
+Migration 034 installs four disabled-by-default, editable presets based on the product and sales context in `EPSIFLOW.md`:
+
+- Monthly client health check — active EpsiFlow Direct and Stripe-plan clients, every 30 days
+- EpsiFlow Direct monthly payment check — active Direct clients, every 30 days, with CRM relationship state authoritative over Stripe
+- Stripe plan payment and cancellation recovery — active Stripe-plan clients in canceled, past-due, unpaid, incomplete, or expired states, every 14 days
+- New lead education and onboarding — one draft 15 minutes after each eligible incoming lead reply
+
+Each definition exposes its audience, cadence, fallback template, and exact playbook instruction passed to the AI. Administrators can pause a playbook and create a new immutable version with changed audience, cadence, wording, or AI instructions. The lead workflow reconstructs all stored sent campaign messages and inbound replies before drafting. Every preset starts as a draft, every generated message remains approval-gated, and this slice adds no automatic provider delivery.
+
 ## Safety rules
 
 - No draft generation authorizes delivery.

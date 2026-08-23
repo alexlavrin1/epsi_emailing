@@ -5,6 +5,8 @@ const config = require('../config');
 const logger = require('../utils/logger');
 const { randomUUID } = require('node:crypto');
 const slack = require('../integrations/slack/client');
+const { getLeadConversationContext } = require('../lead-success/context');
+const { generateLeadReplyDraft } = require('../lead-success/agent');
 
 function isWeekend() {
   const day = new Intl.DateTimeFormat('en-US', {
@@ -403,6 +405,8 @@ function isAutomationUnavailable(error) {
 
 async function processReplyAutomationRuns(dependencies = {}) {
   const database = dependencies.db || db;
+  const leadContextLoader = dependencies.getLeadContext || getLeadConversationContext;
+  const leadDraftGenerator = dependencies.generateLeadDraft || generateLeadReplyDraft;
   let due;
   try {
     due = await database.getDueReplyAutomationRuns(25);
@@ -429,13 +433,19 @@ async function processReplyAutomationRuns(dependencies = {}) {
       if (!version?.body_template || !context || !prospect || prospect.status !== 'active') {
         throw new Error('Reply context is incomplete or the prospect is not active');
       }
-      const body = render(version.body_template, {
-        firstName: prospect.first_name || '',
-        lastName: prospect.last_name || '',
-        company: prospect.company || '',
-        email: prospect.email || '',
-        subject: context.subject || '',
-      }).trim();
+      let body;
+      if (config.aiGateway.clientSuccessAgentEnabled && String(version.agent_prompt || '').trim()) {
+        const completeContext = { ...(await leadContextLoader(prospect, { db: database })), currentReplyId: context.id };
+        body = (await leadDraftGenerator(version, completeContext, dependencies.leadAgentDependencies || {})).body;
+      } else {
+        body = render(version.body_template, {
+          firstName: prospect.first_name || '',
+          lastName: prospect.last_name || '',
+          company: prospect.company || '',
+          email: prospect.email || '',
+          subject: context.subject || '',
+        }).trim();
+      }
       if (!body || body.length > 10000) throw new Error('Rendered automation template must contain 1 to 10000 characters');
       const replyId = await database.completeReplyAutomationRun(run.id, body);
       if (replyId) prepared++;

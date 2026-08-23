@@ -8,21 +8,23 @@ export type WorkflowActionState = { ok: boolean; message: string };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const allowedVariables = new Set(["firstName", "lastName", "company", "email", "subject"]);
 
-type ValidDefinition = { name: string; description: string; body: string; delay: number };
+type ValidDefinition = { name: string; description: string; body: string; delay: number; agentPrompt: string };
 
 function validateDefinition(formData: FormData): ValidDefinition | { error: string } {
   const name = String(formData.get("name") || "").trim();
   const description = String(formData.get("description") || "").trim();
   const body = String(formData.get("body_template") || "").trim();
   const delay = Number(formData.get("delay_minutes"));
+  const agentPrompt = String(formData.get("agent_prompt") || "").trim();
   if (name.length < 3 || name.length > 120) return { error: "Name must contain 3 to 120 characters." } as const;
   if (description.length > 500) return { error: "Description cannot exceed 500 characters." } as const;
   if (!body || body.length > 10000) return { error: "Template must contain 1 to 10,000 characters." } as const;
   if (!Number.isInteger(delay) || delay < 0 || delay > 10080) return { error: "Delay must be between 0 and 10,080 minutes." } as const;
+  if (agentPrompt.length < 20 || agentPrompt.length > 12000) return { error: "AI instructions must contain 20 to 12,000 characters." } as const;
   const variables = [...body.matchAll(/\{\{([^}]+)\}\}/g)].map(match => match[1].trim());
   const unsupported = variables.find(variable => !allowedVariables.has(variable));
   if (unsupported) return { error: `Unsupported template variable: {{${unsupported}}}.` } as const;
-  return { name, description, body, delay } as const;
+  return { name, description, body, delay, agentPrompt } as const;
 }
 
 function actionError(message?: string) {
@@ -52,6 +54,7 @@ export async function createReplyWorkflow(_state: WorkflowActionState, formData:
     workflow_description: definition.description,
     workflow_body_template: definition.body,
     workflow_delay_minutes: definition.delay,
+    workflow_agent_prompt: definition.agentPrompt,
   });
   if (error) return { ok: false, message: actionError(error.message) };
   revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");
@@ -70,6 +73,7 @@ export async function updateReplyWorkflow(_state: WorkflowActionState, formData:
     workflow_description: definition.description,
     workflow_body_template: definition.body,
     workflow_delay_minutes: definition.delay,
+    workflow_agent_prompt: definition.agentPrompt,
   });
   if (error) return { ok: false, message: actionError(error.message) };
   revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");

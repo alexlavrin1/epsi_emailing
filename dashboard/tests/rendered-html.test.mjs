@@ -939,3 +939,36 @@ test("grounds context-aware client drafts in cited stored messages", async () =>
   assert.match(exportRoute, /schemaVersion: 5/);
   assert.match(verifier, /clientPlaybookDraftSources/);
 });
+
+test("installs four editable EpsiFlow playbooks with visible AI instructions", async () => {
+  const [migration, page, controls, data, clientAgent, leadAgent, leadContext, productContext, plan] = await Promise.all([
+    readFile(new URL("../database/migrations/034_epsiflow_playbook_library.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/playbooks/page.tsx", root), "utf8"),
+    readFile(new URL("app/components/client-playbook-controls.tsx", root), "utf8"),
+    readFile(new URL("lib/client-playbook-data.ts", root), "utf8"),
+    readFile(new URL("../src/client-success/agent.js", root), "utf8"),
+    readFile(new URL("../src/lead-success/agent.js", root), "utf8"),
+    readFile(new URL("../src/lead-success/context.js", root), "utf8"),
+    readFile(new URL("../EPSIFLOW.md", root), "utf8"),
+    readFile(new URL("../PLAYBOOKS.md", root), "utf8"),
+  ]);
+  for (const preset of ["client_health_monthly", "direct_payment_monthly", "stripe_plan_recovery", "lead_education_reply"]) assert.match(migration, new RegExp(preset));
+  assert.match(migration, /cooldown_days,status,preset_key[\s\S]*30,'draft','client_health_monthly'/);
+  assert.match(migration, /14,'draft','stripe_plan_recovery'/);
+  assert.match(migration, /'prospect_reply_received',15,'lead_education_reply'/);
+  assert.match(migration, /dashboard_update_client_playbook/);
+  assert.match(migration, /agent_prompt TEXT NOT NULL DEFAULT ''/);
+  assert.match(page, /PlaybookDetailsModal/);
+  assert.match(controls, /<dialog className="playbook-modal"/);
+  assert.match(controls, /showModal\(\)/);
+  assert.match(controls, /AI playbook instructions/);
+  assert.match(controls, /Pause this playbook before changing/);
+  assert.match(data, /automation_workflow_versions\(version,body_template,agent_prompt\)/);
+  assert.match(clientAgent, /instructions: job\.agent_prompt/);
+  assert.match(leadAgent, /version\.agent_prompt/);
+  assert.match(leadContext, /getProspectConversationReplies/);
+  assert.match(leadContext, /getProspectConversationSends/);
+  assert.match(productContext, /Financial and growth infrastructure for Shopify app businesses/);
+  assert.match(plan, /Monthly client health check/);
+  assert.doesNotMatch(migration + controls + clientAgent + leadAgent, /sendTransactionalEmail|sendDirectMessage|chat\.postMessage/);
+});

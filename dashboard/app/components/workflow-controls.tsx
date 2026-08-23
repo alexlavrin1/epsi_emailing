@@ -7,6 +7,7 @@ import { createReplyWorkflow, setWorkflowStatus, updateReplyWorkflow, type Workf
 
 const initialState: WorkflowActionState = { ok: false, message: "" };
 const defaultTemplate = "Hi {{firstName}},\n\nThank you for your reply about {{subject}}. I’ve received your message and will follow up shortly.\n\nBest,\nEpsiFlow";
+const defaultAgentPrompt = "Review the complete lead conversation, answer the latest question directly using confirmed EpsiFlow information, avoid unsupported pricing or financial claims, and end with one relevant low-friction next step.";
 
 function Submit({ idle, pending }: { idle: string; pending: string }) {
   const status = useFormStatus();
@@ -19,6 +20,7 @@ function DefinitionFields({ workflow }: { workflow?: AutomationWorkflow }) {
     <label>Description <span>(optional)</span><input name="description" maxLength={500} defaultValue={workflow?.description || "Prepare a reviewable acknowledgement when an active outreach prospect replies."} /></label>
     <label>Delay in minutes <span>(0–10,080)</span><input name="delay_minutes" type="number" min={0} max={10080} step={1} required defaultValue={workflow?.delayMinutes ?? 0} /></label>
     <label>Reply template <span>(required)</span><textarea name="body_template" required minLength={1} maxLength={10000} defaultValue={workflow?.currentTemplate || defaultTemplate} /></label>
+    <label>AI instructions <span>(required)</span><textarea name="agent_prompt" required minLength={20} maxLength={12000} defaultValue={workflow?.agentPrompt || defaultAgentPrompt} /></label>
     <p className="workflow-variable-help">Available variables: <code>{"{{firstName}}"}</code> <code>{"{{lastName}}"}</code> <code>{"{{company}}"}</code> <code>{"{{email}}"}</code> <code>{"{{subject}}"}</code></p>
   </>;
 }

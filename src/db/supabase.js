@@ -347,12 +347,36 @@ async function claimReplyAutomationRun(id) {
 async function getReplyAutomationVersion(workflowId, version) {
   const { data, error } = await supabase
     .from('automation_workflow_versions')
-    .select('body_template')
+    .select('body_template,agent_prompt')
     .eq('workflow_id', workflowId)
     .eq('version', version)
     .maybeSingle();
   if (error) throw error;
   return data;
+}
+
+async function getProspectConversationReplies(prospectId) {
+  const { data, error } = await supabase.from('prospect_replies')
+    .select('id,subject,body,received_at,created_at').eq('prospect_id', prospectId)
+    .order('received_at', { ascending: true, nullsFirst: false }).limit(500);
+  if (error) throw error;
+  return data || [];
+}
+
+async function getProspectConversationSends(prospectId) {
+  const { data, error } = await supabase.from('outreach_sends')
+    .select('id,campaign_id,step_number,sent_at,status').eq('prospect_id', prospectId)
+    .not('sent_at', 'is', null).order('sent_at', { ascending: true }).limit(500);
+  if (error) throw error;
+  return data || [];
+}
+
+async function getCampaignConversationSteps(campaignIds) {
+  const { data, error } = await supabase.from('campaign_steps')
+    .select('campaign_id,step_number,subject_template,body_template').in('campaign_id', campaignIds)
+    .order('step_number', { ascending: true }).limit(500);
+  if (error) throw error;
+  return data || [];
 }
 
 async function getReplyAutomationContext(prospectReplyId) {
@@ -993,6 +1017,9 @@ module.exports = {
   getDueReplyAutomationRuns,
   claimReplyAutomationRun,
   getReplyAutomationVersion,
+  getProspectConversationReplies,
+  getProspectConversationSends,
+  getCampaignConversationSteps,
   getReplyAutomationContext,
   completeReplyAutomationRun,
   failReplyAutomationRun,

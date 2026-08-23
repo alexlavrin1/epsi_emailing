@@ -29,7 +29,7 @@ function extractOutputText(response) {
   throw Object.assign(new Error('The model returned no structured draft'), { code: 'model_output_missing' });
 }
 
-async function createStructuredClientDraft({ system, user }, dependencies = {}) {
+async function createStructuredResponse({ system, user, schemaName, schema }, dependencies = {}) {
   const authToken = dependencies.authToken || dependencies.apiKey || config.aiGateway.authToken;
   const model = dependencies.model || config.aiGateway.clientSuccessModel;
   const reasoningEffort = dependencies.reasoningEffort || config.aiGateway.reasoningEffort;
@@ -47,7 +47,7 @@ async function createStructuredClientDraft({ system, user }, dependencies = {}) 
       ],
       reasoning: { effort: reasoningEffort },
       max_output_tokens: config.aiGateway.clientSuccessMaxOutputTokens,
-      text: { format: { type: 'json_schema', name: 'client_success_draft', strict: true, schema: DRAFT_SCHEMA } },
+      text: { format: { type: 'json_schema', name: schemaName, strict: true, schema } },
     }),
     signal: AbortSignal.timeout(config.aiGateway.clientSuccessTimeoutMs),
   });
@@ -62,4 +62,8 @@ async function createStructuredClientDraft({ system, user }, dependencies = {}) 
   return { output: parsed, model, responseId: String(payload.id || '').slice(0, 200) || null };
 }
 
-module.exports = { createStructuredClientDraft, extractOutputText, DRAFT_SCHEMA, AI_GATEWAY_RESPONSES_URL };
+async function createStructuredClientDraft(prompts, dependencies = {}) {
+  return createStructuredResponse({ ...prompts, schemaName: 'client_success_draft', schema: DRAFT_SCHEMA }, dependencies);
+}
+
+module.exports = { createStructuredResponse, createStructuredClientDraft, extractOutputText, DRAFT_SCHEMA, AI_GATEWAY_RESPONSES_URL };

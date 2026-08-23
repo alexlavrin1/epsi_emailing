@@ -135,6 +135,7 @@ export type AutomationWorkflow = {
   delayMinutes: number;
   currentVersion: number;
   currentTemplate: string;
+  agentPrompt: string;
   versions: number;
   updatedAt: string;
 };
@@ -630,7 +631,7 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
   }
   const [workflows, runs, runtimeReadiness, workerReadiness, limitReadiness, alertReadiness, reportingReadiness, retryReadiness, automaticTaskReadiness] = await Promise.all([
     supabase.from("automation_workflows")
-      .select("id,name,description,status,trigger_type,approval_mode,delay_minutes,current_version,updated_at,versions:automation_workflow_versions(version,body_template,created_at)")
+      .select("id,name,description,status,trigger_type,approval_mode,delay_minutes,current_version,updated_at,versions:automation_workflow_versions(version,body_template,agent_prompt,created_at)")
       .eq("organization_id", organizationId).order("updated_at", { ascending: false }).limit(100),
     supabase.from("automation_runs")
       .select("id,workflow_version,status,prospect_id,scheduled_for,created_at,completed_at,last_error,workflow:automation_workflows(name),prospect:prospects(first_name,last_name,email),replies:operator_email_replies(status)")
@@ -688,12 +689,12 @@ export async function getAutomationData(supabase: SupabaseClient, organizationId
   logQueryError("automation workflows", workflows.error);
   logQueryError("automation runs", runs.error);
   const workflowRows: AutomationWorkflow[] = (workflows.data ?? []).map(workflow => {
-    const versions = (workflow.versions ?? []) as Array<{ version: number; body_template: string; created_at: string }>;
+    const versions = (workflow.versions ?? []) as Array<{ version: number; body_template: string; agent_prompt: string; created_at: string }>;
     const current = versions.find(item => item.version === workflow.current_version);
     return {
       id: workflow.id, name: workflow.name, description: workflow.description, status: workflow.status,
       triggerType: workflow.trigger_type, approvalMode: workflow.approval_mode, delayMinutes: workflow.delay_minutes,
-      currentVersion: workflow.current_version, currentTemplate: current?.body_template || "", versions: versions.length, updatedAt: workflow.updated_at,
+      currentVersion: workflow.current_version, currentTemplate: current?.body_template || "", agentPrompt: current?.agent_prompt || "", versions: versions.length, updatedAt: workflow.updated_at,
     };
   });
   const retryCounts = new Map((retryMetadata.data ?? []).map(run => [run.id, Number(run.retry_count) || 0] as const));

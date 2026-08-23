@@ -32,7 +32,7 @@ Channel rules: email may have a short subject; Slack subject must be an empty st
   const user = `Prepare one ${job.channel} draft.
 
 PLAYBOOK
-${JSON.stringify({ name: job.playbook_name, purpose: job.playbook_description, trigger: job.trigger_type, subjectTemplate: job.subject_template, bodyTemplate: job.body_template })}
+${JSON.stringify({ name: job.playbook_name, purpose: job.playbook_description, trigger: job.trigger_type, instructions: job.agent_prompt, subjectTemplate: job.subject_template, bodyTemplate: job.body_template })}
 
 TARGET CONTACT
 ${JSON.stringify(target || { id: job.client_contact_id })}

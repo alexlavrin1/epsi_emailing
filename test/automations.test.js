@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const config = require('../src/config');
 
 const { processReplyAutomationRuns } = require('../src/outreach/engine');
 
@@ -55,4 +56,17 @@ test('keeps outreach operational before the automation migration is installed', 
   });
   const result = await processReplyAutomationRuns({ db });
   assert.deepEqual(result, { enabled: false, due: 0, prepared: 0, stopped: 0, failed: 0 });
+});
+
+test('uses the full lead conversation and playbook prompt for an AI reply draft', async () => {
+  const original = config.aiGateway.clientSuccessAgentEnabled;
+  const { db, calls } = run({
+    getReplyAutomationVersion: async () => ({ body_template: 'Fallback', agent_prompt: 'Answer the latest onboarding question with confirmed facts only.' }),
+  });
+  try {
+    config.aiGateway.clientSuccessAgentEnabled = true;
+    const leadContext = { prospect: { id: 'prospect-1' }, messages: [{ id: 'reply-1', direction: 'inbound', body: 'How do I onboard?' }], inboundReplyIds: ['reply-1'] };
+    const result = await processReplyAutomationRuns({ db, getLeadContext: async prospect => { assert.equal(prospect.id, 'prospect-1'); return leadContext; }, generateLeadDraft: async (version, context) => { assert.match(version.agent_prompt, /confirmed facts/); assert.deepEqual(context, { ...leadContext, currentReplyId: 'reply-1' }); return { body: 'Here is the relevant onboarding path.' }; } });
+    assert.equal(result.prepared, 1); assert.deepEqual(calls.completed, [{ id: 'run-1', body: 'Here is the relevant onboarding path.' }]);
+  } finally { config.aiGateway.clientSuccessAgentEnabled = original; }
 });

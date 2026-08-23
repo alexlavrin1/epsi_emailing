@@ -18,7 +18,7 @@ const context = {
   },
   sourceMessageCount: 1,
 };
-const job = { id: 'draft-1', organization_id: 'org-1', client_app_id: 'app-1', client_contact_id: 'contact-1', channel: 'email', playbook_name: 'Direct renewal', playbook_description: 'Check the relationship and next payment.', trigger_type: 'scheduled_checkin', subject_template: 'Checking in', body_template: 'Ask how things are going.' };
+const job = { id: 'draft-1', organization_id: 'org-1', client_app_id: 'app-1', client_contact_id: 'contact-1', channel: 'email', playbook_name: 'Direct renewal', playbook_description: 'Check the relationship and next payment.', trigger_type: 'scheduled_checkin', agent_prompt: 'Never infer payment status; ask one clear question.', subject_template: 'Checking in', body_template: 'Ask how things are going.' };
 
 test('context-aware drafting is disabled by default', async () => {
   const original = config.aiGateway.clientSuccessAgentEnabled;
@@ -37,7 +37,7 @@ test('generates an approval draft from complete context with validated citations
       db: { claimClientPlaybookAgentDrafts: async () => [job], completeClientPlaybookAgentDraft: async value => completed.push(value), failClientPlaybookAgentDraft: async () => assert.fail('must not fail') },
       getContext: async () => context,
       aiGateway: { createStructuredClientDraft: async prompts => {
-        assert.match(prompts.system, /untrusted evidence/i); assert.match(prompts.system, /Use every supplied message/i); assert.match(prompts.user, /How is the account balance/);
+        assert.match(prompts.system, /untrusted evidence/i); assert.match(prompts.system, /Use every supplied message/i); assert.match(prompts.user, /How is the account balance/); assert.match(prompts.user, /Never infer payment status/);
         return { model: 'test-model', responseId: 'resp-safe', output: { subject: 'A quick check-in', body: 'Hi Tarang, how are things going?', source_message_ids: [messageId], context_warnings: [] } };
       } },
     });
