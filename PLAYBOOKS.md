@@ -120,7 +120,7 @@ Initial template variables:
 
 Migration 032 implements the Slice 4 foundation for scheduled check-ins, Stripe cancellation follow-ups, and churn reactivation. The worker is disabled by default, runs before the weekend sending guard, deduplicates every trigger window, and prepares template drafts only. It snapshots how many synchronized emails were available.
 
-Migration 033 implements the disabled-by-default Slice 5 agent queue. The bounded Vercel worker passes the complete stored client context to the OpenAI Responses API with provider storage disabled, treats every customer-controlled field as untrusted evidence, requires strict structured output, validates cited message IDs against the client record, and stores only the reviewed draft, safe provider metadata, a context fingerprint, warnings, and source links. Oversized context is never silently truncated: the draft fails safely for a later summarization workflow. No provider delivery is added.
+Migration 033 implements the disabled-by-default Slice 5 agent queue. The bounded Vercel worker passes the complete stored client context through Vercel AI Gateway's OpenResponses endpoint to an OpenAI model with provider storage disabled, treats every customer-controlled field as untrusted evidence, requires strict structured output, validates cited message IDs against the client record, and stores only the reviewed draft, safe provider metadata, a context fingerprint, warnings, and source links. Oversized context is never silently truncated: the draft fails safely for a later summarization workflow. No provider delivery is added.
 
 - Run as a bounded Vercel job over claimed draft requests
 - Use the customer-support persona for triage, empathy, commitments, and escalation
@@ -128,7 +128,9 @@ Migration 033 implements the disabled-by-default Slice 5 agent queue. The bounde
 - Ground every draft in synchronized conversations and structured CRM/billing facts
 - Store citations to source message IDs and surface missing context
 - Never infer that a Stripe cancellation closes the CRM relationship
-- Require `CLIENT_SUCCESS_AGENT_ENABLED=true` and a server-only `OPENAI_API_KEY`; otherwise no model request is made
+- Default to `openai/gpt-5.6-luna` with `medium` reasoning to balance drafting quality and cost
+- Authenticate with Vercel's automatic short-lived `VERCEL_OIDC_TOKEN` in deployments, or a server-only `AI_GATEWAY_API_KEY` for local development
+- Require `CLIENT_SUCCESS_AGENT_ENABLED=true`; otherwise no model request is made
 
 Wise balance and top-up tracking is deferred until the core CRM automation, approvals, and delivery loop is operational.
 

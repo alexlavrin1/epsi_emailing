@@ -1,5 +1,7 @@
 const config = require('../../config');
 
+const AI_GATEWAY_RESPONSES_URL = 'https://ai-gateway.vercel.sh/v1/responses';
+
 const DRAFT_SCHEMA = {
   type: 'object',
   properties: {
@@ -18,6 +20,7 @@ const DRAFT_SCHEMA = {
 function extractOutputText(response) {
   if (typeof response?.output_text === 'string') return response.output_text;
   for (const item of response?.output || []) {
+    if (item?.type !== 'message') continue;
     for (const content of item?.content || []) {
       if (content?.type === 'refusal') throw Object.assign(new Error('The drafting request was refused'), { code: 'model_refusal' });
       if (content?.type === 'output_text' && typeof content.text === 'string') return content.text;
@@ -27,31 +30,36 @@ function extractOutputText(response) {
 }
 
 async function createStructuredClientDraft({ system, user }, dependencies = {}) {
-  const apiKey = dependencies.apiKey || config.openai.apiKey;
-  const model = dependencies.model || config.openai.clientSuccessModel;
+  const authToken = dependencies.authToken || dependencies.apiKey || config.aiGateway.authToken;
+  const model = dependencies.model || config.aiGateway.clientSuccessModel;
+  const reasoningEffort = dependencies.reasoningEffort || config.aiGateway.reasoningEffort;
   const request = dependencies.fetch || fetch;
-  if (!apiKey) throw Object.assign(new Error('OPENAI_API_KEY is not configured'), { code: 'openai_not_configured' });
-  const response = await request('https://api.openai.com/v1/responses', {
+  if (!authToken) throw Object.assign(new Error('AI Gateway authentication is not configured'), { code: 'ai_gateway_not_configured' });
+  const response = await request(AI_GATEWAY_RESPONSES_URL, {
     method: 'POST',
-    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    headers: { authorization: `Bearer ${authToken}`, 'content-type': 'application/json' },
     body: JSON.stringify({
       model,
       store: false,
-      input: [{ role: 'system', content: system }, { role: 'user', content: user }],
-      max_output_tokens: config.openai.clientSuccessMaxOutputTokens,
+      input: [
+        { type: 'message', role: 'system', content: system },
+        { type: 'message', role: 'user', content: user },
+      ],
+      reasoning: { effort: reasoningEffort },
+      max_output_tokens: config.aiGateway.clientSuccessMaxOutputTokens,
       text: { format: { type: 'json_schema', name: 'client_success_draft', strict: true, schema: DRAFT_SCHEMA } },
     }),
-    signal: AbortSignal.timeout(config.openai.clientSuccessTimeoutMs),
+    signal: AbortSignal.timeout(config.aiGateway.clientSuccessTimeoutMs),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw Object.assign(new Error('OpenAI draft request failed'), { code: `openai_http_${response.status}` });
-  if (payload.status === 'incomplete') throw Object.assign(new Error('OpenAI draft response was incomplete'), { code: `model_incomplete_${payload.incomplete_details?.reason || 'unknown'}` });
+  if (!response.ok) throw Object.assign(new Error('AI Gateway draft request failed'), { code: `ai_gateway_http_${response.status}` });
+  if (payload.status === 'incomplete') throw Object.assign(new Error('AI Gateway draft response was incomplete'), { code: `model_incomplete_${payload.incomplete_details?.reason || 'unknown'}` });
   let parsed;
   try { parsed = JSON.parse(extractOutputText(payload)); } catch (error) {
     if (error?.code) throw error;
-    throw Object.assign(new Error('OpenAI structured output could not be parsed'), { code: 'model_output_invalid' });
+    throw Object.assign(new Error('AI Gateway structured output could not be parsed'), { code: 'model_output_invalid' });
   }
   return { output: parsed, model, responseId: String(payload.id || '').slice(0, 200) || null };
 }
 
-module.exports = { createStructuredClientDraft, extractOutputText, DRAFT_SCHEMA };
+module.exports = { createStructuredClientDraft, extractOutputText, DRAFT_SCHEMA, AI_GATEWAY_RESPONSES_URL };

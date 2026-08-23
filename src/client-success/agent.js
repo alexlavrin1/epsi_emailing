@@ -2,7 +2,7 @@ const { createHash } = require('node:crypto');
 const config = require('../config');
 const database = require('../db/supabase');
 const logger = require('../utils/logger');
-const openai = require('../integrations/openai/client');
+const aiGateway = require('../integrations/ai-gateway/client');
 const { getClientConversationContext } = require('./context');
 
 const allowedWarnings = new Set(['no_email_history', 'slack_history_unavailable', 'billing_state_uncertain', 'relationship_note_missing']);
@@ -64,12 +64,12 @@ function validateOutput(job, context, output) {
 }
 
 async function generateClientSuccessAgentDrafts(dependencies = {}) {
-  if (!config.openai.clientSuccessAgentEnabled) return { enabled: false, claimed: 0, completed: 0, failed: 0 };
+  if (!config.aiGateway.clientSuccessAgentEnabled) return { enabled: false, claimed: 0, completed: 0, failed: 0 };
   const db = dependencies.db || database;
-  const modelClient = dependencies.openai || openai;
+  const modelClient = dependencies.aiGateway || aiGateway;
   const contextLoader = dependencies.getContext || getClientConversationContext;
   let jobs;
-  try { jobs = await db.claimClientPlaybookAgentDrafts(config.openai.clientSuccessAgentLimit); }
+  try { jobs = await db.claimClientPlaybookAgentDrafts(config.aiGateway.clientSuccessAgentLimit); }
   catch (error) {
     if (error?.code === 'PGRST202' || /service_claim_client_playbook_agent_drafts|schema cache/i.test(error?.message || '')) {
       logger.warn('Client-success drafting agent is not installed yet; continuing the client-success cycle');
@@ -83,7 +83,7 @@ async function generateClientSuccessAgentDrafts(dependencies = {}) {
       const context = await contextLoader(job.client_app_id, dependencies.contextDependencies || {});
       if (!context || context.app.organization_id !== job.organization_id || context.app.relationship_state === 'closed' || !context.app.client_success_enabled) throw Object.assign(new Error('Client context is no longer eligible'), { code: 'client_context_ineligible' });
       const serialized = serializeContext(context);
-      if (serialized.length > config.openai.clientSuccessMaxContextChars) throw Object.assign(new Error('Complete client context exceeds the configured safe limit'), { code: 'client_context_too_large' });
+      if (serialized.length > config.aiGateway.clientSuccessMaxContextChars) throw Object.assign(new Error('Complete client context exceeds the configured safe limit'), { code: 'client_context_too_large' });
       const contextSha256 = createHash('sha256').update(serialized).digest('hex');
       const response = await modelClient.createStructuredClientDraft(buildPrompts(job, context, serialized));
       const draft = validateOutput(job, context, response.output);

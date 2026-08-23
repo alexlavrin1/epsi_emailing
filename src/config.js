@@ -96,10 +96,11 @@ module.exports = {
     failureAlertMaxAttempts:
       parseInt(process.env.SLACK_FAILURE_ALERT_MAX_ATTEMPTS || '3', 10),
   },
-  openai: {
-    apiKey: process.env.OPENAI_API_KEY,
+  aiGateway: {
+    authToken: process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN,
     clientSuccessAgentEnabled: String(process.env.CLIENT_SUCCESS_AGENT_ENABLED || 'false').toLowerCase() === 'true',
-    clientSuccessModel: process.env.OPENAI_CLIENT_SUCCESS_MODEL || 'gpt-5.6',
+    clientSuccessModel: process.env.AI_GATEWAY_CLIENT_SUCCESS_MODEL || 'openai/gpt-5.6-luna',
+    reasoningEffort: process.env.AI_GATEWAY_REASONING_EFFORT || 'medium',
     clientSuccessAgentLimit: parseInt(process.env.CLIENT_SUCCESS_AGENT_LIMIT || '1', 10),
     clientSuccessMaxContextChars: parseInt(process.env.CLIENT_SUCCESS_MAX_CONTEXT_CHARS || '300000', 10),
     clientSuccessMaxOutputTokens: parseInt(process.env.CLIENT_SUCCESS_MAX_OUTPUT_TOKENS || '1400', 10),

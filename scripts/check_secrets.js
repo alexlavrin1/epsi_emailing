@@ -11,7 +11,7 @@ const SECRET_NAMES = [
   'SUPABASE_SERVICE_ROLE_KEY', 'YANDEX_PASSWORD', 'CRON_SECRET',
   'INSTANTLY_API_KEY', 'INSTANTLY_WEBHOOK_SECRET',
   'STRIPE_RESTRICTED_KEY', 'STRIPE_WEBHOOK_SECRET',
-  'SLACK_BOT_TOKEN', 'OPENAI_API_KEY', 'APOLLO_API_KEY', 'KVK_API_KEY',
+  'SLACK_BOT_TOKEN', 'AI_GATEWAY_API_KEY', 'VERCEL_OIDC_TOKEN', 'APOLLO_API_KEY', 'KVK_API_KEY',
 ];
 
 const LIVE_SECRET_PATTERNS = [
@@ -62,13 +62,17 @@ function validateEnvironment(env) {
     ['STRIPE_PAYMENT_RECOVERY_ENABLED', ['STRIPE_RESTRICTED_KEY']],
     ['SLACK_DELIVERY_ENABLED', ['SLACK_BOT_TOKEN', 'SLACK_TEAM_ID']],
     ['SLACK_FAILURE_ALERTS_ENABLED', ['SLACK_BOT_TOKEN', 'SLACK_FAILURE_ALERT_CHANNEL_ID']],
-    ['CLIENT_SUCCESS_AGENT_ENABLED', ['OPENAI_API_KEY']],
   ];
   for (const [toggle, names] of conditional) {
     if (String(env[toggle]).toLowerCase() !== 'true') continue;
     for (const name of names) {
       if (!isConfigured(env[name])) findings.push({ level: 'error', name, message: `required while ${toggle}=true` });
     }
+  }
+  if (String(env.CLIENT_SUCCESS_AGENT_ENABLED).toLowerCase() === 'true'
+      && !isConfigured(env.AI_GATEWAY_API_KEY)
+      && !isConfigured(env.VERCEL_OIDC_TOKEN)) {
+    findings.push({ level: 'error', name: 'AI_GATEWAY_API_KEY', message: 'AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN required while CLIENT_SUCCESS_AGENT_ENABLED=true' });
   }
   return findings;
 }

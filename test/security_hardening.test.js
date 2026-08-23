@@ -40,7 +40,20 @@ test('requires provider credentials whenever delivery features are enabled', () 
   assert.ok(findings.some(item => item.name === 'STRIPE_WEBHOOK_SECRET'));
   assert.ok(findings.some(item => item.name === 'SLACK_BOT_TOKEN'));
   assert.ok(findings.some(item => item.name === 'SLACK_TEAM_ID'));
-  assert.ok(findings.some(item => item.name === 'OPENAI_API_KEY'));
+  assert.ok(findings.some(item => item.name === 'AI_GATEWAY_API_KEY'));
+});
+
+test('accepts Vercel OIDC instead of a persistent AI Gateway key', () => {
+  const findings = validateEnvironment({
+    SUPABASE_URL: 'https://project.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: ['sb', 'secret', 'configured_server_key_123456789'].join('_'),
+    YANDEX_EMAIL: 'operator@example.com',
+    YANDEX_PASSWORD: 'configured',
+    CRON_SECRET: 'a'.repeat(32),
+    CLIENT_SUCCESS_AGENT_ENABLED: 'true',
+    VERCEL_OIDC_TOKEN: 'configured-oidc-token',
+  });
+  assert.equal(findings.some(item => item.name === 'AI_GATEWAY_API_KEY'), false);
 });
 
 test('keeps local env files ignored and recognizable live secrets out of tracked files', () => {
