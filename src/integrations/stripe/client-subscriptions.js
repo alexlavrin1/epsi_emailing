@@ -7,10 +7,11 @@ function timestamp(value) {
   return Number.isFinite(value) && value > 0 ? new Date(value * 1000).toISOString() : null;
 }
 
-function normalizeSubscription(subscription) {
+function normalizeSubscription(subscription, products = new Map()) {
   const item = subscription.items?.data?.[0] || null;
   const price = item?.price || null;
-  const product = price?.product || null;
+  const productRef = price?.product || null;
+  const product = typeof productRef === 'string' ? products.get(productRef) || null : productRef;
   const latestInvoice = subscription.latest_invoice;
   return {
     stripe_subscription_id: subscription.id,
@@ -44,9 +45,25 @@ async function syncClientSubscriptions({ clientAppId, stripeCustomerId, stripe, 
       customer: stripeCustomerId,
       status: 'all',
       limit: 100,
-      expand: ['data.items.data.price.product', 'data.latest_invoice'],
+      expand: ['data.latest_invoice'],
     });
-    const snapshot = (subscriptions.data || []).map(normalizeSubscription);
+    const products = new Map();
+    const productIds = [...new Set((subscriptions.data || []).map(subscription => {
+      const product = subscription.items?.data?.[0]?.price?.product;
+      return typeof product === 'string' ? product : null;
+    }).filter(Boolean))];
+    if (stripe.products?.retrieve) {
+      for (const productId of productIds) {
+        try {
+          const product = await stripe.products.retrieve(productId);
+          if (product && !product.deleted) products.set(productId, product);
+        } catch {
+          // Product names are optional display metadata. A restricted key may
+          // still synchronize the authoritative subscription and price state.
+        }
+      }
+    }
+    const snapshot = (subscriptions.data || []).map(subscription => normalizeSubscription(subscription, products));
     await db.replaceClientSubscriptions({
       clientAppId,
       stripeCustomerId,

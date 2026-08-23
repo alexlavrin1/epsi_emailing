@@ -27,15 +27,30 @@ test('retrieves canonical Stripe customer subscriptions and replaces one client 
   const stripe = {
     customers: { retrieve: async id => ({ id, email: 'owner@example.com', name: 'Example owner' }) },
     subscriptions: { list: async options => {
-      assert.deepEqual(options, { customer: 'cus_client_test', status: 'all', limit: 100, expand: ['data.items.data.price.product', 'data.latest_invoice'] });
-      return { data: [{ id: 'sub_client_test', status: 'trialing', items: { data: [] } }] };
+      assert.deepEqual(options, { customer: 'cus_client_test', status: 'all', limit: 100, expand: ['data.latest_invoice'] });
+      return { data: [{ id: 'sub_client_test', status: 'trialing', items: { data: [{ quantity: 1, price: { product: 'prod_client_test', currency: 'usd' } }] } }] };
     } },
+    products: { retrieve: async id => ({ id, name: 'Client success', deleted: false }) },
   };
   const db = { replaceClientSubscriptions: async value => writes.push(value), failClientStripeSync: async () => assert.fail('sync should not fail') };
   const result = await syncClientSubscriptions({ clientAppId: 'app-1', stripeCustomerId: 'cus_client_test', stripe, db });
   assert.deepEqual(result, { subscriptions: 1 });
   assert.equal(writes[0].customerEmail, 'owner@example.com');
   assert.equal(writes[0].subscriptions[0].status, 'trialing');
+  assert.equal(writes[0].subscriptions[0].product_name, 'Client success');
+});
+
+test('keeps subscription sync usable when a restricted key cannot read products', async () => {
+  const writes = [];
+  const stripe = {
+    customers: { retrieve: async id => ({ id }) },
+    subscriptions: { list: async () => ({ data: [{ id: 'sub_restricted', status: 'active', items: { data: [{ quantity: 1, price: { product: 'prod_restricted', nickname: 'Standard', currency: 'usd' } }] } }] }) },
+    products: { retrieve: async () => { const error = new Error('Forbidden'); error.code = 'permission_denied'; throw error; } },
+  };
+  const db = { replaceClientSubscriptions: async value => writes.push(value), failClientStripeSync: async () => assert.fail('optional product lookup must not fail sync') };
+  await syncClientSubscriptions({ clientAppId: 'app-1', stripeCustomerId: 'cus_restricted', stripe, db });
+  assert.equal(writes[0].subscriptions[0].product_name, null);
+  assert.equal(writes[0].subscriptions[0].price_nickname, 'Standard');
 });
 
 test('client Stripe sync endpoint requires a user token and an authorized linked app', async () => {
