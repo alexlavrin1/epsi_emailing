@@ -18,6 +18,12 @@ const eventLabels: Record<string, string> = {
   "client.slack.assignment_requested": "Client Slack assignment requested",
   "client.slack.assigned": "Client Slack chat assigned",
   "client.slack.chat_linked": "Slack Connect chat linked",
+  "client.playbook.created": "Client playbook created",
+  "client.playbook.status_changed": "Client playbook status changed",
+  "client.playbook.draft_created": "Client playbook draft prepared",
+  "client.playbook.draft_updated": "Client playbook draft updated",
+  "client.playbook.draft_approved": "Client playbook draft approved",
+  "client.playbook.draft_cancelled": "Client playbook draft cancelled",
   "crm.lifecycle.changed": "Lifecycle changed",
   "crm.note.created": "Contact note created",
   "crm.task.created": "Follow-up task created",
@@ -54,7 +60,7 @@ const safeMetadataKeys = new Set([
   "workflow_id", "automation_run_id", "version", "previous_version", "trigger_type", "status",
   "previous_limit", "new_limit", "hourly_limit", "runs_in_window",
   "source_type", "source_id", "failure_code", "retry_count", "occurrence_count", "previous_due_hours", "new_due_hours", "due_hours", "previous_days", "new_days", "dataset", "row_count", "truncated",
-  "client_app_id", "contact_count", "slack_requested",
+  "client_app_id", "contact_count", "slack_requested", "playbook_id",
 ]);
 
 function readable(value: string) {
@@ -88,6 +94,12 @@ function eventSummary(event: AuditEvent) {
     case "client.slack.assignment_requested": return "A server-side Slack user lookup and DM assignment was queued.";
     case "client.slack.assigned": return "The Slack bot resolved the contact and assigned a direct conversation.";
     case "client.slack.chat_linked": return "An existing shared Slack conversation was linked to the client contact.";
+    case "client.playbook.created": return "A versioned client-success playbook was saved as an inactive draft.";
+    case "client.playbook.status_changed": return `Playbook changed from ${meta.previous_status || "its previous state"} to ${meta.new_status || "a new state"}.`;
+    case "client.playbook.draft_created": return "A version-pinned client message was prepared without sending.";
+    case "client.playbook.draft_updated": return "A client message draft was edited before a decision.";
+    case "client.playbook.draft_approved": return "The draft was approved as ready, but no provider delivery was attempted.";
+    case "client.playbook.draft_cancelled": return "The draft was cancelled without sending.";
     case "outreach.campaign.status_changed": return `Campaign changed from ${meta.previous_status || "its previous state"} to ${meta.new_status || "a new state"}.`;
     case "outreach.prospect.stopped": return `${meta.scheduled_sends_stopped || 0} scheduled send(s) were stopped.`;
     case "email.reply.draft_created": return "A manual reply was saved as an inert draft for review.";
@@ -124,6 +136,8 @@ function targetHref(event: AuditEvent) {
   if (event.targetType === "automation_internal_task") return "/dashboard/automations";
   if (event.targetType === "client_app" && event.targetId) return `/dashboard/clients/${event.targetId}`;
   if (event.targetType === "client_contact" && typeof event.metadata.client_app_id === "string") return `/dashboard/clients/${event.metadata.client_app_id}`;
+  if (event.targetType === "client_playbook") return "/dashboard/playbooks";
+  if (event.targetType === "client_playbook_draft") return "/dashboard/approvals";
   return null;
 }
 

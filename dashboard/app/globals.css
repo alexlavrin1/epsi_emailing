@@ -725,6 +725,9 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .client-stripe-form small { color: var(--faint); font-size: 9px; line-height: 1.5; }
 .client-stripe-form .action-feedback { margin: 0; }
 .compact-empty { min-height: 110px; border: 1px dashed var(--border-strong); border-radius: 10px; }
+.client-playbook-panel { display: grid; gap: 12px; }
+.client-playbook-runner { display: grid; gap: 10px; }
+.client-playbook-runner small { color: var(--faint); font-size: 10px; line-height: 1.5; }
 .client-add-contact summary { min-height: 44px; color: var(--accent-strong); font-size: 12px; font-weight: 650; line-height: 44px; cursor: pointer; }
 .client-contact-form { display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .client-contact-form .action-feedback { margin: 0; }
@@ -750,6 +753,41 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .client-message-list article { min-width: 0; }
 .client-message-list article > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .client-message-list article > header > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.playbook-safety { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; margin-top: 24px; padding: 18px; border: 1px solid #315447; border-radius: 13px; background: linear-gradient(135deg, #11251e, #0e1c18); }
+.playbook-safety > svg { color: var(--accent); }
+.playbook-safety h2, .playbook-safety p { margin: 0; }
+.playbook-safety p:last-child { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.playbook-list { display: grid; gap: 10px; margin-top: 12px; }
+.playbook-card { overflow: hidden; border: 1px solid var(--border); border-radius: 13px; background: var(--surface); }
+.playbook-card > header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 14px; padding: 17px; }
+.playbook-card h3 { margin: 7px 0 0; font-size: 15px; }
+.playbook-card header p { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.playbook-channel { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.playbook-channel.channel-slack { background: rgba(139,185,255,.1); color: #a8c9ff; }
+.playbook-path { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 1px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--border); }
+.playbook-path > span { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 3px 8px; padding: 13px; background: #091310; }
+.playbook-path svg { grid-row: 1 / span 2; color: var(--accent); }
+.playbook-path small { color: var(--faint); font-size: 9px; text-transform: uppercase; }
+.playbook-path strong { font-size: 10px; line-height: 1.45; }
+.playbook-card > footer { display: flex; min-height: 58px; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 17px; }
+.playbook-card > footer > span { display: inline-flex; align-items: center; gap: 6px; color: var(--faint); font-size: 10px; }
+.playbook-status-control { display: grid; justify-items: end; gap: 6px; }
+.playbook-status-control .action-feedback { margin: 0; max-width: 260px; text-align: right; }
+.playbook-builder fieldset { margin: 0; padding: 0; border: 0; }
+.playbook-builder legend { margin-bottom: 8px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.playbook-builder legend span { color: var(--faint); font-weight: 400; }
+.playbook-status-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
+.playbook-status-grid label { display: flex; min-height: 44px; flex-direction: row; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: #091310; cursor: pointer; }
+.playbook-status-grid input { width: 16px; height: 16px; accent-color: var(--accent); }
+.playbook-status-grid span { color: var(--muted); font-size: 10px; text-transform: capitalize; }
+.playbook-steps { display: grid; gap: 9px; margin: 14px 0 0; padding: 0; list-style: none; }
+.playbook-steps li { display: grid; grid-template-columns: 28px minmax(0,1fr); align-items: center; gap: 9px; color: var(--muted); font-size: 11px; }
+.playbook-steps strong { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-family: var(--font-geist-mono), monospace; }
+.client-playbook-draft-card .client-draft-subject { margin: 14px 14px 0; font-size: 12px; }
+.client-draft-control { display: flex; flex-wrap: wrap; justify-content: flex-end; }
+.client-draft-control .approval-editor { width: auto; }
+.client-draft-control .approval-editor[open] { width: min(100%, 560px); }
 .client-message-list article strong { font-size: 12px; }
 .client-message-list time { color: var(--faint); font-size: 10px; white-space: nowrap; }
 .client-message-list h3 { margin: 9px 0 0; font-size: 14px; overflow-wrap: anywhere; }
@@ -924,6 +962,15 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .workflow-controls { justify-items: stretch; min-width: 0; }
   .workflow-controls .action-feedback, .workflow-editor summary { text-align: left; }
   .workflow-editor { width: 100%; }
+  .playbook-card > header { grid-template-columns: auto minmax(0,1fr); }
+  .playbook-card .workflow-version { grid-column: 2; justify-items: start; text-align: left; }
+  .playbook-path { grid-template-columns: 1fr; }
+  .playbook-card > footer { align-items: stretch; flex-direction: column; }
+  .playbook-status-control { justify-items: stretch; }
+  .playbook-status-control .action-feedback { text-align: left; }
+  .playbook-status-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .client-draft-control { align-items: stretch; flex-direction: column; }
+  .client-draft-control form, .client-draft-control button { width: 100%; }
   .client-summary, .client-app-grid, .client-create-form { grid-template-columns: 1fr; }
   .client-create-form label:last-of-type, .client-form-submit, .client-create-form .action-feedback { grid-column: auto; }
   .client-form-submit { align-items: stretch; flex-direction: column; }

@@ -2,13 +2,17 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { disposeReply, queueReply, retryRecoveryMessage, updateReplyDraft, type ApprovalActionState } from "../dashboard/approvals/actions";
+import { decideClientPlaybookDraft, disposeReply, queueReply, retryRecoveryMessage, updateClientPlaybookDraft, updateReplyDraft, type ApprovalActionState } from "../dashboard/approvals/actions";
 
 const initialState: ApprovalActionState = { ok: false, message: "" };
 
 function ActionButton({ label, pendingLabel, tone = "primary" }: { label: string; pendingLabel: string; tone?: "primary" | "secondary" | "danger" }) {
   const { pending } = useFormStatus();
   return <button className={`${tone}-button compact-button`} disabled={pending} type="submit">{pending ? pendingLabel : label}</button>;
+}
+
+function Feedback({ state }: { state: ApprovalActionState }) {
+  return state.message ? <p className={state.ok ? "action-feedback success" : "action-feedback error"} role={state.ok ? "status" : "alert"}>{state.message}</p> : null;
 }
 
 export function ReplyApprovalControl({ id, status, contact, body }: { id: string; status: string; contact: string; body: string }) {
@@ -23,4 +27,11 @@ export function ReplyApprovalControl({ id, status, contact, body }: { id: string
 export function RecoveryRetryControl({ id, customer, channel }: { id: string; customer: string; channel: string }) {
   const [state, action] = useActionState(retryRecoveryMessage, initialState);
   return <div className="approval-control"><form action={action} onSubmit={event => { if (!window.confirm(`Retry this failed ${channel} delivery for ${customer}? The recovery worker will re-check payment state and recipient permissions first.`)) event.preventDefault(); }}><input type="hidden" name="message_id" value={id} /><ActionButton label="Approve retry" pendingLabel="Queueing…" tone="secondary" /></form>{state.message ? <p className={state.ok ? "action-feedback success" : "action-feedback error"} role={state.ok ? "status" : "alert"}>{state.message}</p> : null}</div>;
+}
+
+export function ClientPlaybookDraftControl({ id, channel, subject, body, contact }: { id: string; channel: "email" | "slack"; subject: string | null; body: string; contact: string }) {
+  const [approveState, approveAction] = useActionState(decideClientPlaybookDraft, initialState);
+  const [cancelState, cancelAction] = useActionState(decideClientPlaybookDraft, initialState);
+  const [editState, editAction] = useActionState(updateClientPlaybookDraft, initialState);
+  return <div className="approval-control client-draft-control"><form action={approveAction} onSubmit={event => { if (!window.confirm(`Approve this ${channel} draft for ${contact}? Approval records readiness only; it will not send.`)) event.preventDefault(); }}><input type="hidden" name="draft_id" value={id} /><input type="hidden" name="decision" value="approve" /><ActionButton label="Approve as ready" pendingLabel="Approving…" /></form><details className="approval-editor"><summary>Edit draft</summary><form className="action-form" action={editAction}><input type="hidden" name="draft_id" value={id} />{channel === "email" ? <label>Subject <span>(required)</span><input name="subject" required maxLength={998} defaultValue={subject || ""} /></label> : <input type="hidden" name="subject" value="" />}<label>Message <span>(required)</span><textarea name="body" required minLength={1} maxLength={10000} defaultValue={body} /></label><ActionButton label="Save draft" pendingLabel="Saving…" tone="secondary" /></form><Feedback state={editState} /></details><form action={cancelAction} onSubmit={event => { if (!window.confirm(`Cancel this ${channel} draft for ${contact}? Nothing will be sent.`)) event.preventDefault(); }}><input type="hidden" name="draft_id" value={id} /><input type="hidden" name="decision" value="cancel" /><ActionButton label="Cancel" pendingLabel="Cancelling…" tone="danger" /></form><Feedback state={approveState} /><Feedback state={cancelState} /></div>;
 }

@@ -754,7 +754,7 @@ test("adds a tenant-scoped existing-client workspace with server-side email and 
     assert.match(exportRoute, new RegExp(`${dataset}:`));
     assert.match(verifier, new RegExp(`'${dataset}'`));
   }
-  assert.match(exportRoute, /schemaVersion: 2/);
+  assert.match(exportRoute, /schemaVersion: 3/);
   assert.match(exportRoute, /slack_chat_url/);
   assert.match(readiness, /orphan client correspondence/i);
   assert.match(rlsRegression, /anon can read existing-client data/i);
@@ -799,4 +799,44 @@ test("keeps client Stripe subscription reads tenant-scoped and provider writes s
   assert.match(recoveryEngine, /getClientStripeLinksByCustomerId/);
   assert.match(recoveryEngine, /reconcileClientSubscriptions/);
   assert.match(recoveryEngine, /ignored_payment_processing_disabled/);
+});
+
+test("keeps client-success playbook drafts versioned, tenant-scoped, and inert", async () => {
+  const [migration, playbookPage, controls, clientActions, approvalActions, approvalControls, clientPage, nav, exportRoute, verifier, plan] = await Promise.all([
+    readFile(new URL("../database/migrations/030_client_success_playbook_drafts.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/playbooks/page.tsx", root), "utf8"),
+    readFile(new URL("app/components/client-playbook-controls.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/clients/actions.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/approvals/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/approval-controls.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/clients/[id]/page.tsx", root), "utf8"),
+    readFile(new URL("app/components/dashboard-nav.tsx", root), "utf8"),
+    readFile(new URL("app/api/data-export/route.ts", root), "utf8"),
+    readFile(new URL("../scripts/verify_data_export.js", root), "utf8"),
+    readFile(new URL("../PLAYBOOKS.md", root), "utf8"),
+  ]);
+  for (const table of ["client_playbooks", "client_playbook_versions", "client_playbook_drafts"]) assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`, "i"));
+  assert.match(migration, /FOREIGN KEY \(playbook_id, playbook_version\)/i);
+  assert.match(migration, /dashboard_is_org_member\(organization_id\)/i);
+  assert.match(migration, /dashboard_has_org_role\(target_organization_id, ARRAY\['admin'\]\)/i);
+  assert.match(migration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON client_playbooks, client_playbook_versions, client_playbook_drafts FROM authenticated, anon/i);
+  assert.match(migration, /approval_mode TEXT NOT NULL DEFAULT 'required'/i);
+  assert.match(migration, /client\.playbook\.draft_approved|client\.playbook\.draft_cancelled/);
+  assert.match(migration, /COUNT\(\*\) FROM client_playbook_drafts/);
+  assert.match(nav, /href="\/dashboard\/playbooks"[\s\S]*?<span>Playbooks<\/span>/);
+  assert.match(playbookPage, /Draft preparation only/);
+  assert.match(playbookPage, /does not send email or Slack/);
+  assert.match(clientPage, /Prepare a check-in/);
+  assert.match(controls, /No message is sent/);
+  assert.match(clientActions, /dashboard_create_client_playbook_draft/);
+  assert.match(approvalActions, /dashboard_decide_client_playbook_draft/);
+  assert.match(approvalControls, /Approval records readiness only/);
+  assert.match(plan, /approved drafts? remain inert/i);
+  const deliverySurface = [migration, playbookPage, controls, clientActions, approvalActions, approvalControls].join("\n");
+  assert.doesNotMatch(deliverySurface, /sendTransactionalEmail|sendDirectMessage|chat\.postMessage/);
+  for (const dataset of ["clientPlaybooks", "clientPlaybookVersions", "clientPlaybookDrafts"]) {
+    assert.match(exportRoute, new RegExp(`${dataset}:`));
+    assert.match(verifier, new RegExp(`'${dataset}'`));
+  }
+  assert.match(exportRoute, /schemaVersion: 3/);
 });

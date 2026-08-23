@@ -78,3 +78,25 @@ export async function retryRecoveryMessage(_state: ApprovalActionState, formData
   revalidatePath("/dashboard/approvals"); revalidatePath("/dashboard"); revalidatePath("/dashboard/pipeline");
   return { ok: true, message: "Retry queued. The recovery worker will revalidate the case before delivery." };
 }
+
+export async function updateClientPlaybookDraft(_state: ApprovalActionState, formData: FormData): Promise<ApprovalActionState> {
+  const { membership } = await requireMembership(); if (!membership) return { ok: false, message: "An active organization membership is required." };
+  const draftId = String(formData.get("draft_id") || ""); const subject = String(formData.get("subject") || "").trim(); const body = String(formData.get("body") || "").trim();
+  if (!uuidPattern.test(draftId) || !body || body.length > 10000 || subject.length > 998) return { ok: false, message: "Enter a valid subject and message." };
+  const supabase = await createSupabaseServerClient(); if (!supabase) return { ok: false, message: "Unable to update this draft." };
+  const { error } = await supabase.rpc("dashboard_update_client_playbook_draft", { target_draft_id: draftId, target_subject: subject || null, target_body: body });
+  if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "Client playbooks require migration 030." : "Unable to update this draft." };
+  revalidatePath("/dashboard/approvals"); revalidatePath("/dashboard/audit");
+  return { ok: true, message: "Draft updated. Nothing has been sent." };
+}
+
+export async function decideClientPlaybookDraft(_state: ApprovalActionState, formData: FormData): Promise<ApprovalActionState> {
+  const { membership } = await requireMembership(); if (!membership) return { ok: false, message: "An active organization membership is required." };
+  const draftId = String(formData.get("draft_id") || ""); const decision = String(formData.get("decision") || "");
+  if (!uuidPattern.test(draftId) || !["approve","cancel"].includes(decision)) return { ok: false, message: "Invalid draft decision." };
+  const supabase = await createSupabaseServerClient(); if (!supabase) return { ok: false, message: "Unable to record this decision." };
+  const { error } = await supabase.rpc("dashboard_decide_client_playbook_draft", { target_draft_id: draftId, target_decision: decision });
+  if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "Client playbooks require migration 030." : "Unable to record this decision." };
+  revalidatePath("/dashboard/approvals"); revalidatePath("/dashboard/audit");
+  return { ok: true, message: decision === "approve" ? "Draft approved and retained as ready. No message was sent." : "Draft cancelled. Nothing was sent." };
+}
