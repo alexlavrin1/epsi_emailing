@@ -9,7 +9,8 @@ const crypto = require('crypto');
 
 const legacyDatasets = ['prospects', 'customers', 'notes', 'tasks', 'recoveryCases', 'auditEvents'];
 const versionTwoDatasets = [...legacyDatasets, 'clientApps', 'clientContacts', 'clientEmailMessages'];
-const expectedDatasets = [...versionTwoDatasets, 'clientSubscriptions', 'clientPlaybooks', 'clientPlaybookVersions', 'clientPlaybookDrafts'];
+const versionThreeDatasets = [...versionTwoDatasets, 'clientSubscriptions', 'clientPlaybooks', 'clientPlaybookVersions', 'clientPlaybookDrafts'];
+const expectedDatasets = [...versionThreeDatasets, 'clientPlaybookAutomationRuns'];
 const forbiddenKeys = /(?:password|secret|access_token|refresh_token|oauth_token|last_error|ip_address|request_id)/i;
 
 function assert(condition, message) { if (!condition) throw new Error(message); }
@@ -21,7 +22,7 @@ function duplicateIds(rows) {
 
 function validateExport(payload) {
   assert(payload && typeof payload === 'object' && !Array.isArray(payload), 'Export root must be an object.');
-  assert([1, 2, 3].includes(payload.schemaVersion), 'Unsupported export schema version.');
+  assert([1, 2, 3, 4].includes(payload.schemaVersion), 'Unsupported export schema version.');
   assert(Number.isFinite(Date.parse(payload.generatedAt)), 'Export timestamp is invalid.');
   assert(Date.parse(payload.generatedAt) <= Date.now() + 300000, 'Export timestamp is in the future.');
   assert(payload.organization && typeof payload.organization.id === 'string' && typeof payload.organization.slug === 'string', 'Organization identity is missing.');
@@ -29,7 +30,7 @@ function validateExport(payload) {
   assert(payload.datasets && typeof payload.datasets === 'object', 'Datasets are missing.');
 
   const counts = {}; const truncated = {};
-  const datasetsForVersion = payload.schemaVersion === 1 ? legacyDatasets : payload.schemaVersion === 2 ? versionTwoDatasets : expectedDatasets;
+  const datasetsForVersion = payload.schemaVersion === 1 ? legacyDatasets : payload.schemaVersion === 2 ? versionTwoDatasets : payload.schemaVersion === 3 ? versionThreeDatasets : expectedDatasets;
   for (const name of datasetsForVersion) {
     const rows = payload.datasets[name];
     assert(Array.isArray(rows), `Dataset ${name} is missing.`);
@@ -63,7 +64,7 @@ function validateExport(payload) {
     }
   }
 
-  if (payload.schemaVersion === 3 && !truncated.clientApps && !truncated.clientContacts && !truncated.clientPlaybooks) {
+  if (payload.schemaVersion >= 3 && !truncated.clientApps && !truncated.clientContacts && !truncated.clientPlaybooks) {
     const appIds = new Set(payload.datasets.clientApps.map(row => row.id));
     const contactIds = new Set(payload.datasets.clientContacts.map(row => row.id));
     const subscriptionIds = new Set(payload.datasets.clientSubscriptions.map(row => row.id));
@@ -76,9 +77,14 @@ function validateExport(payload) {
       assert(contactIds.has(row.client_contact_id), 'A playbook draft references a contact missing from the export.');
       assert(row.client_subscription_id === null || subscriptionIds.has(row.client_subscription_id), 'A playbook draft references a subscription missing from the export.');
     }
+    if (payload.schemaVersion >= 4) for (const row of payload.datasets.clientPlaybookAutomationRuns) {
+      assert(playbookIds.has(row.playbook_id), 'A playbook automation run references a playbook missing from the export.');
+      assert(appIds.has(row.client_app_id), 'A playbook automation run references an app missing from the export.');
+      assert(contactIds.has(row.client_contact_id), 'A playbook automation run references a contact missing from the export.');
+    }
   }
 
-  const safeAuditKeys = new Set(['previous_stage', 'new_stage', 'note_id', 'task_id', 'due_at', 'previous_status', 'new_status', 'contact_kind', 'contact_id', 'workflow_id', 'automation_run_id', 'playbook_id', 'version', 'status', 'channel', 'failure_code', 'retry_count', 'previous_days', 'new_days', 'dataset', 'row_count', 'truncated', 'client_app_id', 'contact_count', 'slack_requested']);
+  const safeAuditKeys = new Set(['trigger', 'context_message_count', 'previous_stage', 'new_stage', 'note_id', 'task_id', 'due_at', 'previous_status', 'new_status', 'contact_kind', 'contact_id', 'workflow_id', 'automation_run_id', 'playbook_id', 'version', 'status', 'channel', 'failure_code', 'retry_count', 'previous_days', 'new_days', 'dataset', 'row_count', 'truncated', 'client_app_id', 'contact_count', 'slack_requested']);
   for (const event of payload.datasets.auditEvents) {
     assert(event.metadata && typeof event.metadata === 'object' && !Array.isArray(event.metadata), 'Audit metadata is invalid.');
     for (const [key, value] of Object.entries(event.metadata)) {

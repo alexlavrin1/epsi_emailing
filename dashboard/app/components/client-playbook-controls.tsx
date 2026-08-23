@@ -19,6 +19,11 @@ export function ClientPlaybookBuilder({ isAdmin }: { isAdmin: boolean }) {
     <label>Playbook name <span>(required)</span><input name="name" minLength={3} maxLength={120} defaultValue="Advertising progress check-in" required /></label>
     <label>Purpose <span>(optional)</span><input name="description" maxLength={500} defaultValue="Prepare a friendly client-success check-in about advertising performance and support needs." /></label>
     <label>Channel <span>(required)</span><select name="channel" defaultValue="email"><option value="email">Email</option><option value="slack">Slack</option></select></label>
+    <label>Trigger <span>(required)</span><select name="trigger_type" defaultValue="manual_client_checkin"><option value="manual_client_checkin">Manual from client page</option><option value="scheduled_checkin">Scheduled relationship check-in</option><option value="stripe_cancellation">Stripe cancellation detected</option><option value="churn_reactivation">Churn reactivation</option></select></label>
+    <p className="workflow-variable-help">Cancellation triggers require a canceled Stripe subscription. Churn reactivation requires the <strong>Churned</strong> relationship state below. Automatic triggers only prepare approval drafts.</p>
+    <fieldset><legend>Client groups</legend><div className="playbook-status-grid"><label><input type="checkbox" name="eligible_segments" value="epsiflow_direct" defaultChecked/><span>EpsiFlow Direct</span></label><label><input type="checkbox" name="eligible_segments" value="stripe_plan" defaultChecked/><span>Stripe plan</span></label></div></fieldset>
+    <fieldset><legend>Relationship states</legend><div className="playbook-status-grid"><label><input type="checkbox" name="eligible_relationships" value="active" defaultChecked/><span>Active</span></label><label><input type="checkbox" name="eligible_relationships" value="churned"/><span>Churned</span></label></div></fieldset>
+    <label>Cooldown in days <span>(automatic triggers)</span><input name="cooldown_days" type="number" min={1} max={365} defaultValue={30}/><small>One draft at most per client, contact, playbook, channel, and cooldown window.</small></label>
     <fieldset><legend>Eligible subscription states <span>(leave empty for any state)</span></legend><div className="playbook-status-grid">{statuses.map(status => <label key={status}><input type="checkbox" name="eligible_statuses" value={status} defaultChecked={["active","trialing"].includes(status)} /><span>{status.replaceAll("_", " ")}</span></label>)}</div></fieldset>
     <label>Email subject <span>(required for email)</span><input name="subject_template" maxLength={998} defaultValue="How are things going with {{clientName}}?" /></label>
     <label>Message template <span>(required)</span><textarea name="body_template" minLength={1} maxLength={10000} defaultValue={defaultBody} required /></label>
@@ -40,4 +45,3 @@ export function ClientPlaybookRunner({ clientAppId, contacts, playbooks }: { cli
     <Submit idle="Prepare draft" pending="Preparing draft…" /><small>No message is sent. The result appears in Approvals for editing and a decision.</small><Feedback state={state} />
   </form>;
 }
-

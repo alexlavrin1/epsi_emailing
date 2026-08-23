@@ -122,7 +122,7 @@ export type ApprovalData = {
   clientDraftsReady: boolean;
   replies: Array<{ id: string; status: string; body: string; lastError: string | null; createdAt: string; contact: string; email: string; subject: string; automationName: string | null }>;
   retries: Array<{ id: string; channel: string; attempts: number; error: string; updatedAt: string; customer: string }>;
-  clientDrafts: Array<{ id: string; channel: "email" | "slack"; recipient: string; subject: string | null; body: string; status: string; createdAt: string; playbookVersion: number; appId: string; appName: string; contactName: string; playbookName: string }>;
+  clientDrafts: Array<{ id: string; channel: "email" | "slack"; recipient: string; subject: string | null; body: string; status: string; createdAt: string; playbookVersion: number; generationMode: string; contextMessageCount: number; appId: string; appName: string; contactName: string; playbookName: string }>;
 };
 
 export type AutomationWorkflow = {
@@ -581,7 +581,7 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
     supabase.rpc("dashboard_reply_controls_ready"),
     supabase.from("operator_email_replies").select("id,body,status,last_error,created_at,source_reply:prospect_replies(subject,prospect:prospects(first_name,last_name,email))").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
     supabase.from("payment_recovery_messages").select("id,channel,attempt_count,last_error,updated_at,recovery_case:payment_recovery_cases(customer:crm_customers(name,email,organization_id))").eq("status", "failed").order("updated_at", { ascending: false }).limit(100),
-    supabase.from("client_playbook_drafts").select("id,channel,recipient_label,subject,body,status,created_at,playbook_version,client_app_id,app:client_apps(name),contact:client_contacts(name),playbook:client_playbooks(name)").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
+    supabase.from("client_playbook_drafts").select("id,channel,recipient_label,subject,body,status,created_at,playbook_version,generation_mode,context_message_count,client_app_id,app:client_apps(name),contact:client_contacts(name),playbook:client_playbooks(name)").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
   ]);
   const ready = !readiness.error && readiness.data === true && !replies.error;
   const automationSources = automationReady
@@ -612,7 +612,7 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
     clientDrafts: (clientDrafts.data ?? []).map(item => ({
       id: item.id, channel: item.channel as "email" | "slack", recipient: item.recipient_label,
       subject: item.subject, body: item.body, status: item.status, createdAt: item.created_at,
-      playbookVersion: item.playbook_version, appId: item.client_app_id,
+      playbookVersion: item.playbook_version, generationMode: item.generation_mode, contextMessageCount: item.context_message_count, appId: item.client_app_id,
       appName: one(item.app as Related<{ name: string }>)?.name || "Client",
       contactName: one(item.contact as Related<{ name: string }>)?.name || "Contact",
       playbookName: one(item.playbook as Related<{ name: string }>)?.name || "Client playbook",

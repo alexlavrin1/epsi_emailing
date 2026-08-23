@@ -754,7 +754,7 @@ test("adds a tenant-scoped existing-client workspace with server-side email and 
     assert.match(exportRoute, new RegExp(`${dataset}:`));
     assert.match(verifier, new RegExp(`'${dataset}'`));
   }
-  assert.match(exportRoute, /schemaVersion: 3/);
+  assert.match(exportRoute, /schemaVersion: 4/);
   assert.match(exportRoute, /slack_chat_url/);
   assert.match(readiness, /orphan client correspondence/i);
   assert.match(rlsRegression, /anon can read existing-client data/i);
@@ -838,7 +838,7 @@ test("keeps client-success playbook drafts versioned, tenant-scoped, and inert",
     assert.match(exportRoute, new RegExp(`${dataset}:`));
     assert.match(verifier, new RegExp(`'${dataset}'`));
   }
-  assert.match(exportRoute, /schemaVersion: 3/);
+  assert.match(exportRoute, /schemaVersion: 4/);
 });
 
 test("keeps manual CRM relationship state authoritative over Stripe", async () => {
@@ -864,4 +864,33 @@ test("keeps manual CRM relationship state authoritative over Stripe", async () =
   assert.match(context, /history_sync_not_installed/);
   assert.match(plan, /CRM relationship state is authoritative/);
   assert.match(plan, /Wise balance and top-up tracking is deferred/);
+});
+
+test("prepares scheduled client-success drafts idempotently without delivery", async () => {
+  const [migration, builder, actions, data, engine, config, exportRoute] = await Promise.all([
+    readFile(new URL("../database/migrations/032_scheduled_client_playbook_drafts.sql", root), "utf8"),
+    readFile(new URL("app/components/client-playbook-controls.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/playbooks/actions.ts", root), "utf8"),
+    readFile(new URL("lib/client-playbook-data.ts", root), "utf8"),
+    readFile(new URL("../src/outreach/engine.js", root), "utf8"),
+    readFile(new URL("../src/config.js", root), "utf8"),
+    readFile(new URL("app/api/data-export/route.ts", root), "utf8"),
+  ]);
+  assert.match(migration, /scheduled_checkin.*stripe_cancellation.*churn_reactivation/);
+  assert.match(migration, /UNIQUE \(playbook_id,client_app_id,client_contact_id,trigger_key\)/);
+  assert.match(migration, /auth\.role\(\) IS DISTINCT FROM 'service_role'/);
+  assert.match(migration, /a\.client_success_enabled=TRUE/);
+  assert.match(migration, /control\.globally_paused=FALSE/);
+  assert.match(migration, /recent\.created_at>NOW\(\)-make_interval\(days=>p\.cooldown_days\)/);
+  assert.match(migration, /context_message_count/);
+  assert.match(migration, /client\.playbook\.automatic_draft_created/);
+  assert.doesNotMatch(migration + engine, /sendTransactionalEmail|sendDirectMessage|chat\.postMessage/);
+  assert.match(builder, /Scheduled relationship check-in/);
+  assert.match(builder, /Churn reactivation/);
+  assert.match(actions, /target_cooldown_days/);
+  assert.match(data, /manual_client_checkin/);
+  assert.match(config, /CLIENT_SUCCESS_AUTOMATION_ENABLED \|\| 'false'/);
+  assert.ok(engine.indexOf("prepareClientSuccessDrafts()") < engine.indexOf("if (isWeekend())"));
+  assert.match(exportRoute, /clientPlaybookAutomationRuns/);
+  assert.match(exportRoute, /schemaVersion: 4/);
 });

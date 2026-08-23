@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseRouteClient } from "../../../lib/supabase-route";
 const limit = 5000;
-const safeAuditKeys = new Set(["previous_stage", "new_stage", "note_id", "task_id", "due_at", "previous_status", "new_status", "contact_kind", "contact_id", "workflow_id", "automation_run_id", "playbook_id", "version", "status", "channel", "failure_code", "retry_count", "previous_days", "new_days", "dataset", "row_count", "truncated", "client_app_id", "contact_count", "slack_requested"]);
+const safeAuditKeys = new Set(["trigger", "context_message_count", "previous_stage", "new_stage", "note_id", "task_id", "due_at", "previous_status", "new_status", "contact_kind", "contact_id", "workflow_id", "automation_run_id", "playbook_id", "version", "status", "channel", "failure_code", "retry_count", "previous_days", "new_days", "dataset", "row_count", "truncated", "client_app_id", "contact_count", "slack_requested"]);
 function sanitizeAuditMetadata(value: unknown) { if (!value || typeof value !== "object" || Array.isArray(value)) return {}; return Object.fromEntries(Object.entries(value).filter(([key, item]) => safeAuditKeys.has(key) && ["string", "number", "boolean"].includes(typeof item)).slice(0, 12)); }
 export async function POST(request: NextRequest) {
   try {
@@ -24,9 +24,10 @@ export async function POST(request: NextRequest) {
       clientContacts: client.from("client_contacts").select("id,client_app_id,name,email,slack_name,slack_assignment_status,slack_team_id,slack_user_id,slack_channel_id,slack_display_name,slack_chat_url,slack_chat_label,last_email_sync_at,created_at,updated_at").eq("organization_id", organization.id).order("created_at").limit(limit + 1),
       clientEmailMessages: client.from("client_email_messages").select("id,client_app_id,client_contact_id,provider_message_id,thread_key,direction,mailbox_email,counterparty_email,subject,body,occurred_at,created_at").eq("organization_id", organization.id).order("occurred_at").limit(limit + 1),
       clientSubscriptions: client.from("client_subscriptions").select("id,client_app_id,stripe_customer_id,stripe_subscription_id,status,product_name,price_nickname,quantity,unit_amount,currency,billing_interval,interval_count,current_period_start,current_period_end,trial_end,cancel_at,cancel_at_period_end,canceled_at,latest_invoice_status,synced_at").eq("organization_id", organization.id).order("synced_at").limit(limit + 1),
-      clientPlaybooks: client.from("client_playbooks").select("id,name,description,channel,trigger_type,eligible_subscription_statuses,status,approval_mode,current_version,created_at,updated_at").eq("organization_id", organization.id).order("created_at").limit(limit + 1),
+      clientPlaybooks: client.from("client_playbooks").select("id,name,description,channel,trigger_type,eligible_subscription_statuses,eligible_client_segments,eligible_relationship_states,cooldown_days,status,approval_mode,current_version,created_at,updated_at").eq("organization_id", organization.id).order("created_at").limit(limit + 1),
       clientPlaybookVersions: client.from("client_playbook_versions").select("id,playbook_id,version,subject_template,body_template,definition,created_at").order("created_at").limit(limit + 1),
-      clientPlaybookDrafts: client.from("client_playbook_drafts").select("id,playbook_id,playbook_version,client_app_id,client_contact_id,client_subscription_id,channel,recipient_label,subject,body,status,decided_at,created_at,updated_at").eq("organization_id", organization.id).order("created_at").limit(limit + 1),
+      clientPlaybookDrafts: client.from("client_playbook_drafts").select("id,playbook_id,playbook_version,client_app_id,client_contact_id,client_subscription_id,channel,recipient_label,subject,body,status,generation_mode,context_message_count,context_latest_message_at,decided_at,created_at,updated_at").eq("organization_id", organization.id).order("created_at").limit(limit + 1),
+      clientPlaybookAutomationRuns: client.from("client_playbook_automation_runs").select("id,playbook_id,playbook_version,client_app_id,client_contact_id,trigger_key,status,draft_id,context_message_count,failure_code,created_at,completed_at").eq("organization_id", organization.id).order("created_at").limit(limit + 1),
       auditEvents: client.from("audit_events").select("id,actor_user_id,event_type,target_type,target_id,metadata,created_at").eq("organization_id", organization.id).order("created_at").limit(limit + 1),
     };
     const entries = await Promise.all(Object.entries(queries).map(async ([name, query]) => [name, await query] as const));
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
     const rowCount = Object.values(datasets).reduce((total, rows) => total + rows.length, 0); const anyTruncated = Object.values(truncated).some(Boolean);
     const { error: auditError } = await client.rpc("dashboard_record_data_export", { target_organization_id: organization.id, target_dataset: "organization_bundle", target_row_count: rowCount, target_truncated: anyTruncated });
     if (auditError) return NextResponse.json({ error: "Export auditing requires migration 022." }, { status: 503 });
-    const payload = { schemaVersion: 3, generatedAt: new Date().toISOString(), organization, limits: { rowsPerDataset: limit, truncated }, datasets };
+    const payload = { schemaVersion: 4, generatedAt: new Date().toISOString(), organization, limits: { rowsPerDataset: limit, truncated }, datasets };
     const filename = `${organization.slug}-data-export-${new Date().toISOString().slice(0, 10)}.json`;
     return applyCookies(new NextResponse(JSON.stringify(payload, null, 2), { headers: { "content-type": "application/json; charset=utf-8", "content-disposition": `attachment; filename="${filename}"`, "cache-control": "private, no-store, max-age=0", "x-content-type-options": "nosniff" } }));
   } catch { return NextResponse.json({ error: "The organization export is unavailable." }, { status: 503 }); }

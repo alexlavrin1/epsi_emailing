@@ -1,7 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
-const { syncExistingClientWorkspace } = require('../src/outreach/engine');
+const { syncExistingClientWorkspace, prepareClientSuccessDrafts } = require('../src/outreach/engine');
+const config = require('../src/config');
 const { createClientSyncHandler } = require('../api/client-sync');
 
 function responseRecorder() {
@@ -77,4 +78,23 @@ test('keeps the outreach engine compatible before migration 025 is installed', a
   const result = await syncExistingClientWorkspace({ db: { getClientContactsForEmailSync: async () => { throw error; } } });
   assert.equal(result.enabled, false);
   assert.equal(result.contacts, 0);
+});
+
+test('scheduled client-success automation is disabled by default and prepares drafts only when enabled', async () => {
+  const originalEnabled=config.clientSuccessAutomationEnabled, originalLimit=config.clientSuccessAutomationLimit; let calls=0;
+  try {
+    config.clientSuccessAutomationEnabled=false;
+    assert.deepEqual(await prepareClientSuccessDrafts({db:{prepareDueClientPlaybookDrafts:async()=>{calls++;}}}),{enabled:false,drafted:0,skipped:0});
+    config.clientSuccessAutomationEnabled=true; config.clientSuccessAutomationLimit=7;
+    const result=await prepareClientSuccessDrafts({db:{prepareDueClientPlaybookDrafts:async limit=>{calls++; assert.equal(limit,7); return {drafted:2,skipped:1};}}});
+    assert.deepEqual(result,{enabled:true,drafted:2,skipped:1}); assert.equal(calls,1);
+  } finally { config.clientSuccessAutomationEnabled=originalEnabled; config.clientSuccessAutomationLimit=originalLimit; }
+});
+
+test('scheduled client-success automation remains compatible before migration 032', async () => {
+  const original=config.clientSuccessAutomationEnabled; config.clientSuccessAutomationEnabled=true;
+  try {
+    const result=await prepareClientSuccessDrafts({db:{prepareDueClientPlaybookDrafts:async()=>{throw Object.assign(new Error('service_prepare_due_client_playbook_drafts is not in schema cache'),{code:'PGRST202'});}}});
+    assert.equal(result.enabled,false);
+  } finally { config.clientSuccessAutomationEnabled=original; }
 });

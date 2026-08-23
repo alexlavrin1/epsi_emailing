@@ -936,6 +936,12 @@ async function failClientStripeSync(clientAppId, failureCode) {
   if (error) throw error;
 }
 
+async function prepareDueClientPlaybookDrafts(limit = 10) {
+  const { data, error } = await supabase.rpc('service_prepare_due_client_playbook_drafts', { target_limit: limit });
+  if (error) throw error;
+  return data || { drafted: 0, skipped: 0 };
+}
+
 module.exports = {
   supabase,
   getMailboxByEmail,
@@ -1006,4 +1012,5 @@ module.exports = {
   claimDueClientStripeSyncs,
   replaceClientSubscriptions,
   failClientStripeSync,
+  prepareDueClientPlaybookDrafts,
 };

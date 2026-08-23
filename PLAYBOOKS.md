@@ -30,7 +30,8 @@ Each playbook contains:
 
 - Name and operator-facing purpose
 - Channel: email or Slack
-- Trigger: manual check-in initially; subscription-event triggers later
+- Trigger: manual check-in, scheduled check-in, Stripe cancellation, or churn reactivation
+- CRM audience: EpsiFlow Direct or Stripe plan; active or churned relationships
 - Eligible subscription states
 - Versioned subject and body templates
 - Cooldown and idempotency rules
@@ -116,6 +117,8 @@ Initial template variables:
 - Keep external delivery approval-gated by default
 
 ### Slice 5 — Context-aware drafting agent
+
+Migration 032 implements the Slice 4 foundation for scheduled check-ins, Stripe cancellation follow-ups, and churn reactivation. The worker is disabled by default, runs before the weekend sending guard, deduplicates every trigger window, and prepares template drafts only. It snapshots how many synchronized emails were available. Agent rewriting remains in Slice 5 so enabling scheduling cannot unexpectedly incur model usage or produce unreviewed AI text.
 
 - Run as a bounded Vercel job over claimed draft requests
 - Use the customer-support persona for triage, empathy, commitments, and escalation

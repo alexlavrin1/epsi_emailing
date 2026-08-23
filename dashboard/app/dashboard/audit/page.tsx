@@ -95,6 +95,7 @@ function eventSummary(event: AuditEvent) {
     case "client.slack.assigned": return "The Slack bot resolved the contact and assigned a direct conversation.";
     case "client.slack.chat_linked": return "An existing shared Slack conversation was linked to the client contact.";
     case "client.relationship.updated": return "The CRM-owned client segment, relationship state, or automation setting changed.";
+    case "client.playbook.automatic_draft_created": return "A scheduled client-success rule prepared an approval-only draft.";
     case "client.playbook.created": return "A versioned client-success playbook was saved as an inactive draft.";
     case "client.playbook.status_changed": return `Playbook changed from ${meta.previous_status || "its previous state"} to ${meta.new_status || "a new state"}.`;
     case "client.playbook.draft_created": return "A version-pinned client message was prepared without sending.";

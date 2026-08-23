@@ -56,6 +56,7 @@ async function runOutreachCycle() {
   // Replies, unsubscribes, and bounces are processed even when sending is
   // disabled or outside business hours.
   await syncExistingClientWorkspace();
+  await prepareClientSuccessDrafts();
   await processReplyAutomationRuns();
   await deliverOperatorEmailReplies();
   await checkForReplies();
@@ -126,6 +127,22 @@ async function runOutreachCycle() {
   }
 
   logger.info('Outreach cycle completed.');
+}
+
+async function prepareClientSuccessDrafts(dependencies = {}) {
+  if (!config.clientSuccessAutomationEnabled) return { enabled: false, drafted: 0, skipped: 0 };
+  const database = dependencies.db || db;
+  try {
+    const result = await database.prepareDueClientPlaybookDrafts(config.clientSuccessAutomationLimit);
+    logger.info(`Client-success automation prepared ${Number(result.drafted || 0)} draft(s)`);
+    return { enabled: true, drafted: Number(result.drafted || 0), skipped: Number(result.skipped || 0) };
+  } catch (error) {
+    if (error?.code === 'PGRST202' || /service_prepare_due_client_playbook_drafts|schema cache/i.test(error?.message || '')) {
+      logger.warn('Scheduled client playbooks are not installed yet; continuing the outreach cycle');
+      return { enabled: false, drafted: 0, skipped: 0 };
+    }
+    throw error;
+  }
 }
 
 function isClientWorkspaceUnavailable(error) {
@@ -481,4 +498,4 @@ async function deliverOperatorEmailReplies(dependencies = {}) {
   return { due: queued.length, sent, failed };
 }
 
-module.exports = { runOutreachCycle, runMonitoredOutreachCycle, deliverOperatorEmailReplies, processReplyAutomationRuns, syncExistingClientWorkspace };
+module.exports = { runOutreachCycle, runMonitoredOutreachCycle, deliverOperatorEmailReplies, processReplyAutomationRuns, syncExistingClientWorkspace, prepareClientSuccessDrafts };

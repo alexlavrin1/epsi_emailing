@@ -7,6 +7,7 @@ import { createSupabaseServerClient } from "../../../lib/supabase-server";
 export type PlaybookActionState = { ok: boolean; message: string };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const allowedStatuses = new Set(["none","incomplete","incomplete_expired","trialing","active","past_due","canceled","unpaid","paused"]);
+const allowedTriggers = new Set(["manual_client_checkin","scheduled_checkin","stripe_cancellation","churn_reactivation"]);
 const allowedVariables = new Set(["clientName","contactName","contactFirstName","subscriptionStatus","productName","billingInterval"]);
 
 function validateTemplates(subject: string, body: string, channel: string) {
@@ -18,7 +19,7 @@ function validateTemplates(subject: string, body: string, channel: string) {
 }
 
 function playbookError(message?: string) {
-  if (/schema cache|Could not find|does not exist/i.test(message || "")) return "Client playbooks require migration 030.";
+  if (/schema cache|Could not find|does not exist/i.test(message || "")) return "Scheduled client playbooks require migration 032.";
   if (/Administrator access/i.test(message || "")) return "Administrator access is required to configure playbooks.";
   if (/already exists/i.test(message || "")) return "A playbook with this name already exists.";
   return "Unable to update this playbook.";
@@ -30,10 +31,11 @@ export async function createClientPlaybook(_state: PlaybookActionState, form: Fo
   const name = String(form.get("name") || "").trim(); const description = String(form.get("description") || "").trim();
   const channel = String(form.get("channel") || ""); const subject = String(form.get("subject_template") || "").trim(); const body = String(form.get("body_template") || "").trim();
   const statuses = form.getAll("eligible_statuses").map(String).filter(status => allowedStatuses.has(status));
-  if (name.length < 3 || name.length > 120 || description.length > 500 || !["email","slack"].includes(channel)) return { ok: false, message: "Enter a valid playbook name, description, and channel." };
+  const trigger=String(form.get("trigger_type")||""); const segments=form.getAll("eligible_segments").map(String).filter(value=>["epsiflow_direct","stripe_plan"].includes(value)); const relationships=form.getAll("eligible_relationships").map(String).filter(value=>["active","churned"].includes(value)); const cooldown=Number(form.get("cooldown_days")||30);
+  if (name.length < 3 || name.length > 120 || description.length > 500 || !["email","slack"].includes(channel) || !allowedTriggers.has(trigger) || !segments.length || !relationships.length || !Number.isInteger(cooldown) || cooldown<1 || cooldown>365) return { ok: false, message: "Enter valid playbook identity, trigger, audience, and cooldown conditions." };
   const templateError = validateTemplates(subject, body, channel); if (templateError) return { ok: false, message: templateError };
   const supabase = await createSupabaseServerClient(); if (!supabase) return { ok: false, message: "Playbooks are unavailable." };
-  const { error } = await supabase.rpc("dashboard_create_client_playbook", { target_organization_id: membership.organization.id, target_name: name, target_description: description, target_channel: channel, target_eligible_statuses: statuses, target_subject_template: subject || null, target_body_template: body });
+  const { error } = await supabase.rpc("dashboard_create_client_playbook", { target_organization_id: membership.organization.id, target_name: name, target_description: description, target_channel: channel, target_trigger_type:trigger, target_eligible_statuses: statuses, target_eligible_segments:segments, target_eligible_relationships:relationships, target_cooldown_days:cooldown, target_subject_template: subject || null, target_body_template: body });
   if (error) return { ok: false, message: playbookError(error.message) };
   revalidatePath("/dashboard/playbooks"); revalidatePath("/dashboard/audit");
   return { ok: true, message: "Playbook saved as a draft. Activate it when its conditions and wording are ready." };
@@ -48,6 +50,5 @@ export async function setClientPlaybookStatus(_state: PlaybookActionState, form:
   const { error } = await supabase.rpc("dashboard_set_client_playbook_status", { target_playbook_id: playbookId, target_status: status });
   if (error) return { ok: false, message: playbookError(error.message) };
   revalidatePath("/dashboard/playbooks"); revalidatePath("/dashboard/clients"); revalidatePath("/dashboard/audit");
-  return { ok: true, message: status === "active" ? "Playbook activated. Operators can now prepare drafts from eligible clients." : "Playbook paused. Existing drafts remain reviewable." };
+  return { ok: true, message: status === "active" ? "Playbook activated. Manual playbooks are available on client pages; automatic playbooks can prepare approval drafts when scheduling is enabled." : "Playbook paused. Existing drafts remain reviewable." };
 }
-
