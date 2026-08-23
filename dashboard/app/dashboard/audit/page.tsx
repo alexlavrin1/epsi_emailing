@@ -94,6 +94,7 @@ function eventSummary(event: AuditEvent) {
     case "client.slack.assignment_requested": return "A server-side Slack user lookup and DM assignment was queued.";
     case "client.slack.assigned": return "The Slack bot resolved the contact and assigned a direct conversation.";
     case "client.slack.chat_linked": return "An existing shared Slack conversation was linked to the client contact.";
+    case "client.relationship.updated": return "The CRM-owned client segment, relationship state, or automation setting changed.";
     case "client.playbook.created": return "A versioned client-success playbook was saved as an inactive draft.";
     case "client.playbook.status_changed": return `Playbook changed from ${meta.previous_status || "its previous state"} to ${meta.new_status || "a new state"}.`;
     case "client.playbook.draft_created": return "A version-pinned client message was prepared without sending.";
@@ -137,6 +138,7 @@ function targetHref(event: AuditEvent) {
   if (event.targetType === "client_app" && event.targetId) return `/dashboard/clients/${event.targetId}`;
   if (event.targetType === "client_contact" && typeof event.metadata.client_app_id === "string") return `/dashboard/clients/${event.metadata.client_app_id}`;
   if (event.targetType === "client_playbook") return "/dashboard/playbooks";
+  if (event.targetType === "client_app") return event.metadata.client_app_id ? `/dashboard/clients/${event.metadata.client_app_id}` : "/dashboard/clients";
   if (event.targetType === "client_playbook_draft") return "/dashboard/approvals";
   return null;
 }

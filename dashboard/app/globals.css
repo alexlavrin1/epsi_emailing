@@ -988,3 +988,12 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+/* Manual CRM relationship state stays authoritative over provider billing state. */
+.client-relationship-form { display: grid; gap: 12px; margin-top: 14px; }
+.client-relationship-form textarea { min-height: 92px; }
+.client-success-toggle { min-height: 52px; display: flex !important; flex-direction: row !important; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.client-success-toggle input { width: 20px; height: 20px; flex: 0 0 auto; }
+.client-success-toggle span { display: grid; gap: 2px; }
+.client-success-toggle small { color: var(--muted); font-weight: 400; }
+.status-churned { color: #f6c86f; background: rgba(212, 151, 45, .14); }
+.status-closed { color: var(--muted); background: var(--surface-raised); }

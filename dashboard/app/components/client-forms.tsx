@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { addClientContactAction, createClientAppAction, linkClientStripeCustomerAction, requestClientSlackAction, setClientSlackChatLinkAction, type ClientActionState } from "../dashboard/clients/actions";
+import { addClientContactAction, createClientAppAction, linkClientStripeCustomerAction, requestClientSlackAction, setClientRelationshipAction, setClientSlackChatLinkAction, type ClientActionState } from "../dashboard/clients/actions";
 
 const initialClientActionState: ClientActionState = { ok: false, message: "" };
 
@@ -72,5 +72,16 @@ export function ClientStripeLink({ clientAppId, currentCustomerId }: { clientApp
     <Submit idle={currentCustomerId ? "Update & synchronize" : "Link & synchronize"} pending="Synchronizing…" />
     <small>Find this ID on the customer page in Stripe. EpsiFlow reads subscription state but cannot change the subscription.</small>
     <Feedback state={state} />
+  </form>;
+}
+
+export function ClientRelationshipControl({ clientAppId, segment, relationshipState, enabled, note }: { clientAppId:string; segment:string; relationshipState:string; enabled:boolean; note:string }) {
+  const [state,action]=useActionState(setClientRelationshipAction,initialClientActionState);
+  return <form className="action-form client-relationship-form" action={action}><input type="hidden" name="client_app_id" value={clientAppId}/>
+    <label>Commercial model<select name="client_segment" defaultValue={segment}><option value="epsiflow_direct">EpsiFlow Direct</option><option value="stripe_plan">Stripe plan</option></select></label>
+    <label>Relationship state<select name="relationship_state" defaultValue={relationshipState}><option value="active">Active client</option><option value="churned">Churned · reactivation</option><option value="closed">Closed · no automation</option></select></label>
+    <label>Internal note <span>(optional)</span><textarea name="relationship_note" maxLength={1000} defaultValue={note} placeholder="Why they churned, payment arrangement, or follow-up context"/></label>
+    <div className="client-success-toggle"><input id={`client-success-${clientAppId}`} type="checkbox" name="client_success_enabled" defaultChecked={enabled}/><span><label htmlFor={`client-success-${clientAppId}`}>Client-success automation enabled</label><small>Stripe cancellation does not turn this off.</small></span></div>
+    <Submit idle="Save relationship" pending="Saving…"/><Feedback state={state}/>
   </form>;
 }

@@ -20,6 +20,10 @@ Approved delivery through the relevant provider
 
 The eligibility decision and delivery decision are deliberately separate. A matching subscription state may create a draft, but it never authorizes external delivery.
 
+CRM relationship state is authoritative. Stripe is billing evidence and never silently turns client-success automation off. Each client is manually classified as EpsiFlow Direct or Stripe plan, and as active, churned, or closed. Active clients receive service/payment playbooks, churned clients receive reactivation playbooks, and closed clients have automation disabled.
+
+Before an agent drafts, it must receive the full stored client context: client and contact facts, internal relationship notes, subscription history, and every synchronized email in chronological thread order. Slack links are included now, but Slack message history is unavailable until a separate history-sync integration is installed. Long histories must be summarized in auditable chunks without dropping unresolved commitments or the most recent conversation.
+
 ## Playbook definition
 
 Each playbook contains:
@@ -69,6 +73,12 @@ Initial template variables:
 - Channel: email
 - Purpose: prepare a results review or next-period planning message
 
+### Churn reactivation
+
+- Trigger: CRM relationship state is churned and the reactivation cooldown has elapsed
+- Channel: email or Slack
+- Purpose: learn why the client left, address the real objection, and offer a relevant smaller plan or return path
+
 ## Delivery slices
 
 ### Slice 1 — Manual approval-gated drafts
@@ -104,6 +114,17 @@ Initial template variables:
 - Prepare drafts only when the playbook is active and conditions still match
 - Surface runs and failures in automation monitoring
 - Keep external delivery approval-gated by default
+
+### Slice 5 — Context-aware drafting agent
+
+- Run as a bounded Vercel job over claimed draft requests
+- Use the customer-support persona for triage, empathy, commitments, and escalation
+- Use sales-enablement guidance for situation-specific retention and reactivation language
+- Ground every draft in synchronized conversations and structured CRM/billing facts
+- Store citations to source message IDs and surface missing context
+- Never infer that a Stripe cancellation closes the CRM relationship
+
+Wise balance and top-up tracking is deferred until the core CRM automation, approvals, and delivery loop is operational.
 
 ## Safety rules
 

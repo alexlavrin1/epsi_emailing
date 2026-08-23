@@ -119,3 +119,15 @@ export async function createClientPlaybookDraftAction(_previous: ClientActionSta
   revalidatePath(`/dashboard/clients/${appId}`); revalidatePath("/dashboard/approvals"); revalidatePath("/dashboard/audit");
   return { ok: true, message: "Draft prepared. Review it in Approvals; nothing has been sent." };
 }
+
+export async function setClientRelationshipAction(_previous: ClientActionState, form: FormData): Promise<ClientActionState> {
+  const { membership } = await requireMembership(); if (!membership) return { ok: false, message: "An active workspace membership is required." };
+  const appId=formValue(form,"client_app_id"), segment=formValue(form,"client_segment"), relationshipState=formValue(form,"relationship_state"), note=formValue(form,"relationship_note");
+  const enabled=form.get("client_success_enabled")==="on";
+  if (!uuidPattern.test(appId) || !["epsiflow_direct","stripe_plan"].includes(segment) || !["active","churned","closed"].includes(relationshipState) || note.length>1000) return { ok:false,message:"Choose a valid segment and relationship state." };
+  const supabase=await createSupabaseServerClient(); if(!supabase) return {ok:false,message:"Relationship controls are unavailable."};
+  const {error}=await supabase.rpc("dashboard_set_client_relationship",{target_client_app_id:appId,target_client_segment:segment,target_relationship_state:relationshipState,target_client_success_enabled:enabled,target_relationship_note:note});
+  if(error) return {ok:false,message:/schema cache|Could not find|does not exist/i.test(error.message)?"Relationship controls require migration 031.":"The relationship could not be updated."};
+  revalidatePath(`/dashboard/clients/${appId}`); revalidatePath("/dashboard/clients"); revalidatePath("/dashboard/audit");
+  return {ok:true,message:relationshipState==="closed"?"Relationship closed. Client-success automation is off.":`Relationship saved as ${relationshipState}.`};
+}

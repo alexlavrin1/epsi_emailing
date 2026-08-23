@@ -840,3 +840,28 @@ test("keeps client-success playbook drafts versioned, tenant-scoped, and inert",
   }
   assert.match(exportRoute, /schemaVersion: 3/);
 });
+
+test("keeps manual CRM relationship state authoritative over Stripe", async () => {
+  const [migration, detail, forms, actions, data, context, plan] = await Promise.all([
+    readFile(new URL("../database/migrations/031_client_relationship_state.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/clients/[id]/page.tsx", root), "utf8"),
+    readFile(new URL("app/components/client-forms.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/clients/actions.ts", root), "utf8"),
+    readFile(new URL("lib/client-data.ts", root), "utf8"),
+    readFile(new URL("../src/client-success/context.js", root), "utf8"),
+    readFile(new URL("../PLAYBOOKS.md", root), "utf8"),
+  ]);
+  assert.match(migration, /client_segment TEXT NOT NULL DEFAULT 'stripe_plan'/);
+  assert.match(migration, /relationship_state IN \('active','churned','closed'\)/);
+  assert.match(migration, /client_success_enabled BOOLEAN NOT NULL DEFAULT TRUE/);
+  assert.match(migration, /dashboard_is_org_member\(target\.organization_id\)/);
+  assert.match(migration, /client\.relationship\.updated/);
+  assert.match(detail, /CRM authority/);
+  assert.match(forms, /Stripe cancellation does not turn this off/);
+  assert.match(actions, /dashboard_set_client_relationship/);
+  assert.match(data, /relationship_state/);
+  assert.match(context, /for \(let from = 0; ; from \+= 500\)/);
+  assert.match(context, /history_sync_not_installed/);
+  assert.match(plan, /CRM relationship state is authoritative/);
+  assert.match(plan, /Wise balance and top-up tracking is deferred/);
+});

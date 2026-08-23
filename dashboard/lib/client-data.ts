@@ -20,6 +20,10 @@ export type ClientAppSummary = {
   name: string;
   websiteUrl: string;
   status: string;
+  clientSegment: "epsiflow_direct" | "stripe_plan";
+  relationshipState: "active" | "churned" | "closed";
+  clientSuccessEnabled: boolean;
+  relationshipNote: string;
   updatedAt: string;
   contacts: ClientContact[];
 };
@@ -69,11 +73,11 @@ function contact(record: ContactRecord): ClientContact {
 
 export async function getClientApps(supabase: SupabaseClient, organizationId: string) {
   const { data, error } = await supabase.from("client_apps")
-    .select("id,name,website_url,status,updated_at,contacts:client_contacts(id,name,email,slack_name,slack_display_name,slack_assignment_status,slack_team_id,slack_channel_id,slack_chat_url,slack_chat_label,slack_failure_code,last_email_sync_at)")
+    .select("id,name,website_url,status,client_segment,relationship_state,client_success_enabled,relationship_note,updated_at,contacts:client_contacts(id,name,email,slack_name,slack_display_name,slack_assignment_status,slack_team_id,slack_channel_id,slack_chat_url,slack_chat_label,slack_failure_code,last_email_sync_at)")
     .eq("organization_id", organizationId).order("updated_at", { ascending: false });
   if (error) return { ready: false, apps: [] as ClientAppSummary[] };
   const apps = (data ?? []).map(row => ({
-    id: row.id, name: row.name, websiteUrl: row.website_url, status: row.status,
+    id: row.id, name: row.name, websiteUrl: row.website_url, status: row.status, clientSegment: row.client_segment, relationshipState: row.relationship_state, clientSuccessEnabled: row.client_success_enabled, relationshipNote: row.relationship_note,
     updatedAt: row.updated_at, contacts: ((row.contacts ?? []) as ContactRecord[]).map(contact),
   }));
   return { ready: true, apps };
@@ -82,7 +86,7 @@ export async function getClientApps(supabase: SupabaseClient, organizationId: st
 export async function getClientAppDetail(supabase: SupabaseClient, organizationId: string, clientAppId: string) {
   const [appResult, messagesResult, stripeAppResult, subscriptionsResult] = await Promise.all([
     supabase.from("client_apps")
-      .select("id,name,website_url,status,updated_at,contacts:client_contacts(id,name,email,slack_name,slack_display_name,slack_assignment_status,slack_team_id,slack_channel_id,slack_chat_url,slack_chat_label,slack_failure_code,last_email_sync_at)")
+      .select("id,name,website_url,status,client_segment,relationship_state,client_success_enabled,relationship_note,updated_at,contacts:client_contacts(id,name,email,slack_name,slack_display_name,slack_assignment_status,slack_team_id,slack_channel_id,slack_chat_url,slack_chat_label,slack_failure_code,last_email_sync_at)")
       .eq("organization_id", organizationId).eq("id", clientAppId).maybeSingle(),
     supabase.from("client_email_messages")
       .select("id,client_contact_id,thread_key,direction,subject,body,occurred_at")
@@ -99,7 +103,7 @@ export async function getClientAppDetail(supabase: SupabaseClient, organizationI
   if (appResult.error || !appResult.data) return { ready: !appResult.error, app: null, messages: [] as ClientMessage[] };
   const row = appResult.data;
   const app: ClientAppSummary = {
-    id: row.id, name: row.name, websiteUrl: row.website_url, status: row.status,
+    id: row.id, name: row.name, websiteUrl: row.website_url, status: row.status, clientSegment: row.client_segment, relationshipState: row.relationship_state, clientSuccessEnabled: row.client_success_enabled, relationshipNote: row.relationship_note,
     updatedAt: row.updated_at, contacts: ((row.contacts ?? []) as ContactRecord[]).map(contact),
   };
   const messages = (messagesResult.data ?? []).map(message => ({
