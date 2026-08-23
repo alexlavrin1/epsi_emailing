@@ -77,11 +77,11 @@ test('client Stripe sync endpoint requires a user token and an authorized linked
   assert.deepEqual(accepted.body.result, { subscriptions: 2 });
 });
 
-test('a verified subscription event refreshes a linked client even without an invoice', async () => {
+test('a verified live subscription event refreshes a linked client without enabling payment recovery', async () => {
   const snapshots = [];
   const subscription = { id: 'sub_event', status: 'active', customer: 'cus_event', latest_invoice: null, items: { data: [] } };
   const stripe = {
-    events: { retrieve: async () => ({ id: 'evt_event', type: 'customer.subscription.updated', livemode: false, data: { object: subscription } }) },
+    events: { retrieve: async () => ({ id: 'evt_event', type: 'customer.subscription.updated', livemode: true, data: { object: subscription } }) },
     customers: { retrieve: async () => ({ id: 'cus_event', email: 'client@example.com' }) },
     subscriptions: {
       retrieve: async () => subscription,
@@ -93,7 +93,9 @@ test('a verified subscription event refreshes a linked client even without an in
     replaceClientSubscriptions: async value => snapshots.push(value),
     failClientStripeSync: async () => assert.fail('event refresh should succeed'),
   };
-  const result = await processStripeEventRow({ id: 'evt_event', stripe_customer_id: 'cus_event' }, { stripe, db });
+  const result = await processStripeEventRow({ id: 'evt_event', stripe_customer_id: 'cus_event' }, {
+    stripe, db, clientSubscriptionWebhookEnabled: true, paymentProcessingEnabled: false,
+  });
   assert.deepEqual(result, { outcome: 'client_subscriptions_refreshed', clientSubscriptionsRefreshed: 1 });
   assert.equal(snapshots.length, 1);
   assert.equal(snapshots[0].subscriptions[0].status, 'active');

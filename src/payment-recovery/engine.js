@@ -233,20 +233,28 @@ async function processStripeEventRow(row, dependencies = {}) {
   const database = dependencies.db || db;
   const stripe = dependencies.stripe || getStripeClient();
   const event = await stripe.events.retrieve(row.id);
+  const clientSubscriptionWebhookEnabled = dependencies.clientSubscriptionWebhookEnabled !== false;
+  const paymentProcessingEnabled = dependencies.paymentProcessingEnabled !== false;
 
-  if (event.livemode && !config.stripe.allowLiveEvents) {
+  if (event.livemode && !config.stripe.allowLiveEvents && !clientSubscriptionWebhookEnabled) {
     return { outcome: 'ignored_live_event' };
   }
 
   const eventObject = event.data?.object || {};
   const stripeCustomerId = objectId(eventObject.customer) || row.stripe_customer_id || null;
   let clientSubscriptionsRefreshed = 0;
-  if (stripeCustomerId && database.getClientStripeLinksByCustomerId) {
+  if (clientSubscriptionWebhookEnabled && stripeCustomerId && database.getClientStripeLinksByCustomerId) {
     const links = await database.getClientStripeLinksByCustomerId(stripeCustomerId);
     for (const link of links) {
       await syncClientSubscriptions({ clientAppId: link.id, stripeCustomerId, stripe, db: database });
       clientSubscriptionsRefreshed++;
     }
+  }
+
+  if (!paymentProcessingEnabled || (event.livemode && !config.stripe.allowLiveEvents)) {
+    return clientSubscriptionsRefreshed
+      ? { outcome: 'client_subscriptions_refreshed', clientSubscriptionsRefreshed }
+      : { outcome: 'ignored_payment_processing_disabled' };
   }
 
   const context = await loadCanonicalContext(event, stripe);
@@ -301,7 +309,7 @@ async function reconcileClientSubscriptions(dependencies = {}) {
 }
 
 async function processPendingStripeEvents(dependencies = {}) {
-  if (!config.stripe.eventProcessingEnabled) {
+  if (!config.stripe.eventProcessingEnabled && !config.stripe.clientSubscriptionWebhookEnabled) {
     return { enabled: false, claimed: 0, processed: 0, failed: 0 };
   }
   const database = dependencies.db || db;
@@ -311,7 +319,11 @@ async function processPendingStripeEvents(dependencies = {}) {
 
   for (const row of rows) {
     try {
-      const result = await processStripeEventRow(row, dependencies);
+      const result = await processStripeEventRow(row, {
+        ...dependencies,
+        paymentProcessingEnabled: config.stripe.eventProcessingEnabled,
+        clientSubscriptionWebhookEnabled: config.stripe.clientSubscriptionWebhookEnabled,
+      });
       await database.markStripeWebhookEventProcessed(row.id);
       processed++;
       logger.info('Stripe recovery event processed', {

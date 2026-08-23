@@ -43,7 +43,7 @@ async function handler(req, res) {
       stripe: getStripeClient(),
       webhookSecret: config.stripe.webhookSecret,
       eventIngestionEnabled: config.stripe.eventIngestionEnabled,
-      allowLiveEvents: config.stripe.allowLiveEvents,
+      allowLiveEvents: config.stripe.allowLiveEvents || config.stripe.clientSubscriptionWebhookEnabled,
       enqueue: db.enqueueStripeWebhookEvent,
     });
 

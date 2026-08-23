@@ -47,6 +47,8 @@ module.exports = {
       parseInt(process.env.STRIPE_RECONCILIATION_CASE_LIMIT || '25', 10),
     clientSubscriptionReconciliationEnabled:
       String(process.env.STRIPE_CLIENT_SUBSCRIPTION_RECONCILIATION_ENABLED || 'true').toLowerCase() !== 'false',
+    clientSubscriptionWebhookEnabled:
+      String(process.env.STRIPE_CLIENT_SUBSCRIPTION_WEBHOOK_ENABLED || 'true').toLowerCase() !== 'false',
     clientSubscriptionReconciliationMinutes:
       parseInt(process.env.STRIPE_CLIENT_SUBSCRIPTION_RECONCILIATION_MINUTES || '360', 10),
     clientSubscriptionReconciliationLimit:

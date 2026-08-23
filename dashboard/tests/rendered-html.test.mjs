@@ -798,4 +798,5 @@ test("keeps client Stripe subscription reads tenant-scoped and provider writes s
   assert.match(engineSync, /replaceClientSubscriptions/);
   assert.match(recoveryEngine, /getClientStripeLinksByCustomerId/);
   assert.match(recoveryEngine, /reconcileClientSubscriptions/);
+  assert.match(recoveryEngine, /ignored_payment_processing_disabled/);
 });
