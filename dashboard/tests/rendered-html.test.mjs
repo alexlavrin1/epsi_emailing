@@ -765,3 +765,30 @@ test("adds a tenant-scoped existing-client workspace with server-side email and 
   assert.match(css, /\.client-thread-summary \{[^}]*min-height: 68px/);
   assert.match(css, /\.client-slack-connect > summary \{[^}]*min-height: 44px/);
 });
+
+test("keeps client Stripe subscription reads tenant-scoped and provider writes server-side", async () => {
+  const [migration, detailPage, forms, actions, data, engineSync, endpoint] = await Promise.all([
+    readFile(new URL("../database/migrations/028_client_stripe_subscriptions.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/clients/[id]/page.tsx", root), "utf8"),
+    readFile(new URL("app/components/client-forms.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/clients/actions.ts", root), "utf8"),
+    readFile(new URL("lib/client-data.ts", root), "utf8"),
+    readFile(new URL("../src/integrations/stripe/client-subscriptions.js", root), "utf8"),
+    readFile(new URL("../api/client-stripe-sync.js", root), "utf8"),
+  ]);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS client_subscriptions/i);
+  assert.match(migration, /client_subscriptions_member_read[\s\S]*dashboard_is_org_member\(organization_id\)/i);
+  assert.match(migration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON client_subscriptions FROM authenticated, anon/i);
+  assert.match(migration, /auth\.role\(\) IS DISTINCT FROM 'service_role'/i);
+  assert.match(migration, /client\.stripe\.linked/);
+  assert.match(actions, /dashboard_link_client_stripe_customer/);
+  assert.match(actions, /triggerClientStripeSync/);
+  assert.doesNotMatch(actions + data, /STRIPE_RESTRICTED_KEY|SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(forms, /Stripe customer ID/);
+  assert.match(detailPage, /Current period|Latest invoice/);
+  assert.match(data, /\.from\("client_subscriptions"\)/);
+  assert.match(endpoint, /authorizeClientSync/);
+  assert.match(endpoint, /getClientStripeLink/);
+  assert.match(engineSync, /stripe\.subscriptions\.list/);
+  assert.match(engineSync, /replaceClientSubscriptions/);
+});

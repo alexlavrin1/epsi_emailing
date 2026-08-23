@@ -703,6 +703,28 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .client-slack-connect > summary { min-height: 44px; color: var(--accent-strong); font-size: 10px; font-weight: 650; line-height: 44px; cursor: pointer; }
 .client-slack-connect[open] > summary { color: var(--text); }
 .client-slack-connect .client-slack-form { margin-top: 0; }
+.client-stripe-panel { display: grid; gap: 12px; }
+.client-stripe-identity { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: #091310; }
+.client-stripe-identity strong, .client-stripe-identity code, .client-stripe-identity small { min-width: 0; overflow-wrap: anywhere; }
+.client-stripe-identity strong { font-size: 12px; }
+.client-stripe-identity code { grid-column: 1; color: var(--muted); font-size: 10px; }
+.client-stripe-identity .status-badge { grid-column: 2; grid-row: 1 / span 2; }
+.client-stripe-identity small { grid-column: 1 / -1; color: var(--faint); font-size: 9px; }
+.client-subscription-list { display: grid; gap: 8px; }
+.client-subscription-list article { padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); }
+.client-subscription-list header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.client-subscription-list header strong { font-size: 12px; }
+.client-subscription-list article > code { display: block; margin-top: 5px; color: var(--faint); font-size: 9px; overflow-wrap: anywhere; }
+.client-subscription-list dl { display: grid; grid-template-columns: minmax(90px, .65fr) minmax(0, 1fr); gap: 5px 10px; margin: 12px 0 0; font-size: 10px; }
+.client-subscription-list dt { color: var(--faint); }
+.client-subscription-list dd { margin: 0; color: var(--muted); text-align: right; overflow-wrap: anywhere; }
+.client-stripe-form { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
+.client-stripe-form label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; }
+.client-stripe-form input { width: 100%; min-height: 44px; padding: 0 11px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--surface); color: var(--text); font-family: var(--font-geist-mono), monospace; font-size: 16px; }
+.client-stripe-form input:focus { border-color: var(--accent); outline: 0; box-shadow: 0 0 0 3px var(--accent-soft); }
+.client-stripe-form small { color: var(--faint); font-size: 9px; line-height: 1.5; }
+.client-stripe-form .action-feedback { margin: 0; }
+.compact-empty { min-height: 110px; border: 1px dashed var(--border-strong); border-radius: 10px; }
 .client-add-contact summary { min-height: 44px; color: var(--accent-strong); font-size: 12px; font-weight: 650; line-height: 44px; cursor: pointer; }
 .client-contact-form { display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .client-contact-form .action-feedback { margin: 0; }

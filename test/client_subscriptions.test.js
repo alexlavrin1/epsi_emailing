@@ -1,0 +1,61 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { normalizeSubscription, syncClientSubscriptions } = require('../src/integrations/stripe/client-subscriptions');
+const { createClientStripeSyncHandler } = require('../api/client-stripe-sync');
+
+function responseRecorder() {
+  return { statusCode: null, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+}
+
+test('normalizes a Stripe subscription without retaining the provider payload', () => {
+  const snapshot = normalizeSubscription({
+    id: 'sub_client_test', status: 'active', current_period_start: 1787000000,
+    current_period_end: 1789678400, trial_end: null, cancel_at: null,
+    cancel_at_period_end: false, canceled_at: null,
+    latest_invoice: { id: 'in_client_test', status: 'paid' },
+    items: { data: [{ quantity: 2, price: { nickname: 'Growth', unit_amount: 4900, currency: 'usd', recurring: { interval: 'month', interval_count: 1 }, product: { id: 'prod_client_test', name: 'Ads management', deleted: false } } }] },
+  });
+  assert.equal(snapshot.stripe_subscription_id, 'sub_client_test');
+  assert.equal(snapshot.product_name, 'Ads management');
+  assert.equal(snapshot.unit_amount, 4900);
+  assert.equal(snapshot.latest_invoice_status, 'paid');
+  assert.equal(Object.hasOwn(snapshot, 'latest_invoice'), false);
+});
+
+test('retrieves canonical Stripe customer subscriptions and replaces one client snapshot', async () => {
+  const writes = [];
+  const stripe = {
+    customers: { retrieve: async id => ({ id, email: 'owner@example.com', name: 'Example owner' }) },
+    subscriptions: { list: async options => {
+      assert.deepEqual(options, { customer: 'cus_client_test', status: 'all', limit: 100, expand: ['data.items.data.price.product', 'data.latest_invoice'] });
+      return { data: [{ id: 'sub_client_test', status: 'trialing', items: { data: [] } }] };
+    } },
+  };
+  const db = { replaceClientSubscriptions: async value => writes.push(value), failClientStripeSync: async () => assert.fail('sync should not fail') };
+  const result = await syncClientSubscriptions({ clientAppId: 'app-1', stripeCustomerId: 'cus_client_test', stripe, db });
+  assert.deepEqual(result, { subscriptions: 1 });
+  assert.equal(writes[0].customerEmail, 'owner@example.com');
+  assert.equal(writes[0].subscriptions[0].status, 'trialing');
+});
+
+test('client Stripe sync endpoint requires a user token and an authorized linked app', async () => {
+  const appId = 'c8301c4c-6399-45a3-b577-95d14b32ba3a';
+  const calls = [];
+  const handler = createClientStripeSyncHandler({
+    db: {
+      authorizeClientSync: async (token, id) => token === 'valid-user-token' && id === appId ? { id } : null,
+      getClientStripeLink: async () => ({ stripe_customer_id: 'cus_client_test' }),
+    },
+    stripe: () => ({ provider: 'stripe' }),
+    sync: async options => { calls.push(options); return { subscriptions: 2 }; },
+  });
+  const unauthorized = responseRecorder();
+  await handler({ method: 'POST', headers: {}, body: { client_app_id: appId } }, unauthorized);
+  assert.equal(unauthorized.statusCode, 401);
+  const accepted = responseRecorder();
+  await handler({ method: 'POST', headers: { authorization: 'Bearer valid-user-token' }, body: { client_app_id: appId } }, accepted);
+  assert.equal(accepted.statusCode, 200);
+  assert.equal(calls[0].clientAppId, appId);
+  assert.equal(calls[0].stripeCustomerId, 'cus_client_test');
+  assert.deepEqual(accepted.body.result, { subscriptions: 2 });
+});

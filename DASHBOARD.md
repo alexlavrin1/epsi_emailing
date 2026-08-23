@@ -262,6 +262,22 @@ Status: in progress. The first slice adds a tenant-scoped Clients workspace orga
 - Explicit Slack direct-chat assignment
 - Tenant isolation, auditing, export, and retention coverage
 
+### Phase 8 — Stripe subscriptions and client-success playbooks
+
+Status: in progress. The first slice adds an explicit, audited Stripe customer link to each existing-client app and an immediate, server-side subscription refresh. The client workspace displays the current and historical subscription status, product and price, billing interval, period end, trial and cancellation state, and latest invoice status without exposing Stripe credentials or allowing subscription mutations. Migration `028_client_stripe_subscriptions.sql` is ready to apply. Verified webhook refresh and guarded scheduled reconciliation are the next data-freshness slice. Subscription state and CRM context can then trigger versioned playbooks that prepare email or Slack drafts. External communication remains approval-gated by default.
+
+- Reviewable client-to-Stripe customer linking
+- Current subscription, product, price, billing period, cancellation, trial, and payment-state visibility
+- Verified webhook updates plus scheduled and on-demand reconciliation
+- Subscription-state and CRM-event triggers
+- Versioned client-success playbooks with configurable conditions and cooldowns
+- Approval-gated email and Slack drafts
+- Per-client communication preferences and stop controls
+- Idempotency, rate limits, audit history, and runtime monitoring
+- Safe manual prompts such as checking campaign or advertising progress
+
+Outcome: operators can understand each client's commercial state and use reusable playbooks to prepare timely, contextual follow-ups without allowing generated text to send autonomously.
+
 ## MVP boundary
 
 The first usable release includes secure login, a dashboard, contact/company CRM, client timeline, email reply queue, pipeline stages, notes and tasks, outreach and payment-recovery visibility, pause/stop controls, an approval queue, automation run logs, and an audit trail.

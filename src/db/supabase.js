@@ -886,6 +886,36 @@ async function failClientSlackAssignment(contactId, failureCode) {
   if (error) throw error;
 }
 
+async function getClientStripeLink(clientAppId) {
+  const { data, error } = await supabase
+    .from('client_apps')
+    .select('id,organization_id,stripe_customer_id')
+    .eq('id', clientAppId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function replaceClientSubscriptions({ clientAppId, stripeCustomerId, customerEmail, customerName, subscriptions }) {
+  const { data, error } = await supabase.rpc('service_replace_client_subscriptions', {
+    target_client_app_id: clientAppId,
+    target_stripe_customer_id: stripeCustomerId,
+    target_customer_email: customerEmail,
+    target_customer_name: customerName,
+    target_subscriptions: subscriptions,
+  });
+  if (error) throw error;
+  return Number(data || 0);
+}
+
+async function failClientStripeSync(clientAppId, failureCode) {
+  const { error } = await supabase.rpc('service_fail_client_stripe_sync', {
+    target_client_app_id: clientAppId,
+    target_failure_code: failureCode,
+  });
+  if (error) throw error;
+}
+
 module.exports = {
   supabase,
   getMailboxByEmail,
@@ -951,4 +981,7 @@ module.exports = {
   getPendingClientSlackAssignments,
   completeClientSlackAssignment,
   failClientSlackAssignment,
+  getClientStripeLink,
+  replaceClientSubscriptions,
+  failClientStripeSync,
 };

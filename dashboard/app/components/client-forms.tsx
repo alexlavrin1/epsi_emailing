@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { addClientContactAction, createClientAppAction, requestClientSlackAction, setClientSlackChatLinkAction, type ClientActionState } from "../dashboard/clients/actions";
+import { addClientContactAction, createClientAppAction, linkClientStripeCustomerAction, requestClientSlackAction, setClientSlackChatLinkAction, type ClientActionState } from "../dashboard/clients/actions";
 
 const initialClientActionState: ClientActionState = { ok: false, message: "" };
 
@@ -62,4 +62,15 @@ export function ClientSlackConnectLink({ clientAppId, contactId }: { clientAppId
       <Feedback state={state} />
     </form>
   </details>;
+}
+
+export function ClientStripeLink({ clientAppId, currentCustomerId }: { clientAppId: string; currentCustomerId: string | null }) {
+  const [state, action] = useActionState(linkClientStripeCustomerAction, initialClientActionState);
+  return <form className="client-stripe-form action-form" action={action}>
+    <input type="hidden" name="client_app_id" value={clientAppId} />
+    <label htmlFor={`stripe-customer-${clientAppId}`}>Stripe customer ID<input id={`stripe-customer-${clientAppId}`} name="stripe_customer_id" maxLength={255} pattern="cus_[A-Za-z0-9]+" defaultValue={currentCustomerId || ""} placeholder="cus_…" required /></label>
+    <Submit idle={currentCustomerId ? "Update & synchronize" : "Link & synchronize"} pending="Synchronizing…" />
+    <small>Find this ID on the customer page in Stripe. EpsiFlow reads subscription state but cannot change the subscription.</small>
+    <Feedback state={state} />
+  </form>;
 }

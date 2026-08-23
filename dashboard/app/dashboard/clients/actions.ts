@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireMembership } from "../../../lib/auth";
 import { createSupabaseServerClient } from "../../../lib/supabase-server";
 import { triggerClientWorkspaceSync } from "../../../lib/client-sync";
+import { triggerClientStripeSync } from "../../../lib/client-stripe-sync";
 
 export type ClientActionState = { ok: boolean; message: string };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -80,4 +81,23 @@ export async function setClientSlackChatLinkAction(_previous: ClientActionState,
   if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "Slack Connect links require migration 027." : actionError(error.message) };
   revalidatePath(`/dashboard/clients/${appId}`); revalidatePath("/dashboard/audit");
   return { ok: true, message: "Slack Connect conversation linked." };
+}
+
+export async function linkClientStripeCustomerAction(_previous: ClientActionState, form: FormData): Promise<ClientActionState> {
+  const { membership } = await requireMembership();
+  if (!membership) return { ok: false, message: "An active workspace membership is required." };
+  const appId = formValue(form, "client_app_id");
+  const customerId = formValue(form, "stripe_customer_id");
+  if (!uuidPattern.test(appId) || !/^cus_[A-Za-z0-9]+$/.test(customerId) || customerId.length > 255) return { ok: false, message: "Enter a valid Stripe customer ID beginning with cus_." };
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { ok: false, message: "Stripe linking is unavailable." };
+  const { error } = await supabase.rpc("dashboard_link_client_stripe_customer", { target_client_app_id: appId, target_stripe_customer_id: customerId });
+  if (error) {
+    if (/schema cache|Could not find|does not exist/i.test(error.message)) return { ok: false, message: "Stripe subscription visibility requires migration 028." };
+    if (/already linked/i.test(error.message)) return { ok: false, message: "That Stripe customer is already linked to another client." };
+    return { ok: false, message: "The Stripe customer could not be linked." };
+  }
+  const sync = await triggerClientStripeSync(supabase, appId);
+  revalidatePath(`/dashboard/clients/${appId}`); revalidatePath("/dashboard/audit");
+  return { ok: true, message: sync.completed ? "Stripe customer linked and subscriptions synchronized." : "Stripe customer linked. Subscription synchronization is queued for the engine." };
 }

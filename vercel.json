@@ -11,6 +11,9 @@
     },
     "api/client-sync.js": {
       "maxDuration": 60
+    },
+    "api/client-stripe-sync.js": {
+      "maxDuration": 30
     }
   },
   "crons": [

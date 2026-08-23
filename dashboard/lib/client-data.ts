@@ -24,6 +24,21 @@ export type ClientAppSummary = {
   contacts: ClientContact[];
 };
 
+export type ClientSubscription = {
+  id: string; stripeSubscriptionId: string; status: string; productName: string | null;
+  priceNickname: string | null; quantity: number | null; unitAmount: number | null;
+  currency: string | null; billingInterval: string | null; intervalCount: number | null;
+  currentPeriodStart: string | null; currentPeriodEnd: string | null; trialEnd: string | null;
+  cancelAt: string | null; cancelAtPeriodEnd: boolean; canceledAt: string | null;
+  latestInvoiceStatus: string | null; syncedAt: string;
+};
+
+export type ClientStripeState = {
+  ready: boolean; customerId: string | null; customerEmail: string | null; customerName: string | null;
+  syncStatus: "unlinked" | "pending" | "synced" | "failed"; failureCode: string | null;
+  lastSyncAt: string | null; subscriptions: ClientSubscription[];
+};
+
 export type ClientMessage = {
   id: string;
   clientContactId: string;
@@ -65,7 +80,7 @@ export async function getClientApps(supabase: SupabaseClient, organizationId: st
 }
 
 export async function getClientAppDetail(supabase: SupabaseClient, organizationId: string, clientAppId: string) {
-  const [appResult, messagesResult] = await Promise.all([
+  const [appResult, messagesResult, stripeAppResult, subscriptionsResult] = await Promise.all([
     supabase.from("client_apps")
       .select("id,name,website_url,status,updated_at,contacts:client_contacts(id,name,email,slack_name,slack_display_name,slack_assignment_status,slack_team_id,slack_channel_id,slack_chat_url,slack_chat_label,slack_failure_code,last_email_sync_at)")
       .eq("organization_id", organizationId).eq("id", clientAppId).maybeSingle(),
@@ -73,6 +88,13 @@ export async function getClientAppDetail(supabase: SupabaseClient, organizationI
       .select("id,client_contact_id,thread_key,direction,subject,body,occurred_at")
       .eq("organization_id", organizationId).eq("client_app_id", clientAppId)
       .order("occurred_at", { ascending: false }).limit(250),
+    supabase.from("client_apps")
+      .select("stripe_customer_id,stripe_customer_email,stripe_customer_name,stripe_sync_status,stripe_sync_failure_code,last_stripe_sync_at")
+      .eq("organization_id", organizationId).eq("id", clientAppId).maybeSingle(),
+    supabase.from("client_subscriptions")
+      .select("id,stripe_subscription_id,status,product_name,price_nickname,quantity,unit_amount,currency,billing_interval,interval_count,current_period_start,current_period_end,trial_end,cancel_at,cancel_at_period_end,canceled_at,latest_invoice_status,synced_at")
+      .eq("organization_id", organizationId).eq("client_app_id", clientAppId)
+      .order("current_period_end", { ascending: false, nullsFirst: false }),
   ]);
   if (appResult.error || !appResult.data) return { ready: !appResult.error, app: null, messages: [] as ClientMessage[] };
   const row = appResult.data;
@@ -86,5 +108,22 @@ export async function getClientAppDetail(supabase: SupabaseClient, organizationI
     direction: message.direction as ClientMessage["direction"], subject: message.subject,
     body: message.body, occurredAt: message.occurred_at,
   }));
-  return { ready: !messagesResult.error, app, messages };
+  const stripeRow = stripeAppResult.data;
+  const stripe: ClientStripeState = {
+    ready: !stripeAppResult.error && !subscriptionsResult.error,
+    customerId: stripeRow?.stripe_customer_id ?? null, customerEmail: stripeRow?.stripe_customer_email ?? null,
+    customerName: stripeRow?.stripe_customer_name ?? null,
+    syncStatus: stripeRow?.stripe_sync_status ?? "unlinked", failureCode: stripeRow?.stripe_sync_failure_code ?? null,
+    lastSyncAt: stripeRow?.last_stripe_sync_at ?? null,
+    subscriptions: (subscriptionsResult.data ?? []).map(row => ({
+      id: row.id, stripeSubscriptionId: row.stripe_subscription_id, status: row.status,
+      productName: row.product_name, priceNickname: row.price_nickname, quantity: row.quantity,
+      unitAmount: row.unit_amount, currency: row.currency, billingInterval: row.billing_interval,
+      intervalCount: row.interval_count, currentPeriodStart: row.current_period_start,
+      currentPeriodEnd: row.current_period_end, trialEnd: row.trial_end, cancelAt: row.cancel_at,
+      cancelAtPeriodEnd: row.cancel_at_period_end, canceledAt: row.canceled_at,
+      latestInvoiceStatus: row.latest_invoice_status, syncedAt: row.synced_at,
+    })),
+  };
+  return { ready: !messagesResult.error, app, messages, stripe };
 }
