@@ -34,11 +34,13 @@ test('requires provider credentials whenever delivery features are enabled', () 
     CRON_SECRET: 'a'.repeat(32),
     STRIPE_EVENT_INGESTION_ENABLED: 'true',
     SLACK_DELIVERY_ENABLED: 'true',
+    CLIENT_SUCCESS_AGENT_ENABLED: 'true',
   });
   assert.ok(findings.some(item => item.name === 'STRIPE_RESTRICTED_KEY'));
   assert.ok(findings.some(item => item.name === 'STRIPE_WEBHOOK_SECRET'));
   assert.ok(findings.some(item => item.name === 'SLACK_BOT_TOKEN'));
   assert.ok(findings.some(item => item.name === 'SLACK_TEAM_ID'));
+  assert.ok(findings.some(item => item.name === 'OPENAI_API_KEY'));
 });
 
 test('keeps local env files ignored and recognizable live secrets out of tracked files', () => {

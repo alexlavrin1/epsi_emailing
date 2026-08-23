@@ -11,7 +11,7 @@ const SECRET_NAMES = [
   'SUPABASE_SERVICE_ROLE_KEY', 'YANDEX_PASSWORD', 'CRON_SECRET',
   'INSTANTLY_API_KEY', 'INSTANTLY_WEBHOOK_SECRET',
   'STRIPE_RESTRICTED_KEY', 'STRIPE_WEBHOOK_SECRET',
-  'SLACK_BOT_TOKEN', 'APOLLO_API_KEY', 'KVK_API_KEY',
+  'SLACK_BOT_TOKEN', 'OPENAI_API_KEY', 'APOLLO_API_KEY', 'KVK_API_KEY',
 ];
 
 const LIVE_SECRET_PATTERNS = [
@@ -20,6 +20,7 @@ const LIVE_SECRET_PATTERNS = [
   ['Slack token', /xox[baprs]-[A-Za-z0-9-]{20,}/g],
   ['Stripe live key', /(?:sk|rk)_live_[A-Za-z0-9]{16,}/g],
   ['Stripe webhook secret', /whsec_[A-Za-z0-9]{16,}/g],
+  ['OpenAI API key', /sk-(?:proj-)?[A-Za-z0-9_-]{20,}/g],
   ['private key', /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g],
 ];
 
@@ -61,6 +62,7 @@ function validateEnvironment(env) {
     ['STRIPE_PAYMENT_RECOVERY_ENABLED', ['STRIPE_RESTRICTED_KEY']],
     ['SLACK_DELIVERY_ENABLED', ['SLACK_BOT_TOKEN', 'SLACK_TEAM_ID']],
     ['SLACK_FAILURE_ALERTS_ENABLED', ['SLACK_BOT_TOKEN', 'SLACK_FAILURE_ALERT_CHANNEL_ID']],
+    ['CLIENT_SUCCESS_AGENT_ENABLED', ['OPENAI_API_KEY']],
   ];
   for (const [toggle, names] of conditional) {
     if (String(env[toggle]).toLowerCase() !== 'true') continue;

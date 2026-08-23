@@ -96,6 +96,15 @@ module.exports = {
     failureAlertMaxAttempts:
       parseInt(process.env.SLACK_FAILURE_ALERT_MAX_ATTEMPTS || '3', 10),
   },
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY,
+    clientSuccessAgentEnabled: String(process.env.CLIENT_SUCCESS_AGENT_ENABLED || 'false').toLowerCase() === 'true',
+    clientSuccessModel: process.env.OPENAI_CLIENT_SUCCESS_MODEL || 'gpt-5.6',
+    clientSuccessAgentLimit: parseInt(process.env.CLIENT_SUCCESS_AGENT_LIMIT || '1', 10),
+    clientSuccessMaxContextChars: parseInt(process.env.CLIENT_SUCCESS_MAX_CONTEXT_CHARS || '300000', 10),
+    clientSuccessMaxOutputTokens: parseInt(process.env.CLIENT_SUCCESS_MAX_OUTPUT_TOKENS || '1400', 10),
+    clientSuccessTimeoutMs: parseInt(process.env.CLIENT_SUCCESS_AGENT_TIMEOUT_MS || '45000', 10),
+  },
   outreachEnabled: String(process.env.OUTREACH_ENABLED || 'false').toLowerCase() === 'true',
   dailySendLimit: parseInt(process.env.DAILY_SEND_LIMIT || '60', 10),
   dailyNewLeadLimit: parseInt(process.env.DAILY_NEW_LEAD_LIMIT || '30', 10),

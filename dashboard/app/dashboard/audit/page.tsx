@@ -24,6 +24,10 @@ const eventLabels: Record<string, string> = {
   "client.playbook.draft_updated": "Client playbook draft updated",
   "client.playbook.draft_approved": "Client playbook draft approved",
   "client.playbook.draft_cancelled": "Client playbook draft cancelled",
+  "client.playbook.automatic_draft_created": "Scheduled client draft prepared",
+  "client.playbook.agent_draft_completed": "Context-aware client draft completed",
+  "client.playbook.agent_draft_failed": "Context-aware client draft failed safely",
+  "client.relationship.updated": "Client relationship state updated",
   "crm.lifecycle.changed": "Lifecycle changed",
   "crm.note.created": "Contact note created",
   "crm.task.created": "Follow-up task created",
@@ -57,10 +61,10 @@ const eventLabels: Record<string, string> = {
 const safeMetadataKeys = new Set([
   "previous_stage", "new_stage", "note_id", "task_id", "due_at", "previous_status", "new_status",
   "contact_kind", "contact_id", "scheduled_sends_stopped", "prospect_reply_id", "channel", "previous_attempt_count",
-  "workflow_id", "automation_run_id", "version", "previous_version", "trigger_type", "status",
+  "workflow_id", "automation_run_id", "version", "previous_version", "trigger_type", "trigger", "status", "context_message_count",
   "previous_limit", "new_limit", "hourly_limit", "runs_in_window",
   "source_type", "source_id", "failure_code", "retry_count", "occurrence_count", "previous_due_hours", "new_due_hours", "due_hours", "previous_days", "new_days", "dataset", "row_count", "truncated",
-  "client_app_id", "contact_count", "slack_requested", "playbook_id",
+  "client_app_id", "contact_count", "slack_requested", "playbook_id", "generation_mode", "source_count", "context_warning_count",
 ]);
 
 function readable(value: string) {

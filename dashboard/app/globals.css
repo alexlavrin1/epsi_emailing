@@ -785,6 +785,14 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .playbook-steps li { display: grid; grid-template-columns: 28px minmax(0,1fr); align-items: center; gap: 9px; color: var(--muted); font-size: 11px; }
 .playbook-steps strong { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-family: var(--font-geist-mono), monospace; }
 .client-playbook-draft-card .client-draft-subject { margin: 14px 14px 0; font-size: 12px; }
+.client-draft-evidence { display: grid; gap: 8px; margin-top: 10px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 8px; background: rgba(124, 92, 255, .06); color: var(--muted); font-size: 11px; }
+.client-draft-evidence > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; color: #c6b7ff; }
+.client-draft-evidence ul, .client-draft-evidence ol { display: grid; gap: 5px; margin: 6px 0 0; padding-left: 20px; }
+.client-draft-evidence ul { list-style: none; padding-left: 0; }
+.client-draft-evidence li { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.client-draft-evidence li svg { flex: 0 0 auto; color: var(--danger); }
+.client-draft-evidence summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--accent-strong); font-weight: 700; }
+.client-draft-evidence time { flex: 0 0 auto; color: var(--faint); }
 .client-draft-control { display: flex; flex-wrap: wrap; justify-content: flex-end; }
 .client-draft-control .approval-editor { width: auto; }
 .client-draft-control .approval-editor[open] { width: min(100%, 560px); }

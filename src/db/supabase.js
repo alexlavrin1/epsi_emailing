@@ -942,6 +942,33 @@ async function prepareDueClientPlaybookDrafts(limit = 10) {
   return data || { drafted: 0, skipped: 0 };
 }
 
+async function claimClientPlaybookAgentDrafts(limit = 3) {
+  const { data, error } = await supabase.rpc('service_claim_client_playbook_agent_drafts', { target_limit: limit });
+  if (error) throw error;
+  return data || [];
+}
+
+async function completeClientPlaybookAgentDraft({ draftId, subject, body, sourceMessageIds, warnings, contextSha256, contextMessageCount, contextLatestMessageAt, model, responseId }) {
+  const { error } = await supabase.rpc('service_complete_client_playbook_agent_draft', {
+    target_draft_id: draftId,
+    target_subject: subject,
+    target_body: body,
+    target_source_message_ids: sourceMessageIds,
+    target_context_warnings: warnings,
+    target_context_sha256: contextSha256,
+    target_context_message_count: contextMessageCount,
+    target_context_latest_message_at: contextLatestMessageAt,
+    target_model: model,
+    target_response_id: responseId,
+  });
+  if (error) throw error;
+}
+
+async function failClientPlaybookAgentDraft(draftId, code) {
+  const { error } = await supabase.rpc('service_fail_client_playbook_agent_draft', { target_draft_id: draftId, target_failure_code: code });
+  if (error) throw error;
+}
+
 module.exports = {
   supabase,
   getMailboxByEmail,
@@ -1013,4 +1040,7 @@ module.exports = {
   replaceClientSubscriptions,
   failClientStripeSync,
   prepareDueClientPlaybookDrafts,
+  claimClientPlaybookAgentDrafts,
+  completeClientPlaybookAgentDraft,
+  failClientPlaybookAgentDraft,
 };

@@ -118,7 +118,9 @@ Initial template variables:
 
 ### Slice 5 — Context-aware drafting agent
 
-Migration 032 implements the Slice 4 foundation for scheduled check-ins, Stripe cancellation follow-ups, and churn reactivation. The worker is disabled by default, runs before the weekend sending guard, deduplicates every trigger window, and prepares template drafts only. It snapshots how many synchronized emails were available. Agent rewriting remains in Slice 5 so enabling scheduling cannot unexpectedly incur model usage or produce unreviewed AI text.
+Migration 032 implements the Slice 4 foundation for scheduled check-ins, Stripe cancellation follow-ups, and churn reactivation. The worker is disabled by default, runs before the weekend sending guard, deduplicates every trigger window, and prepares template drafts only. It snapshots how many synchronized emails were available.
+
+Migration 033 implements the disabled-by-default Slice 5 agent queue. The bounded Vercel worker passes the complete stored client context to the OpenAI Responses API with provider storage disabled, treats every customer-controlled field as untrusted evidence, requires strict structured output, validates cited message IDs against the client record, and stores only the reviewed draft, safe provider metadata, a context fingerprint, warnings, and source links. Oversized context is never silently truncated: the draft fails safely for a later summarization workflow. No provider delivery is added.
 
 - Run as a bounded Vercel job over claimed draft requests
 - Use the customer-support persona for triage, empathy, commitments, and escalation
@@ -126,6 +128,7 @@ Migration 032 implements the Slice 4 foundation for scheduled check-ins, Stripe 
 - Ground every draft in synchronized conversations and structured CRM/billing facts
 - Store citations to source message IDs and surface missing context
 - Never infer that a Stripe cancellation closes the CRM relationship
+- Require `CLIENT_SUCCESS_AGENT_ENABLED=true` and a server-only `OPENAI_API_KEY`; otherwise no model request is made
 
 Wise balance and top-up tracking is deferred until the core CRM automation, approvals, and delivery loop is operational.
 
