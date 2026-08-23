@@ -29,7 +29,7 @@ function normalizeSubscription(subscription, products = new Map()) {
     cancel_at: timestamp(subscription.cancel_at),
     cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
     canceled_at: timestamp(subscription.canceled_at),
-    latest_invoice_status: typeof latestInvoice === 'object' ? latestInvoice.status || null : null,
+    latest_invoice_status: latestInvoice && typeof latestInvoice === 'object' ? latestInvoice.status || null : null,
   };
 }
 

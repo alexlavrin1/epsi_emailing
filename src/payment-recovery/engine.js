@@ -3,6 +3,7 @@ const db = require('../db/supabase');
 const gmail = require('../outreach/gmail');
 const logger = require('../utils/logger');
 const { getStripeClient } = require('../integrations/stripe/client');
+const { syncClientSubscriptions } = require('../integrations/stripe/client-subscriptions');
 const slackClient = require('../integrations/slack/client');
 const {
   buildCrmCustomerRecord,
@@ -229,6 +230,7 @@ async function persistRecoveryContext({
 }
 
 async function processStripeEventRow(row, dependencies = {}) {
+  const database = dependencies.db || db;
   const stripe = dependencies.stripe || getStripeClient();
   const event = await stripe.events.retrieve(row.id);
 
@@ -236,15 +238,66 @@ async function processStripeEventRow(row, dependencies = {}) {
     return { outcome: 'ignored_live_event' };
   }
 
+  const eventObject = event.data?.object || {};
+  const stripeCustomerId = objectId(eventObject.customer) || row.stripe_customer_id || null;
+  let clientSubscriptionsRefreshed = 0;
+  if (stripeCustomerId && database.getClientStripeLinksByCustomerId) {
+    const links = await database.getClientStripeLinksByCustomerId(stripeCustomerId);
+    for (const link of links) {
+      await syncClientSubscriptions({ clientAppId: link.id, stripeCustomerId, stripe, db: database });
+      clientSubscriptionsRefreshed++;
+    }
+  }
+
   const context = await loadCanonicalContext(event, stripe);
-  if (!context) return { outcome: 'ignored_without_invoice' };
+  if (!context) return clientSubscriptionsRefreshed
+    ? { outcome: 'client_subscriptions_refreshed', clientSubscriptionsRefreshed }
+    : { outcome: 'ignored_without_invoice' };
   const persisted = await persistRecoveryContext({
     context,
     eventType: event.type,
     observedAt: event.created,
     dependencies,
   });
-  return persisted.result;
+  return clientSubscriptionsRefreshed
+    ? { ...persisted.result, clientSubscriptionsRefreshed }
+    : persisted.result;
+}
+
+async function reconcileClientSubscriptions(dependencies = {}) {
+  if (!config.stripe.clientSubscriptionReconciliationEnabled) {
+    return { enabled: false, claimed: 0, synced: 0, subscriptions: 0, failed: 0 };
+  }
+  const database = dependencies.db || db;
+  if (!database.claimDueClientStripeSyncs) return { enabled: false, claimed: 0, synced: 0, subscriptions: 0, failed: 0 };
+  const stripe = dependencies.stripe || getStripeClient();
+  const intervalMinutes = Math.min(Math.max(positiveInteger(config.stripe.clientSubscriptionReconciliationMinutes, 360), 15), 10080);
+  const limit = Math.min(positiveInteger(config.stripe.clientSubscriptionReconciliationLimit, 5), 25);
+  let links;
+  try {
+    links = await database.claimDueClientStripeSyncs(intervalMinutes, limit);
+  } catch (error) {
+    if (/schema cache|does not exist|claim_due_client_stripe_syncs/i.test(String(error.message || ''))) {
+      return { enabled: false, claimed: 0, synced: 0, subscriptions: 0, failed: 0 };
+    }
+    throw error;
+  }
+  let synced = 0; let subscriptions = 0; let failed = 0;
+  for (const link of links) {
+    try {
+      const result = await syncClientSubscriptions({
+        clientAppId: link.client_app_id,
+        stripeCustomerId: link.stripe_customer_id,
+        stripe,
+        db: database,
+      });
+      synced++; subscriptions += result.subscriptions;
+    } catch (error) {
+      failed++;
+      logger.error(`Client subscription reconciliation failed [app=${link.client_app_id}]: ${error.message}`);
+    }
+  }
+  return { enabled: true, claimed: links.length, synced, subscriptions, failed };
 }
 
 async function processPendingStripeEvents(dependencies = {}) {
@@ -594,12 +647,13 @@ async function deliverRecoveryFailureAlerts(dependencies = {}) {
 
 async function runPaymentRecoveryCycle(dependencies = {}) {
   const events = await processPendingStripeEvents(dependencies);
+  const clientSubscriptions = await reconcileClientSubscriptions(dependencies);
   const reconciliation = await reconcilePaymentRecoveryCases(dependencies);
   const reminders = await scheduleDuePaymentRecoveryReminders(dependencies);
   const email = await deliverDueTransactionalEmails(dependencies);
   const slack = await deliverDueSlackMessages(dependencies);
   const alerts = await deliverRecoveryFailureAlerts(dependencies);
-  return { events, reconciliation, reminders, email, slack, alerts };
+  return { events, clientSubscriptions, reconciliation, reminders, email, slack, alerts };
 }
 
 module.exports = {
@@ -609,6 +663,7 @@ module.exports = {
   isRecoverySignal,
   processStripeEventRow,
   processPendingStripeEvents,
+  reconcileClientSubscriptions,
   reconcilePaymentRecoveryCases,
   scheduleDuePaymentRecoveryReminders,
   deliverDueTransactionalEmails,

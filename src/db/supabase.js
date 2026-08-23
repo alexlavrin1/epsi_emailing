@@ -896,6 +896,26 @@ async function getClientStripeLink(clientAppId) {
   return data;
 }
 
+async function getClientStripeLinksByCustomerId(stripeCustomerId) {
+  const { data, error } = await supabase
+    .from('client_apps')
+    .select('id,stripe_customer_id')
+    .eq('stripe_customer_id', stripeCustomerId)
+    .eq('status', 'active')
+    .limit(25);
+  if (error) throw error;
+  return data || [];
+}
+
+async function claimDueClientStripeSyncs(intervalMinutes = 360, limit = 5) {
+  const { data, error } = await supabase.rpc('claim_due_client_stripe_syncs', {
+    target_interval_minutes: intervalMinutes,
+    target_limit: limit,
+  });
+  if (error) throw error;
+  return data || [];
+}
+
 async function replaceClientSubscriptions({ clientAppId, stripeCustomerId, customerEmail, customerName, subscriptions }) {
   const { data, error } = await supabase.rpc('service_replace_client_subscriptions', {
     target_client_app_id: clientAppId,
@@ -982,6 +1002,8 @@ module.exports = {
   completeClientSlackAssignment,
   failClientSlackAssignment,
   getClientStripeLink,
+  getClientStripeLinksByCustomerId,
+  claimDueClientStripeSyncs,
   replaceClientSubscriptions,
   failClientStripeSync,
 };

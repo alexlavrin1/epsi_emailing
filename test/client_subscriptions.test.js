@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizeSubscription, syncClientSubscriptions } = require('../src/integrations/stripe/client-subscriptions');
 const { createClientStripeSyncHandler } = require('../api/client-stripe-sync');
+const config = require('../src/config');
+const { processStripeEventRow, reconcileClientSubscriptions } = require('../src/payment-recovery/engine');
 
 function responseRecorder() {
   return { statusCode: null, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
@@ -73,4 +75,54 @@ test('client Stripe sync endpoint requires a user token and an authorized linked
   assert.equal(calls[0].clientAppId, appId);
   assert.equal(calls[0].stripeCustomerId, 'cus_client_test');
   assert.deepEqual(accepted.body.result, { subscriptions: 2 });
+});
+
+test('a verified subscription event refreshes a linked client even without an invoice', async () => {
+  const snapshots = [];
+  const subscription = { id: 'sub_event', status: 'active', customer: 'cus_event', latest_invoice: null, items: { data: [] } };
+  const stripe = {
+    events: { retrieve: async () => ({ id: 'evt_event', type: 'customer.subscription.updated', livemode: false, data: { object: subscription } }) },
+    customers: { retrieve: async () => ({ id: 'cus_event', email: 'client@example.com' }) },
+    subscriptions: {
+      retrieve: async () => subscription,
+      list: async () => ({ data: [subscription] }),
+    },
+  };
+  const db = {
+    getClientStripeLinksByCustomerId: async id => { assert.equal(id, 'cus_event'); return [{ id: 'app-event' }]; },
+    replaceClientSubscriptions: async value => snapshots.push(value),
+    failClientStripeSync: async () => assert.fail('event refresh should succeed'),
+  };
+  const result = await processStripeEventRow({ id: 'evt_event', stripe_customer_id: 'cus_event' }, { stripe, db });
+  assert.deepEqual(result, { outcome: 'client_subscriptions_refreshed', clientSubscriptionsRefreshed: 1 });
+  assert.equal(snapshots.length, 1);
+  assert.equal(snapshots[0].subscriptions[0].status, 'active');
+});
+
+test('scheduled reconciliation claims a bounded stale-client batch and isolates failures', async () => {
+  const original = { ...config.stripe };
+  Object.assign(config.stripe, {
+    clientSubscriptionReconciliationEnabled: true,
+    clientSubscriptionReconciliationMinutes: 360,
+    clientSubscriptionReconciliationLimit: 5,
+  });
+  const writes = []; const failures = [];
+  const stripe = {
+    customers: { retrieve: async id => id === 'cus_bad' ? Promise.reject(Object.assign(new Error('Unavailable'), { code: 'api_error' })) : ({ id }) },
+    subscriptions: { list: async () => ({ data: [] }) },
+  };
+  const db = {
+    claimDueClientStripeSyncs: async (minutes, limit) => { assert.deepEqual([minutes, limit], [360, 5]); return [
+      { client_app_id: 'app-good', stripe_customer_id: 'cus_good' },
+      { client_app_id: 'app-bad', stripe_customer_id: 'cus_bad' },
+    ]; },
+    replaceClientSubscriptions: async value => writes.push(value),
+    failClientStripeSync: async (id, code) => failures.push({ id, code }),
+  };
+  try {
+    const result = await reconcileClientSubscriptions({ stripe, db });
+    assert.deepEqual(result, { enabled: true, claimed: 2, synced: 1, subscriptions: 0, failed: 1 });
+    assert.equal(writes[0].clientAppId, 'app-good');
+    assert.deepEqual(failures, [{ id: 'app-bad', code: 'api_error' }]);
+  } finally { Object.assign(config.stripe, original); }
 });

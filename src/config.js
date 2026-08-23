@@ -45,6 +45,12 @@ module.exports = {
       parseInt(process.env.STRIPE_RECONCILIATION_LOOKBACK_HOURS || '48', 10),
     reconciliationCaseLimit:
       parseInt(process.env.STRIPE_RECONCILIATION_CASE_LIMIT || '25', 10),
+    clientSubscriptionReconciliationEnabled:
+      String(process.env.STRIPE_CLIENT_SUBSCRIPTION_RECONCILIATION_ENABLED || 'true').toLowerCase() !== 'false',
+    clientSubscriptionReconciliationMinutes:
+      parseInt(process.env.STRIPE_CLIENT_SUBSCRIPTION_RECONCILIATION_MINUTES || '360', 10),
+    clientSubscriptionReconciliationLimit:
+      parseInt(process.env.STRIPE_CLIENT_SUBSCRIPTION_RECONCILIATION_LIMIT || '5', 10),
   },
   paymentRecoveryReminders: {
     enabled:

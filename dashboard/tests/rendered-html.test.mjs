@@ -767,13 +767,15 @@ test("adds a tenant-scoped existing-client workspace with server-side email and 
 });
 
 test("keeps client Stripe subscription reads tenant-scoped and provider writes server-side", async () => {
-  const [migration, detailPage, forms, actions, data, engineSync, endpoint] = await Promise.all([
+  const [migration, reconciliationMigration, detailPage, forms, actions, data, engineSync, recoveryEngine, endpoint] = await Promise.all([
     readFile(new URL("../database/migrations/028_client_stripe_subscriptions.sql", root), "utf8"),
+    readFile(new URL("../database/migrations/029_client_subscription_reconciliation.sql", root), "utf8"),
     readFile(new URL("app/dashboard/clients/[id]/page.tsx", root), "utf8"),
     readFile(new URL("app/components/client-forms.tsx", root), "utf8"),
     readFile(new URL("app/dashboard/clients/actions.ts", root), "utf8"),
     readFile(new URL("lib/client-data.ts", root), "utf8"),
     readFile(new URL("../src/integrations/stripe/client-subscriptions.js", root), "utf8"),
+    readFile(new URL("../src/payment-recovery/engine.js", root), "utf8"),
     readFile(new URL("../api/client-stripe-sync.js", root), "utf8"),
   ]);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS client_subscriptions/i);
@@ -781,6 +783,9 @@ test("keeps client Stripe subscription reads tenant-scoped and provider writes s
   assert.match(migration, /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON client_subscriptions FROM authenticated, anon/i);
   assert.match(migration, /auth\.role\(\) IS DISTINCT FROM 'service_role'/i);
   assert.match(migration, /client\.stripe\.linked/);
+  assert.match(reconciliationMigration, /FOR UPDATE SKIP LOCKED/i);
+  assert.match(reconciliationMigration, /auth\.role\(\) IS DISTINCT FROM 'service_role'/i);
+  assert.match(reconciliationMigration, /stripe_sync_claimed_at = NULL/i);
   assert.match(actions, /dashboard_link_client_stripe_customer/);
   assert.match(actions, /triggerClientStripeSync/);
   assert.doesNotMatch(actions + data, /STRIPE_RESTRICTED_KEY|SUPABASE_SERVICE_ROLE_KEY/);
@@ -791,4 +796,6 @@ test("keeps client Stripe subscription reads tenant-scoped and provider writes s
   assert.match(endpoint, /getClientStripeLink/);
   assert.match(engineSync, /stripe\.subscriptions\.list/);
   assert.match(engineSync, /replaceClientSubscriptions/);
+  assert.match(recoveryEngine, /getClientStripeLinksByCustomerId/);
+  assert.match(recoveryEngine, /reconcileClientSubscriptions/);
 });
