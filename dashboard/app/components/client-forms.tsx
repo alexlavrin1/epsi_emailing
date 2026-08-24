@@ -23,6 +23,7 @@ export function ClientCreateForm() {
     <label htmlFor="client-contact-name">Primary contact<input id="client-contact-name" name="contact_name" maxLength={160} placeholder="Sam Rivera" required /></label>
     <label htmlFor="client-contact-email">Email<input id="client-contact-email" name="email" type="email" autoComplete="email" maxLength={320} placeholder="sam@acme.example" required /></label>
     <label htmlFor="client-contact-slack">Slack name <span>(optional)</span><input id="client-contact-slack" name="slack_name" maxLength={120} placeholder="@sam or Sam Rivera" /></label>
+    <label htmlFor="client-segment">Relationship type<select id="client-segment" name="client_segment" defaultValue="stripe_plan"><option value="lead">Lead</option><option value="epsiflow_direct">EpsiFlow Direct client</option><option value="stripe_plan">Stripe plan client</option></select><small>This controls which playbooks are available for the record.</small></label>
     <div className="client-form-submit"><Submit idle="Add existing client" pending="Adding client…" /><small>Email matching starts automatically. Adding a Slack name queues a secure DM assignment.</small></div>
     <Feedback state={state} />
   </form>;
@@ -78,7 +79,7 @@ export function ClientStripeLink({ clientAppId, currentCustomerId }: { clientApp
 export function ClientRelationshipControl({ clientAppId, segment, relationshipState, enabled, note }: { clientAppId:string; segment:string; relationshipState:string; enabled:boolean; note:string }) {
   const [state,action]=useActionState(setClientRelationshipAction,initialClientActionState);
   return <form className="action-form client-relationship-form" action={action}><input type="hidden" name="client_app_id" value={clientAppId}/>
-    <label>Commercial model<select name="client_segment" defaultValue={segment}><option value="epsiflow_direct">EpsiFlow Direct</option><option value="stripe_plan">Stripe plan</option></select></label>
+    <label>Relationship type<select name="client_segment" defaultValue={segment}><option value="lead">Lead</option><option value="epsiflow_direct">EpsiFlow Direct client</option><option value="stripe_plan">Stripe plan client</option></select><small>This classification controls which playbooks can be prepared.</small></label>
     <label>Relationship state<select name="relationship_state" defaultValue={relationshipState}><option value="active">Active client</option><option value="churned">Churned · reactivation</option><option value="closed">Closed · no automation</option></select></label>
     <label>Internal note <span>(optional)</span><textarea name="relationship_note" maxLength={1000} defaultValue={note} placeholder="Why they churned, payment arrangement, or follow-up context"/></label>
     <div className="client-success-toggle"><input id={`client-success-${clientAppId}`} type="checkbox" name="client_success_enabled" defaultChecked={enabled}/><span><label htmlFor={`client-success-${clientAppId}`}>Client-success automation enabled</label><small>Stripe cancellation does not turn this off.</small></span></div>

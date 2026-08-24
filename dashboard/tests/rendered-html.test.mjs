@@ -972,3 +972,26 @@ test("installs four editable EpsiFlow playbooks with visible AI instructions", a
   assert.match(plan, /Monthly client health check/);
   assert.doesNotMatch(migration + controls + clientAgent + leadAgent, /sendTransactionalEmail|sendDirectMessage|chat\.postMessage/);
 });
+
+test("supports lead client records and manual lead education drafts", async () => {
+  const [migration, forms, clientActions, playbookActions, detail, data] = await Promise.all([
+    readFile(new URL("../database/migrations/035_lead_relationship_playbooks.sql", root), "utf8"),
+    readFile(new URL("app/components/client-forms.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/clients/actions.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/playbooks/actions.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/clients/[id]/page.tsx", root), "utf8"),
+    readFile(new URL("lib/client-playbook-data.ts", root), "utf8"),
+  ]);
+  assert.match(migration, /client_segment IN \('lead','epsiflow_direct','stripe_plan'\)/);
+  assert.match(migration, /eligible_client_segments <@ ARRAY\['lead','epsiflow_direct','stripe_plan'\]/);
+  assert.match(migration, /'manual_client_checkin','\{\}',ARRAY\['lead'\],ARRAY\['active'\],14/);
+  assert.match(migration, /COALESCE\(source_status,'draft'\),'lead_education_manual'/);
+  assert.match(migration, /source_preset','lead_education_reply'/);
+  assert.match(forms, /<option value="lead">Lead<\/option>/);
+  assert.match(clientActions, /\["lead","epsiflow_direct","stripe_plan"\]/);
+  assert.match(clientActions, /The relationship save could not be confirmed/);
+  assert.match(playbookActions, /\["lead","epsiflow_direct","stripe_plan"\]/);
+  assert.match(detail, /availablePlaybooks/);
+  assert.match(detail, /key=\{`\$\{app\.id\}-\$\{app\.clientSegment\}/);
+  assert.match(data, /neq\("preset_key", "lead_education_reply"\)/);
+});

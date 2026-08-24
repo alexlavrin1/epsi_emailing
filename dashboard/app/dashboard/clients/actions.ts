@@ -18,7 +18,7 @@ function validWebsite(value: string) {
 }
 function actionError(message?: string) {
   if (/already exists|already assigned|duplicate/i.test(message || "")) return "That client app or contact is already in this workspace.";
-  if (/schema cache|Could not find|does not exist/i.test(message || "")) return "The Clients workspace requires migration 025.";
+  if (/schema cache|Could not find|does not exist/i.test(message || "")) return "Lead-aware client records require migration 035.";
   if (/Not authorized/i.test(message || "")) return "Your workspace access changed. Refresh and try again.";
   return "The client could not be saved. Review the fields and try again.";
 }
@@ -28,12 +28,12 @@ export async function createClientAppAction(_previous: ClientActionState, form: 
   if (!membership) return { ok: false, message: "An active workspace membership is required." };
   const name = formValue(form, "name"); const website = formValue(form, "website_url");
   const contactName = formValue(form, "contact_name"); const email = formValue(form, "email").toLowerCase();
-  const slackName = formValue(form, "slack_name");
-  if (name.length < 1 || name.length > 160 || contactName.length < 1 || contactName.length > 160 || !validWebsite(website) || !validEmail(email) || slackName.length > 120) return { ok: false, message: "Enter a valid app, website, contact name, and email." };
+  const slackName = formValue(form, "slack_name"); const segment = formValue(form, "client_segment");
+  if (name.length < 1 || name.length > 160 || contactName.length < 1 || contactName.length > 160 || !validWebsite(website) || !validEmail(email) || slackName.length > 120 || !["lead","epsiflow_direct","stripe_plan"].includes(segment)) return { ok: false, message: "Enter a valid app, website, relationship type, contact name, and email." };
   const supabase = await createSupabaseServerClient(); if (!supabase) return { ok: false, message: "The Clients workspace is unavailable." };
   const { data, error } = await supabase.rpc("dashboard_create_client_app", {
     target_organization_id: membership.organization.id, target_name: name, target_website_url: website,
-    target_contact_name: contactName, target_contact_email: email, target_slack_name: slackName || null,
+    target_contact_name: contactName, target_contact_email: email, target_slack_name: slackName || null, target_client_segment: segment,
   });
   if (error || !data) return { ok: false, message: actionError(error?.message) };
   await triggerClientWorkspaceSync(supabase, String(data), "historical");
@@ -124,10 +124,13 @@ export async function setClientRelationshipAction(_previous: ClientActionState, 
   const { membership } = await requireMembership(); if (!membership) return { ok: false, message: "An active workspace membership is required." };
   const appId=formValue(form,"client_app_id"), segment=formValue(form,"client_segment"), relationshipState=formValue(form,"relationship_state"), note=formValue(form,"relationship_note");
   const enabled=form.get("client_success_enabled")==="on";
-  if (!uuidPattern.test(appId) || !["epsiflow_direct","stripe_plan"].includes(segment) || !["active","churned","closed"].includes(relationshipState) || note.length>1000) return { ok:false,message:"Choose a valid segment and relationship state." };
+  if (!uuidPattern.test(appId) || !["lead","epsiflow_direct","stripe_plan"].includes(segment) || !["active","churned","closed"].includes(relationshipState) || note.length>1000) return { ok:false,message:"Choose a valid relationship type and state." };
   const supabase=await createSupabaseServerClient(); if(!supabase) return {ok:false,message:"Relationship controls are unavailable."};
   const {error}=await supabase.rpc("dashboard_set_client_relationship",{target_client_app_id:appId,target_client_segment:segment,target_relationship_state:relationshipState,target_client_success_enabled:enabled,target_relationship_note:note});
-  if(error) return {ok:false,message:/schema cache|Could not find|does not exist/i.test(error.message)?"Relationship controls require migration 031.":"The relationship could not be updated."};
+  if(error) return {ok:false,message:/schema cache|Could not find|does not exist/i.test(error.message)?"Lead-aware relationship controls require migration 035.":"The relationship could not be updated."};
+  const {data: saved,error: verifyError}=await supabase.from("client_apps").select("client_segment,relationship_state,client_success_enabled").eq("id",appId).maybeSingle();
+  if(verifyError || !saved || saved.client_segment!==segment || saved.relationship_state!==relationshipState) return {ok:false,message:"The relationship save could not be confirmed. Refresh and try again."};
   revalidatePath(`/dashboard/clients/${appId}`); revalidatePath("/dashboard/clients"); revalidatePath("/dashboard/audit");
-  return {ok:true,message:relationshipState==="closed"?"Relationship closed. Client-success automation is off.":`Relationship saved as ${relationshipState}.`};
+  const segmentLabel=segment==="lead"?"Lead":segment==="epsiflow_direct"?"EpsiFlow Direct":"Stripe plan";
+  return {ok:true,message:relationshipState==="closed"?"Relationship closed. Client-success automation is off.":`${segmentLabel} relationship saved as ${relationshipState}.`};
 }

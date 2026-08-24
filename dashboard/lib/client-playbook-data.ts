@@ -27,7 +27,7 @@ export async function getClientPlaybooks(supabase: SupabaseClient, organizationI
       .eq("organization_id", organizationId).order("updated_at", { ascending: false }).limit(100),
     supabase.from("automation_workflows")
       .select("id,name,description,status,trigger_type,delay_minutes,current_version,updated_at,preset_key,versions:automation_workflow_versions(version,body_template,agent_prompt)")
-      .eq("organization_id", organizationId).not("preset_key", "is", null).order("updated_at", { ascending: false }).limit(100),
+      .eq("organization_id", organizationId).not("preset_key", "is", null).neq("preset_key", "lead_education_reply").order("updated_at", { ascending: false }).limit(100),
   ]);
   if (clients.error || leads.error) return { ready: false, playbooks: [] as ManagedPlaybook[] };
   const playbooks: ManagedPlaybook[] = (clients.data ?? []).map(row => {

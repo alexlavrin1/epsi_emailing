@@ -20,7 +20,7 @@ export type ClientAppSummary = {
   name: string;
   websiteUrl: string;
   status: string;
-  clientSegment: "epsiflow_direct" | "stripe_plan";
+  clientSegment: "lead" | "epsiflow_direct" | "stripe_plan";
   relationshipState: "active" | "churned" | "closed";
   clientSuccessEnabled: boolean;
   relationshipNote: string;
