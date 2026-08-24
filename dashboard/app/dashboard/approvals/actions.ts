@@ -101,13 +101,14 @@ export async function decideClientPlaybookDraft(_state: ApprovalActionState, for
   return { ok: true, message: decision === "approve" ? "Draft approved and retained as ready. No message was sent." : "Draft cancelled. Nothing was sent." };
 }
 
-export async function retryClientPlaybookAgentDraft(_state: ApprovalActionState, formData: FormData): Promise<ApprovalActionState> {
+export async function regenerateClientPlaybookAgentDraft(_state: ApprovalActionState, formData: FormData): Promise<ApprovalActionState> {
   const { membership } = await requireMembership(); if (!membership) return { ok: false, message: "An active organization membership is required." };
   const draftId = String(formData.get("draft_id") || "");
-  if (!uuidPattern.test(draftId)) return { ok: false, message: "Invalid client draft." };
-  const supabase = await createSupabaseServerClient(); if (!supabase) return { ok: false, message: "Unable to retry this AI draft." };
-  const { error } = await supabase.rpc("dashboard_retry_client_playbook_agent_draft", { target_draft_id: draftId });
-  if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "AI draft retry requires migration 038." : "Unable to retry this AI draft." };
+  const feedback = String(formData.get("feedback") || "").trim();
+  if (!uuidPattern.test(draftId) || feedback.length > 4000) return { ok: false, message: "Feedback must be no more than 4,000 characters." };
+  const supabase = await createSupabaseServerClient(); if (!supabase) return { ok: false, message: "Unable to regenerate this AI draft." };
+  const { error } = await supabase.rpc("dashboard_regenerate_client_playbook_agent_draft", { target_draft_id: draftId, target_feedback: feedback || null });
+  if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "AI regeneration requires migration 039." : "Unable to regenerate this AI draft." };
   revalidatePath("/dashboard/approvals"); revalidatePath("/dashboard/audit");
-  return { ok: true, message: "AI retry queued. The drafting worker will re-check the client and prepare a new approval draft." };
+  return { ok: true, message: "AI regeneration queued with your feedback. The result will return here for approval; nothing will be sent." };
 }

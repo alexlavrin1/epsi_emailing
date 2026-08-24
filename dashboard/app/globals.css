@@ -820,6 +820,12 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .client-draft-control { display: flex; flex-wrap: wrap; justify-content: flex-end; }
 .client-draft-control .approval-editor { width: auto; }
 .client-draft-control .approval-editor[open] { width: min(100%, 560px); }
+.client-draft-control .ai-regeneration-form { flex: 1 0 100%; grid-template-columns: minmax(0,1fr) auto; align-items: end; margin: 0 0 12px; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: #091310; text-align: left; }
+.ai-regeneration-form label, .ai-regeneration-form small { grid-column: 1; }
+.ai-regeneration-form textarea { min-height: 88px; }
+.ai-regeneration-form small { color: var(--faint); font-size: 10px; line-height: 1.5; }
+.ai-regeneration-form button { grid-column: 2; grid-row: 1 / span 2; }
+.client-draft-control > .action-feedback { flex: 1 0 100%; text-align: left; }
 .client-message-list article strong { font-size: 12px; }
 .client-message-list time { color: var(--faint); font-size: 10px; white-space: nowrap; }
 .client-message-list h3 { margin: 9px 0 0; font-size: 14px; overflow-wrap: anywhere; }
@@ -1008,6 +1014,8 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .playbook-modal-summary, .playbook-modal-fields { grid-template-columns: 1fr; }
   .client-draft-control { align-items: stretch; flex-direction: column; }
   .client-draft-control form, .client-draft-control button { width: 100%; }
+  .client-draft-control .ai-regeneration-form { grid-template-columns: 1fr; }
+  .ai-regeneration-form button { grid-column: 1; grid-row: auto; }
   .client-summary, .client-app-grid, .client-create-form { grid-template-columns: 1fr; }
   .client-create-form label:last-of-type, .client-form-submit, .client-create-form .action-feedback { grid-column: auto; }
   .client-form-submit { align-items: stretch; flex-direction: column; }

@@ -157,6 +157,10 @@ The lead education prompt now treats the latest unanswered message as the primar
 
 Migration 037 creates a new immutable version of the lead education playbook with the confirmed Stripe budget/payment pairs and EpsiFlow Direct charges. Pricing questions must be answered directly, the approximate $91 Direct transfer charge must remain qualified, and unconfirmed refund, custody, tax, and FX terms still require human confirmation. Existing approvals retain the exact older version that produced them.
 
+### Slice 9 — operator-guided AI revisions
+
+Migration 039 adds a regeneration loop to every open client-success draft. An operator can supply up to 4,000 characters of feedback and queue a replacement AI draft grounded in the same complete conversation, CRM state, pricing facts, and pinned playbook version. Feedback may change emphasis, tone, structure, or identify a missing answer, but cannot override factual and no-delivery safeguards. Each request is tenant-scoped, audited without copying feedback into broad audit metadata, and returns to the same approval checkpoint.
+
 ## Safety rules
 
 - No draft generation authorizes delivery.

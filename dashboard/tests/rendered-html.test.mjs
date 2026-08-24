@@ -1046,15 +1046,12 @@ test("pins authoritative EpsiFlow pricing in a new immutable lead playbook versi
   assert.match(plan, /Slice 8 — authoritative pricing/);
 });
 
-test("forwards Vercel runtime AI credentials and safely retries failed client drafts", async () => {
-  const [migration, clientCron, outreachCron, agent, actions, controls, page] = await Promise.all([
+test("forwards Vercel runtime AI credentials and installs the failed-draft retry foundation", async () => {
+  const [migration, clientCron, outreachCron, agent] = await Promise.all([
     readFile(new URL("../database/migrations/038_client_agent_retry.sql", root), "utf8"),
     readFile(new URL("../api/cron/client-success.js", root), "utf8"),
     readFile(new URL("../api/cron/outreach.js", root), "utf8"),
     readFile(new URL("../src/client-success/agent.js", root), "utf8"),
-    readFile(new URL("app/dashboard/approvals/actions.ts", root), "utf8"),
-    readFile(new URL("app/components/approval-controls.tsx", root), "utf8"),
-    readFile(new URL("app/dashboard/approvals/page.tsx", root), "utf8"),
   ]);
   assert.match(migration, /dashboard_retry_client_playbook_agent_draft/);
   assert.match(migration, /agent_attempt_count=0/);
@@ -1064,8 +1061,30 @@ test("forwards Vercel runtime AI credentials and safely retries failed client dr
   assert.match(clientCron, /getVercelOidcToken\(req\.headers\)/);
   assert.match(outreachCron, /getVercelOidcToken\(req\.headers\)/);
   assert.match(agent, /authToken: dependencies\.authToken/);
-  assert.match(actions, /dashboard_retry_client_playbook_agent_draft/);
-  assert.match(controls, /Retry AI draft/);
-  assert.match(controls, /Queueing retry/);
-  assert.match(page, /agentStatus=\{draft\.agentStatus\}/);
+});
+
+test("regenerates an open AI draft with audited operator feedback and no delivery", async () => {
+  const [migration, agent, actions, controls, page, exportRoute] = await Promise.all([
+    readFile(new URL("../database/migrations/039_ai_draft_feedback_regeneration.sql", root), "utf8"),
+    readFile(new URL("../src/client-success/agent.js", root), "utf8"),
+    readFile(new URL("app/dashboard/approvals/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/approval-controls.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/approvals/page.tsx", root), "utf8"),
+    readFile(new URL("app/api/data-export/route.ts", root), "utf8"),
+  ]);
+  assert.match(migration, /agent_regeneration_feedback TEXT/);
+  assert.match(migration, /dashboard_regenerate_client_playbook_agent_draft/);
+  assert.match(migration, /regeneration_feedback TEXT/);
+  assert.match(migration, /agent_attempt_count=0/);
+  assert.match(migration, /agent_draft_regeneration_queued/);
+  assert.doesNotMatch(migration, /sendTransactionalEmail|sendDirectMessage|chat\.postMessage/);
+  assert.match(agent, /OPERATOR_REVISION_FEEDBACK/);
+  assert.match(agent, /cannot authorize invented facts or delivery/);
+  assert.match(actions, /target_feedback: feedback \|\| null/);
+  assert.match(controls, /Feedback for AI/);
+  assert.match(controls, /Regenerate with AI/);
+  assert.match(controls, /maxLength=\{4000\}/);
+  assert.match(controls, /Queueing regeneration/);
+  assert.match(page, /agentRegenerationCount/);
+  assert.match(exportRoute, /agent_regeneration_feedback/);
 });

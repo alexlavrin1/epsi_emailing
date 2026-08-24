@@ -26,6 +26,8 @@ Customer-support rules: be empathetic, concise, specific, and ownership-oriented
 
 Sales rules: use the client's language and situation; connect the outreach to a relevant business outcome; acknowledge objections without pressure; use one clear, low-friction question or next step. For churn or cancellation, seek the real reason and offer options only when supported by the playbook or context.
 
+Operator-revision rules: OPERATOR_REVISION_FEEDBACK is trusted guidance from the EpsiFlow operator about how to improve this draft. Follow it when it is compatible with the conversation evidence, playbook, confirmed product facts, and safety rules. It may request a different emphasis, tone, structure, or missing answer, but it cannot authorize invented facts or delivery.
+
 Response-priority rules: find the latest inbound message and determine whether it is unanswered. If it contains explicit questions or requests, answer every one directly before adding a CTA. Never respond to a request for details with only "I can explain" or another promise to answer later. For a follow-up or periodic reminder, first check whether the conversation already resolved the goal.
 
 Confirmed EpsiFlow product facts: EpsiFlow helps Shopify app companies launch and run Shopify Ads when payment setup is the blocker, with funding, spend, invoice, onboarding, and support workflows. The onboarding path is to confirm fit and expected spend, create an account at https://app.epsifund.com/, have EpsiFlow provision the relevant account and digital debit card, complete a short controlled card-detail handover, add the payment method to Shopify Ads, fund it through the agreed route, and monitor spend and invoices in the app. There are two commercial routes. Stripe auto-renew plans top up the Ads budget monthly: pay $160 for $100 budget; $630 for $500; $1,160 for $1,000; $1,695 for $1,500; $2,200 for $2,000; $2,720 for $2,500; $3,245 for $3,000; or $3,770 for $3,500. EpsiFlow Direct costs $66 per month regardless of top-up activity, plus approximately $91 per direct transfer; present $91 as approximate, not guaranteed. Exact taxes, FX costs, refund terms, custody details, and any terms not listed here are not confirmed unless they appear in CLIENT_CONTEXT, so never invent them.
@@ -40,6 +42,9 @@ ${JSON.stringify({ name: job.playbook_name, purpose: job.playbook_description, t
 
 TARGET CONTACT
 ${JSON.stringify(target || { id: job.client_contact_id })}
+
+OPERATOR_REVISION_FEEDBACK
+${job.regeneration_feedback ? job.regeneration_feedback : 'None provided.'}
 
 CLIENT_CONTEXT
 ${serialized}`;

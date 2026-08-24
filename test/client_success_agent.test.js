@@ -19,7 +19,7 @@ const context = {
   },
   sourceMessageCount: 1,
 };
-const job = { id: 'draft-1', organization_id: 'org-1', client_app_id: 'app-1', client_contact_id: 'contact-1', channel: 'email', playbook_name: 'Direct renewal', playbook_description: 'Check the relationship and next payment.', trigger_type: 'scheduled_checkin', agent_prompt: 'Never infer payment status; ask one clear question.', subject_template: 'Checking in', body_template: 'Ask how things are going.' };
+const job = { id: 'draft-1', organization_id: 'org-1', client_app_id: 'app-1', client_contact_id: 'contact-1', channel: 'email', playbook_name: 'Direct renewal', playbook_description: 'Check the relationship and next payment.', trigger_type: 'scheduled_checkin', agent_prompt: 'Never infer payment status; ask one clear question.', subject_template: 'Checking in', body_template: 'Ask how things are going.', regeneration_feedback: 'Answer the balance question first and keep the tone warm.' };
 
 test('context-aware drafting is disabled by default', async () => {
   const original = config.aiGateway.clientSuccessAgentEnabled;
@@ -40,7 +40,7 @@ test('generates an approval draft from complete context with validated citations
       authToken: 'runtime-oidc-token',
       aiGateway: { createStructuredClientDraft: async (prompts, auth) => {
         assert.equal(auth.authToken, 'runtime-oidc-token');
-        assert.match(prompts.system, /untrusted evidence/i); assert.match(prompts.system, /Use every supplied message/i); assert.match(prompts.system, /answer every one directly/i); assert.match(prompts.system, /EpsiFlow Direct costs \$66 per month/); assert.match(prompts.system, /\$1,160 for \$1,000/); assert.match(prompts.system, /approximately \$91 per direct transfer/); assert.match(prompts.user, /How is the account balance/); assert.match(prompts.user, /Never infer payment status/);
+        assert.match(prompts.system, /untrusted evidence/i); assert.match(prompts.system, /Use every supplied message/i); assert.match(prompts.system, /answer every one directly/i); assert.match(prompts.system, /trusted guidance from the EpsiFlow operator/i); assert.match(prompts.system, /cannot authorize invented facts or delivery/i); assert.match(prompts.system, /EpsiFlow Direct costs \$66 per month/); assert.match(prompts.system, /\$1,160 for \$1,000/); assert.match(prompts.system, /approximately \$91 per direct transfer/); assert.match(prompts.user, /How is the account balance/); assert.match(prompts.user, /Never infer payment status/); assert.match(prompts.user, /Answer the balance question first/);
         return { model: 'test-model', responseId: 'resp-safe', output: { subject: 'A quick check-in', body: 'Hi Tarang, how are things going?', source_message_ids: [messageId], context_warnings: [] } };
       } },
     });
