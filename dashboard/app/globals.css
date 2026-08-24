@@ -1034,3 +1034,6 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .client-success-toggle small { color: var(--muted); font-weight: 400; }
 .status-churned { color: #f6c86f; background: rgba(212, 151, 45, .14); }
 .status-closed { color: var(--muted); background: var(--surface-raised); }
+.playbook-assignment-status { display:grid; gap:5px; padding:12px; border:1px solid var(--border); border-radius:10px; background:var(--surface-raised); }
+.playbook-assignment-status .status-badge { justify-self:start; }
+.playbook-assignment-status small { color:var(--muted); line-height:1.5; }

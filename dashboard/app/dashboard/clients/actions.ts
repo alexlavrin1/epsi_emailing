@@ -108,16 +108,22 @@ export async function createClientPlaybookDraftAction(_previous: ClientActionSta
   const appId = formValue(form, "client_app_id"); const contactId = formValue(form, "contact_id"); const playbookId = formValue(form, "playbook_id");
   if (![appId, contactId, playbookId].every(value => uuidPattern.test(value))) return { ok: false, message: "Choose a valid playbook and client contact." };
   const supabase = await createSupabaseServerClient(); if (!supabase) return { ok: false, message: "Client playbooks are unavailable." };
+  const {error:assignmentError}=await supabase.rpc("dashboard_assign_client_playbook",{target_playbook_id:playbookId,target_client_app_id:appId,target_client_contact_id:contactId});
+  if(assignmentError) {
+    if(/schema cache|Could not find|does not exist/i.test(assignmentError.message)) return {ok:false,message:"Persistent client playbooks require migration 036."};
+    if(/not eligible/i.test(assignmentError.message)) return {ok:false,message:"This playbook does not match the client’s relationship type or state."};
+    return {ok:false,message:"The playbook assignment could not be saved."};
+  }
   const { error } = await supabase.rpc("dashboard_create_client_playbook_draft", { target_playbook_id: playbookId, target_client_app_id: appId, target_client_contact_id: contactId });
   if (error) {
     if (/schema cache|Could not find|does not exist/i.test(error.message)) return { ok: false, message: "Client playbooks require migration 030." };
     if (/not eligible/i.test(error.message)) return { ok: false, message: "This client’s current subscription state does not match the playbook conditions." };
     if (/no linked Slack/i.test(error.message)) return { ok: false, message: "Link a Slack conversation for this contact before preparing a Slack draft." };
-    if (/open draft already exists/i.test(error.message)) return { ok: false, message: "An open draft already exists for this playbook and contact." };
+    if (/open draft already exists/i.test(error.message)) { revalidatePath(`/dashboard/clients/${appId}`); return { ok: true, message: "Playbook assigned permanently. An existing draft is already waiting in Approvals." }; }
     return { ok: false, message: "The client draft could not be prepared." };
   }
   revalidatePath(`/dashboard/clients/${appId}`); revalidatePath("/dashboard/approvals"); revalidatePath("/dashboard/audit");
-  return { ok: true, message: "Draft prepared. Review it in Approvals; nothing has been sent." };
+  return { ok: true, message: "Playbook assigned permanently and a context-aware draft was queued for Approvals. Nothing has been sent." };
 }
 
 export async function setClientRelationshipAction(_previous: ClientActionState, form: FormData): Promise<ClientActionState> {

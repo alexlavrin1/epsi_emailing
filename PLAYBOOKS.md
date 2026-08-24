@@ -145,6 +145,14 @@ Migration 034 installs four disabled-by-default, editable presets based on the p
 
 Each definition exposes its audience, cadence, fallback template, and exact playbook instruction passed to the AI. Administrators can pause a playbook and create a new immutable version with changed audience, cadence, wording, or AI instructions. The lead workflow reconstructs all stored sent campaign messages and inbound replies before drafting. Every preset starts as a draft, every generated message remains approval-gated, and this slice adds no automatic provider delivery.
 
+### Slice 7 — persistent client assignments
+
+Migration 036 changes the client-page picker from a one-time draft action into one persistent playbook assignment per client app. Re-selecting a playbook updates that assignment; existing one-shot choices are recovered from the latest client draft during migration.
+
+The weekend-safe outreach cycle evaluates assigned playbooks after synchronizing mailbox history. It prepares a context-aware approval draft when the latest inbound email is unanswered, when an outbound email has received no reply for the assignment's follow-up interval, or when the relationship is due for periodic review. Default cadences are 15 minutes for replies, 5 days for lead follow-ups, 7 days for Direct/payment follow-ups, 14 days for lead and Stripe recovery reviews, and 30 days for Direct payment reviews. Exact source-message and time-window keys prevent duplicate drafts.
+
+The lead education prompt now treats the latest unanswered message as the primary task and must answer every explicit request before offering a next step. It includes the confirmed EpsiFlow onboarding path and both known commercial routes. Because the current product record still lacks a confirmed Direct price and fee table, the model must identify those terms for human confirmation rather than inventing them.
+
 ## Safety rules
 
 - No draft generation authorizes delivery.

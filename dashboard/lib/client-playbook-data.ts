@@ -18,6 +18,12 @@ export type LeadPlaybook = {
 
 export type ManagedPlaybook = ClientPlaybook | LeadPlaybook;
 
+export type ClientPlaybookAssignment = {
+  id: string; playbookId: string; contactId: string; status: "active" | "paused";
+  replyDelayMinutes: number; followupDays: number; periodicDays: number;
+  lastEvaluatedAt: string | null; lastDraftAt: string | null; lastTriggerKind: string | null;
+};
+
 export async function getClientPlaybooks(supabase: SupabaseClient, organizationId: string) {
   const readiness = await supabase.rpc("dashboard_epsiflow_playbook_library_ready");
   if (readiness.error || readiness.data !== true) return { ready: false, playbooks: [] as ManagedPlaybook[] };
@@ -45,5 +51,13 @@ export async function getClientPlaybooks(supabase: SupabaseClient, organizationI
 
 export async function getActiveClientPlaybooks(supabase: SupabaseClient, organizationId: string) {
   const result = await getClientPlaybooks(supabase, organizationId);
-  return { ready: result.ready, playbooks: result.playbooks.filter((playbook): playbook is ClientPlaybook => playbook.kind === "client" && playbook.status === "active" && playbook.triggerType === "manual_client_checkin") };
+  return { ready: result.ready, playbooks: result.playbooks.filter((playbook): playbook is ClientPlaybook => playbook.kind === "client" && playbook.status === "active") };
+}
+
+export async function getClientPlaybookAssignment(supabase: SupabaseClient, organizationId: string, clientAppId: string) {
+  const readiness = await supabase.rpc("dashboard_client_playbook_assignments_ready");
+  if (readiness.error || readiness.data !== true) return { ready:false, assignment:null as ClientPlaybookAssignment | null };
+  const {data,error}=await supabase.from("client_playbook_assignments").select("id,playbook_id,client_contact_id,status,reply_delay_minutes,followup_days,periodic_days,last_evaluated_at,last_draft_at,last_trigger_kind").eq("organization_id",organizationId).eq("client_app_id",clientAppId).maybeSingle();
+  if(error) return {ready:false,assignment:null as ClientPlaybookAssignment|null};
+  return {ready:true,assignment:data ? {id:data.id,playbookId:data.playbook_id,contactId:data.client_contact_id,status:data.status as ClientPlaybookAssignment["status"],replyDelayMinutes:data.reply_delay_minutes,followupDays:data.followup_days,periodicDays:data.periodic_days,lastEvaluatedAt:data.last_evaluated_at,lastDraftAt:data.last_draft_at,lastTriggerKind:data.last_trigger_kind}:null};
 }

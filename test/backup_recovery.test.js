@@ -5,7 +5,7 @@ const path = require('node:path');
 const { validateExport, expectedDatasets } = require('../scripts/verify_data_export');
 
 function validExport() {
-  return { schemaVersion: 5, generatedAt: new Date().toISOString(), organization: { id: 'org-1', name: 'EpsiFlow', slug: 'epsiflow' }, limits: { rowsPerDataset: 5000, truncated: Object.fromEntries(expectedDatasets.map(name => [name, false])) }, datasets: {
+  return { schemaVersion: 6, generatedAt: new Date().toISOString(), organization: { id: 'org-1', name: 'EpsiFlow', slug: 'epsiflow' }, limits: { rowsPerDataset: 5000, truncated: Object.fromEntries(expectedDatasets.map(name => [name, false])) }, datasets: {
     prospects: [{ id: 'prospect-1', email: 'person@example.com' }], customers: [{ id: 'customer-1', email: 'client@example.com' }],
     notes: [{ id: 'note-1', contact_kind: 'prospect', contact_id: 'prospect-1', body: 'Follow up' }], tasks: [{ id: 'task-1', contact_kind: 'customer', contact_id: 'customer-1', title: 'Review' }],
     recoveryCases: [{ id: 'case-1', crm_customer_id: 'customer-1' }], auditEvents: [{ id: 'event-1', metadata: { status: 'completed', row_count: 4 } }],
@@ -17,12 +17,13 @@ function validExport() {
     clientPlaybookDrafts: [{ id: 'playbook-draft-1', playbook_id: 'playbook-1', client_app_id: 'app-1', client_contact_id: 'contact-1', client_subscription_id: 'subscription-1' }],
     clientPlaybookAutomationRuns: [{ id: 'run-1', playbook_id: 'playbook-1', client_app_id: 'app-1', client_contact_id: 'contact-1', draft_id: 'playbook-draft-1' }],
     clientPlaybookDraftSources: [{ draft_id: 'playbook-draft-1', message_id: 'message-1', ordinal: 1 }],
+    clientPlaybookAssignments: [{ id: 'assignment-1', playbook_id: 'playbook-1', client_app_id: 'app-1', client_contact_id: 'contact-1', status: 'active' }],
   } };
 }
 
 test('validates a complete organization export using aggregate output only', () => {
   const result = validateExport(validExport());
-  assert.deepEqual(result.counts, { prospects: 1, customers: 1, notes: 1, tasks: 1, recoveryCases: 1, auditEvents: 1, clientApps: 1, clientContacts: 1, clientEmailMessages: 1, clientSubscriptions: 1, clientPlaybooks: 1, clientPlaybookVersions: 1, clientPlaybookDrafts: 1, clientPlaybookAutomationRuns: 1, clientPlaybookDraftSources: 1 });
+  assert.deepEqual(result.counts, { prospects: 1, customers: 1, notes: 1, tasks: 1, recoveryCases: 1, auditEvents: 1, clientApps: 1, clientContacts: 1, clientEmailMessages: 1, clientSubscriptions: 1, clientPlaybooks: 1, clientPlaybookVersions: 1, clientPlaybookDrafts: 1, clientPlaybookAutomationRuns: 1, clientPlaybookDraftSources: 1, clientPlaybookAssignments: 1 });
   assert.equal(JSON.stringify(result).includes('person@example.com'), false);
 });
 

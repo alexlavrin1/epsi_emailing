@@ -3,7 +3,7 @@
 import { useActionState, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { X } from "lucide-react";
-import type { ManagedPlaybook, ClientPlaybook } from "../../lib/client-playbook-data";
+import type { ManagedPlaybook, ClientPlaybook, ClientPlaybookAssignment } from "../../lib/client-playbook-data";
 import { setWorkflowStatus, updateReplyWorkflow } from "../dashboard/automations/actions";
 import { createClientPlaybook, setClientPlaybookStatus, updateClientPlaybook, type PlaybookActionState } from "../dashboard/playbooks/actions";
 import { createClientPlaybookDraftAction } from "../dashboard/clients/actions";
@@ -81,11 +81,12 @@ export function PlaybookDetailsModal({ playbook, isAdmin }: { playbook: ManagedP
   </>;
 }
 
-export function ClientPlaybookRunner({ clientAppId, contacts, playbooks }: { clientAppId: string; contacts: Array<{ id: string; name: string }>; playbooks: Array<{ id: string; name: string; channel: string }> }) {
+export function ClientPlaybookRunner({ clientAppId, contacts, playbooks, assignment }: { clientAppId: string; contacts: Array<{ id: string; name: string }>; playbooks: Array<{ id: string; name: string; channel: string }>; assignment:ClientPlaybookAssignment|null }) {
   const [state, action] = useActionState(createClientPlaybookDraftAction, initial);
   return <form className="action-form client-playbook-runner" action={action}><input type="hidden" name="client_app_id" value={clientAppId} />
-    <label>Playbook<select name="playbook_id" required defaultValue=""><option value="" disabled>Select a playbook</option>{playbooks.map(playbook => <option value={playbook.id} key={playbook.id}>{playbook.name} · {playbook.channel}</option>)}</select></label>
-    <label>Contact<select name="contact_id" required defaultValue={contacts[0]?.id || ""}>{contacts.map(contact => <option value={contact.id} key={contact.id}>{contact.name}</option>)}</select></label>
-    <Submit idle="Prepare draft" pending="Preparing draft…" /><small>No message is sent. The result appears in Approvals for editing and a decision.</small><Feedback state={state} />
+    {assignment ? <div className="playbook-assignment-status" role="status"><span className="status-badge status-active">Monitoring</span><strong>{playbooks.find(playbook=>playbook.id===assignment.playbookId)?.name || "Assigned playbook"}</strong><small>Replies after {assignment.replyDelayMinutes} min · follow-up after {assignment.followupDays} days · periodic review every {assignment.periodicDays} days</small></div> : <p className="muted">Choose once to keep this playbook attached to the relationship.</p>}
+    <label>Playbook<select name="playbook_id" required defaultValue={assignment?.playbookId || ""}><option value="" disabled>Select a playbook</option>{playbooks.map(playbook => <option value={playbook.id} key={playbook.id}>{playbook.name} · {playbook.channel}</option>)}</select></label>
+    <label>Primary contact<select name="contact_id" required defaultValue={assignment?.contactId || contacts[0]?.id || ""}>{contacts.map(contact => <option value={contact.id} key={contact.id}>{contact.name}</option>)}</select></label>
+    <Submit idle={assignment ? "Save assignment & prepare now" : "Assign playbook & prepare now"} pending="Saving assignment…" /><small>The 15-minute job checks synchronized mail for an unanswered inbound message, a due follow-up, or a periodic reminder. It only prepares an AI draft in Approvals; nothing is sent.</small><Feedback state={state} />
   </form>;
 }

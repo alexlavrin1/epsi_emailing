@@ -754,7 +754,7 @@ test("adds a tenant-scoped existing-client workspace with server-side email and 
     assert.match(exportRoute, new RegExp(`${dataset}:`));
     assert.match(verifier, new RegExp(`'${dataset}'`));
   }
-  assert.match(exportRoute, /schemaVersion: 5/);
+  assert.match(exportRoute, /schemaVersion: 6/);
   assert.match(exportRoute, /slack_chat_url/);
   assert.match(readiness, /orphan client correspondence/i);
   assert.match(rlsRegression, /anon can read existing-client data/i);
@@ -826,8 +826,8 @@ test("keeps client-success playbook drafts versioned, tenant-scoped, and inert",
   assert.match(nav, /href="\/dashboard\/playbooks"[\s\S]*?<span>Playbooks<\/span>/);
   assert.match(playbookPage, /Draft preparation only/);
   assert.match(playbookPage, /does not send email or Slack/);
-  assert.match(clientPage, /Prepare a check-in/);
-  assert.match(controls, /No message is sent/);
+  assert.match(clientPage, /Assigned playbook/);
+  assert.match(controls, /nothing is sent/i);
   assert.match(clientActions, /dashboard_create_client_playbook_draft/);
   assert.match(approvalActions, /dashboard_decide_client_playbook_draft/);
   assert.match(approvalControls, /Approval records readiness only/);
@@ -838,7 +838,7 @@ test("keeps client-success playbook drafts versioned, tenant-scoped, and inert",
     assert.match(exportRoute, new RegExp(`${dataset}:`));
     assert.match(verifier, new RegExp(`'${dataset}'`));
   }
-  assert.match(exportRoute, /schemaVersion: 5/);
+  assert.match(exportRoute, /schemaVersion: 6/);
 });
 
 test("keeps manual CRM relationship state authoritative over Stripe", async () => {
@@ -888,11 +888,11 @@ test("prepares scheduled client-success drafts idempotently without delivery", a
   assert.match(builder, /Scheduled relationship check-in/);
   assert.match(builder, /Churn reactivation/);
   assert.match(actions, /target_cooldown_days/);
-  assert.match(data, /manual_client_checkin/);
+  assert.match(data, /client_playbook_assignments/);
   assert.match(config, /CLIENT_SUCCESS_AUTOMATION_ENABLED \|\| 'false'/);
   assert.ok(engine.indexOf("prepareClientSuccessDrafts()") < engine.indexOf("if (isWeekend())"));
   assert.match(exportRoute, /clientPlaybookAutomationRuns/);
-  assert.match(exportRoute, /schemaVersion: 5/);
+  assert.match(exportRoute, /schemaVersion: 6/);
 });
 
 test("grounds context-aware client drafts in cited stored messages", async () => {
@@ -936,7 +936,7 @@ test("grounds context-aware client drafts in cited stored messages", async () =>
   assert.match(approvals, /cited conversation source/);
   assert.match(data, /client_playbook_draft_sources/);
   assert.match(exportRoute, /clientPlaybookDraftSources/);
-  assert.match(exportRoute, /schemaVersion: 5/);
+  assert.match(exportRoute, /schemaVersion: 6/);
   assert.match(verifier, /clientPlaybookDraftSources/);
 });
 
@@ -994,4 +994,37 @@ test("supports lead client records and manual lead education drafts", async () =
   assert.match(detail, /availablePlaybooks/);
   assert.match(detail, /key=\{`\$\{app\.id\}-\$\{app\.clientSegment\}/);
   assert.match(data, /neq\("preset_key", "lead_education_reply"\)/);
+});
+
+test("persists one playbook assignment per client and monitors reply and follow-up signals", async () => {
+  const [migration, controls, actions, detail, data, agent, exportRoute, verifier] = await Promise.all([
+    readFile(new URL("../database/migrations/036_persistent_client_playbook_assignments.sql", root), "utf8"),
+    readFile(new URL("app/components/client-playbook-controls.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/clients/actions.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/clients/[id]/page.tsx", root), "utf8"),
+    readFile(new URL("lib/client-playbook-data.ts", root), "utf8"),
+    readFile(new URL("../src/client-success/agent.js", root), "utf8"),
+    readFile(new URL("app/api/data-export/route.ts", root), "utf8"),
+    readFile(new URL("../scripts/verify_data_export.js", root), "utf8"),
+  ]);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS client_playbook_assignments/);
+  assert.match(migration, /UNIQUE \(client_app_id\)/);
+  assert.match(migration, /dashboard_assign_client_playbook/);
+  assert.match(migration, /latest_direction='inbound'/);
+  assert.match(migration, /trigger_kind:='followup'/);
+  assert.match(migration, /trigger_kind:='periodic'/);
+  assert.match(migration, /agent_status\) VALUES[\s\S]*'pending'/);
+  assert.match(migration, /lead_education_manual'[\s\S]*THEN 5/);
+  assert.match(migration, /answer each one directly/);
+  assert.doesNotMatch(migration, /sendTransactionalEmail|sendDirectMessage|chat\.postMessage/);
+  assert.match(actions, /dashboard_assign_client_playbook/);
+  assert.match(actions, /Playbook assigned permanently/);
+  assert.match(controls, /checks synchronized mail/);
+  assert.match(detail, /getClientPlaybookAssignment/);
+  assert.match(data, /client_playbook_assignments/);
+  assert.match(agent, /Never respond to a request for details/);
+  assert.match(agent, /EpsiFlow Direct monthly subscription/);
+  assert.match(exportRoute, /clientPlaybookAssignments/);
+  assert.match(exportRoute, /schemaVersion: 6/);
+  assert.match(verifier, /clientPlaybookAssignments/);
 });

@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
       clientPlaybookDrafts: client.from("client_playbook_drafts").select("id,playbook_id,playbook_version,client_app_id,client_contact_id,client_subscription_id,channel,recipient_label,subject,body,status,generation_mode,context_message_count,context_latest_message_at,agent_status,agent_attempt_count,agent_generated_at,agent_model,agent_response_id,agent_failure_code,agent_context_sha256,agent_context_warnings,decided_at,created_at,updated_at").eq("organization_id", organization.id).order("created_at").limit(limit + 1),
       clientPlaybookDraftSources: client.from("client_playbook_draft_sources").select("draft_id,message_id,ordinal,created_at").order("created_at").limit(limit + 1),
       clientPlaybookAutomationRuns: client.from("client_playbook_automation_runs").select("id,playbook_id,playbook_version,client_app_id,client_contact_id,trigger_key,status,draft_id,context_message_count,failure_code,created_at,completed_at").eq("organization_id", organization.id).order("created_at").limit(limit + 1),
+      clientPlaybookAssignments: client.from("client_playbook_assignments").select("id,client_app_id,client_contact_id,playbook_id,status,reply_delay_minutes,followup_days,periodic_days,last_evaluated_at,last_draft_at,last_trigger_kind,created_at,updated_at").eq("organization_id", organization.id).order("created_at").limit(limit + 1),
       auditEvents: client.from("audit_events").select("id,actor_user_id,event_type,target_type,target_id,metadata,created_at").eq("organization_id", organization.id).order("created_at").limit(limit + 1),
     };
     const entries = await Promise.all(Object.entries(queries).map(async ([name, query]) => [name, await query] as const));
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
     const rowCount = Object.values(datasets).reduce((total, rows) => total + rows.length, 0); const anyTruncated = Object.values(truncated).some(Boolean);
     const { error: auditError } = await client.rpc("dashboard_record_data_export", { target_organization_id: organization.id, target_dataset: "organization_bundle", target_row_count: rowCount, target_truncated: anyTruncated });
     if (auditError) return NextResponse.json({ error: "Export auditing requires migration 022." }, { status: 503 });
-    const payload = { schemaVersion: 5, generatedAt: new Date().toISOString(), organization, limits: { rowsPerDataset: limit, truncated }, datasets };
+    const payload = { schemaVersion: 6, generatedAt: new Date().toISOString(), organization, limits: { rowsPerDataset: limit, truncated }, datasets };
     const filename = `${organization.slug}-data-export-${new Date().toISOString().slice(0, 10)}.json`;
     return applyCookies(new NextResponse(JSON.stringify(payload, null, 2), { headers: { "content-type": "application/json; charset=utf-8", "content-disposition": `attachment; filename="${filename}"`, "cache-control": "private, no-store, max-age=0", "x-content-type-options": "nosniff" } }));
   } catch { return NextResponse.json({ error: "The organization export is unavailable." }, { status: 503 }); }

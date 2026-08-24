@@ -11,7 +11,8 @@ const legacyDatasets = ['prospects', 'customers', 'notes', 'tasks', 'recoveryCas
 const versionTwoDatasets = [...legacyDatasets, 'clientApps', 'clientContacts', 'clientEmailMessages'];
 const versionThreeDatasets = [...versionTwoDatasets, 'clientSubscriptions', 'clientPlaybooks', 'clientPlaybookVersions', 'clientPlaybookDrafts'];
 const versionFourDatasets = [...versionThreeDatasets, 'clientPlaybookAutomationRuns'];
-const expectedDatasets = [...versionFourDatasets, 'clientPlaybookDraftSources'];
+const versionFiveDatasets = [...versionFourDatasets, 'clientPlaybookDraftSources'];
+const expectedDatasets = [...versionFiveDatasets, 'clientPlaybookAssignments'];
 const forbiddenKeys = /(?:password|secret|access_token|refresh_token|oauth_token|last_error|ip_address|request_id)/i;
 
 function assert(condition, message) { if (!condition) throw new Error(message); }
@@ -23,7 +24,7 @@ function duplicateIds(rows) {
 
 function validateExport(payload) {
   assert(payload && typeof payload === 'object' && !Array.isArray(payload), 'Export root must be an object.');
-  assert([1, 2, 3, 4, 5].includes(payload.schemaVersion), 'Unsupported export schema version.');
+  assert([1, 2, 3, 4, 5, 6].includes(payload.schemaVersion), 'Unsupported export schema version.');
   assert(Number.isFinite(Date.parse(payload.generatedAt)), 'Export timestamp is invalid.');
   assert(Date.parse(payload.generatedAt) <= Date.now() + 300000, 'Export timestamp is in the future.');
   assert(payload.organization && typeof payload.organization.id === 'string' && typeof payload.organization.slug === 'string', 'Organization identity is missing.');
@@ -31,7 +32,7 @@ function validateExport(payload) {
   assert(payload.datasets && typeof payload.datasets === 'object', 'Datasets are missing.');
 
   const counts = {}; const truncated = {};
-  const datasetsForVersion = payload.schemaVersion === 1 ? legacyDatasets : payload.schemaVersion === 2 ? versionTwoDatasets : payload.schemaVersion === 3 ? versionThreeDatasets : payload.schemaVersion === 4 ? versionFourDatasets : expectedDatasets;
+  const datasetsForVersion = payload.schemaVersion === 1 ? legacyDatasets : payload.schemaVersion === 2 ? versionTwoDatasets : payload.schemaVersion === 3 ? versionThreeDatasets : payload.schemaVersion === 4 ? versionFourDatasets : payload.schemaVersion === 5 ? versionFiveDatasets : expectedDatasets;
   for (const name of datasetsForVersion) {
     const rows = payload.datasets[name];
     assert(Array.isArray(rows), `Dataset ${name} is missing.`);
@@ -90,6 +91,11 @@ function validateExport(payload) {
         assert(draftIds.has(row.draft_id), 'A playbook draft source references a draft missing from the export.');
         assert(messageIds.has(row.message_id), 'A playbook draft source references a message missing from the export.');
       }
+    }
+    if (payload.schemaVersion >= 6) for (const row of payload.datasets.clientPlaybookAssignments) {
+      assert(playbookIds.has(row.playbook_id), 'A playbook assignment references a playbook missing from the export.');
+      assert(appIds.has(row.client_app_id), 'A playbook assignment references an app missing from the export.');
+      assert(contactIds.has(row.client_contact_id), 'A playbook assignment references a contact missing from the export.');
     }
   }
 
