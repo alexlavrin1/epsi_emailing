@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireMembership } from "../../../lib/auth";
 import { createSupabaseServerClient } from "../../../lib/supabase-server";
+import { triggerClientPlaybookGeneration } from "../../../lib/client-playbook-generation";
 
 export type ApprovalActionState = { ok: boolean; message: string };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -104,11 +105,15 @@ export async function decideClientPlaybookDraft(_state: ApprovalActionState, for
 export async function regenerateClientPlaybookAgentDraft(_state: ApprovalActionState, formData: FormData): Promise<ApprovalActionState> {
   const { membership } = await requireMembership(); if (!membership) return { ok: false, message: "An active organization membership is required." };
   const draftId = String(formData.get("draft_id") || "");
+  const clientAppId = String(formData.get("client_app_id") || "");
   const feedback = String(formData.get("feedback") || "").trim();
-  if (!uuidPattern.test(draftId) || feedback.length > 4000) return { ok: false, message: "Feedback must be no more than 4,000 characters." };
+  if (!uuidPattern.test(draftId) || !uuidPattern.test(clientAppId) || feedback.length > 4000) return { ok: false, message: "Feedback must be no more than 4,000 characters." };
   const supabase = await createSupabaseServerClient(); if (!supabase) return { ok: false, message: "Unable to regenerate this AI draft." };
   const { error } = await supabase.rpc("dashboard_regenerate_client_playbook_agent_draft", { target_draft_id: draftId, target_feedback: feedback || null });
   if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "AI regeneration requires migration 039." : "Unable to regenerate this AI draft." };
+  const immediate = await triggerClientPlaybookGeneration(supabase, draftId, clientAppId);
   revalidatePath("/dashboard/approvals"); revalidatePath("/dashboard/audit");
-  return { ok: true, message: "AI regeneration queued with your feedback. The result will return here for approval; nothing will be sent." };
+  return immediate.completed
+    ? { ok: true, message: "AI draft regenerated with your feedback. Review the replacement below; nothing was sent." }
+    : { ok: true, message: "Regeneration is queued. The immediate attempt did not finish, so the background worker will retry it safely." };
 }

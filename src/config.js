@@ -97,6 +97,8 @@ module.exports = {
       parseInt(process.env.SLACK_FAILURE_ALERT_MAX_ATTEMPTS || '3', 10),
   },
   aiGateway: {
+    apiKey: process.env.AI_GATEWAY_API_KEY,
+    oidcToken: process.env.VERCEL_OIDC_TOKEN,
     authToken: process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN,
     clientSuccessAgentEnabled: String(process.env.CLIENT_SUCCESS_AGENT_ENABLED || 'false').toLowerCase() === 'true',
     clientSuccessModel: process.env.AI_GATEWAY_CLIENT_SUCCESS_MODEL || 'openai/gpt-5.6-luna',

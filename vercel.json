@@ -17,6 +17,9 @@
     },
     "api/cron/client-success.js": {
       "maxDuration": 60
+    },
+    "api/client-playbook-generate.js": {
+      "maxDuration": 60
     }
   },
   "crons": [

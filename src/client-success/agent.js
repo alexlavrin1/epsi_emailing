@@ -78,7 +78,11 @@ async function generateClientSuccessAgentDrafts(dependencies = {}) {
   const modelClient = dependencies.aiGateway || aiGateway;
   const contextLoader = dependencies.getContext || getClientConversationContext;
   let jobs;
-  try { jobs = await db.claimClientPlaybookAgentDrafts(config.aiGateway.clientSuccessAgentLimit); }
+  try {
+    jobs = dependencies.targetDraftId
+      ? await db.claimClientPlaybookAgentDraft(dependencies.targetDraftId, dependencies.targetClientAppId)
+      : await db.claimClientPlaybookAgentDrafts(config.aiGateway.clientSuccessAgentLimit);
+  }
   catch (error) {
     if (error?.code === 'PGRST202' || /service_claim_client_playbook_agent_drafts|schema cache/i.test(error?.message || '')) {
       logger.warn('Client-success drafting agent is not installed yet; continuing the client-success cycle');

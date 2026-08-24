@@ -5,6 +5,7 @@ const { generateClientSuccessAgentDrafts, validateOutput } = require('../src/cli
 const { createStructuredClientDraft, AI_GATEWAY_RESPONSES_URL } = require('../src/integrations/ai-gateway/client');
 const { getVercelOidcToken } = require('../src/integrations/ai-gateway/vercel-auth');
 const { createClientSuccessHandler } = require('../api/cron/client-success');
+const { createClientPlaybookGenerateHandler } = require('../api/client-playbook-generate');
 
 const messageId = 'da94562f-a209-421e-b482-d2631a89097a';
 const context = {
@@ -66,11 +67,25 @@ test('rejects hallucinated citations and Slack subjects', () => {
 });
 
 test('uses Vercel AI Gateway with medium reasoning, strict output, and storage disabled', async () => {
-  let request; let requestUrl;
-  const result = await createStructuredClientDraft({ system: 'System', user: 'User' }, { authToken: 'test-token', model: 'openai/test-model', reasoningEffort: 'medium', fetch: async (url, options) => { requestUrl = url; request = JSON.parse(options.body); return { ok: true, status: 200, json: async () => ({ id: 'resp-1', status: 'completed', output: [{ type: 'reasoning' }, { type: 'message', content: [{ type: 'output_text', text: JSON.stringify({ subject: 'Subject', body: 'Body', source_message_ids: [], context_warnings: [] }) }] }] }) }; } });
+  let request; let requestUrl; let authorization;
+  const result = await createStructuredClientDraft({ system: 'System', user: 'User' }, { apiKey: 'configured-gateway-key', authToken: 'runtime-oidc-token', model: 'openai/test-model', reasoningEffort: 'medium', fetch: async (url, options) => { requestUrl = url; request = JSON.parse(options.body); authorization=options.headers.authorization; return { ok: true, status: 200, json: async () => ({ id: 'resp-1', status: 'completed', output: [{ type: 'reasoning' }, { type: 'message', content: [{ type: 'output_text', text: JSON.stringify({ subject: 'Subject', body: 'Body', source_message_ids: [], context_warnings: [] }) }] }] }) }; } });
   assert.equal(requestUrl, AI_GATEWAY_RESPONSES_URL); assert.equal(request.model, 'openai/test-model'); assert.equal(request.reasoning.effort, 'medium');
+  assert.equal(authorization, 'Bearer configured-gateway-key');
   assert.equal(request.store, false); assert.equal(request.text.format.type, 'json_schema'); assert.equal(request.text.format.strict, true); assert.equal(request.text.format.schema.additionalProperties, false);
   assert.equal(result.responseId, 'resp-1'); assert.equal(result.output.body, 'Body');
+});
+
+test('uses a sanitized Gateway error code without retaining provider details', async () => {
+  await assert.rejects(() => createStructuredClientDraft({ system: 'System', user: 'User' }, { apiKey: 'configured-gateway-key', fetch: async () => ({ ok: false, status: 403, json: async () => ({ error: { code: 'insufficient_credits', message: 'private billing detail' } }) }) }), error => error.code === 'ai_gateway_http_403_insufficient_credits' && !error.message.includes('billing'));
+});
+
+test('immediately generates only the authenticated client draft requested', async () => {
+  const draftId='da94562f-a209-421e-b482-d2631a89097a'; const appId='6b4badc3-5e16-4a1a-ae4d-300160045780'; let generation;
+  const handler=createClientPlaybookGenerateHandler({ db:{ authorizeClientSync:async (token,id)=>token==='user-token'&&id===appId ? { id } : null }, generate:async dependencies=>{ generation=dependencies; return { enabled:true,claimed:1,completed:1,failed:0 }; } });
+  const response=()=>({statusCode:0,body:null,status(code){this.statusCode=code;return this;},json(body){this.body=body;return this;}});
+  const denied=response(); await handler({method:'POST',headers:{},body:{draft_id:draftId,client_app_id:appId}},denied); assert.equal(denied.statusCode,401);
+  const accepted=response(); await handler({method:'POST',headers:{authorization:'Bearer user-token','x-vercel-oidc-token':'runtime-token'},body:{draft_id:draftId,client_app_id:appId}},accepted);
+  assert.equal(accepted.statusCode,200); assert.equal(accepted.body.result.completed,1); assert.equal(generation.targetDraftId,draftId); assert.equal(generation.targetClientAppId,appId); assert.equal(generation.authToken,'runtime-token');
 });
 
 test('client-success Vercel cron requires the configured bearer secret', async () => {

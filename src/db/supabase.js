@@ -972,6 +972,12 @@ async function claimClientPlaybookAgentDrafts(limit = 3) {
   return data || [];
 }
 
+async function claimClientPlaybookAgentDraft(draftId, clientAppId) {
+  const { data, error } = await supabase.rpc('service_claim_client_playbook_agent_draft', { target_draft_id: draftId, target_client_app_id: clientAppId });
+  if (error) throw error;
+  return data || [];
+}
+
 async function completeClientPlaybookAgentDraft({ draftId, subject, body, sourceMessageIds, warnings, contextSha256, contextMessageCount, contextLatestMessageAt, model, responseId }) {
   const { error } = await supabase.rpc('service_complete_client_playbook_agent_draft', {
     target_draft_id: draftId,
@@ -1068,6 +1074,7 @@ module.exports = {
   failClientStripeSync,
   prepareDueClientPlaybookDrafts,
   claimClientPlaybookAgentDrafts,
+  claimClientPlaybookAgentDraft,
   completeClientPlaybookAgentDraft,
   failClientPlaybookAgentDraft,
 };

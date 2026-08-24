@@ -1084,7 +1084,37 @@ test("regenerates an open AI draft with audited operator feedback and no deliver
   assert.match(controls, /Feedback for AI/);
   assert.match(controls, /Regenerate with AI/);
   assert.match(controls, /maxLength=\{4000\}/);
-  assert.match(controls, /Queueing regeneration/);
+  assert.match(controls, /Regenerating/);
   assert.match(page, /agentRegenerationCount/);
   assert.match(exportRoute, /agent_regeneration_feedback/);
+});
+
+test("runs feedback regeneration immediately for exactly one authenticated client draft", async () => {
+  const [migration, endpoint, trigger, actions, controls, page, config, gateway, vercel] = await Promise.all([
+    readFile(new URL("../database/migrations/040_immediate_client_agent_generation.sql", root), "utf8"),
+    readFile(new URL("../api/client-playbook-generate.js", root), "utf8"),
+    readFile(new URL("lib/client-playbook-generation.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/approvals/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/approval-controls.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/approvals/page.tsx", root), "utf8"),
+    readFile(new URL("../src/config.js", root), "utf8"),
+    readFile(new URL("../src/integrations/ai-gateway/client.js", root), "utf8"),
+    readFile(new URL("../vercel.json", root), "utf8"),
+  ]);
+  assert.match(migration, /service_claim_client_playbook_agent_draft\(target_draft_id UUID,target_client_app_id UUID\)/);
+  assert.match(migration, /draft\.id=target_draft_id/);
+  assert.match(migration, /app\.id=target_client_app_id/);
+  assert.match(migration, /agent_failure_code IS NULL/);
+  assert.doesNotMatch(migration + endpoint, /sendTransactionalEmail|sendDirectMessage|chat\.postMessage/);
+  assert.match(endpoint, /authorizeClientSync\(token, clientAppId\)/);
+  assert.match(endpoint, /targetDraftId: draftId/);
+  assert.match(trigger, /supabase\.auth\.getSession\(\)/);
+  assert.match(trigger, /\/api\/client-playbook-generate/);
+  assert.match(actions, /await triggerClientPlaybookGeneration/);
+  assert.match(controls, /client_app_id/);
+  assert.match(controls, /pendingLabel="Regenerating…"/);
+  assert.match(page, /draft\.agentStatus === "pending" && Boolean\(draft\.agentFailureCode\)/);
+  assert.match(config, /apiKey: process\.env\.AI_GATEWAY_API_KEY/);
+  assert.match(gateway, /dependencies\.apiKey \|\| config\.aiGateway\.apiKey \|\| dependencies\.authToken/);
+  assert.match(vercel, /api\/client-playbook-generate\.js/);
 });

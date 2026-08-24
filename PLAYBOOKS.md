@@ -161,6 +161,8 @@ Migration 037 creates a new immutable version of the lead education playbook wit
 
 Migration 039 adds a regeneration loop to every open client-success draft. An operator can supply up to 4,000 characters of feedback and queue a replacement AI draft grounded in the same complete conversation, CRM state, pricing facts, and pinned playbook version. Feedback may change emphasis, tone, structure, or identify a missing answer, but cannot override factual and no-delivery safeguards. Each request is tenant-scoped, audited without copying feedback into broad audit metadata, and returns to the same approval checkpoint.
 
+Migration 040 makes that loop immediate: after the audited database reset, the dashboard calls a user-authenticated engine endpoint that authorizes the client app and atomically claims only the selected draft. The configured AI Gateway API key takes precedence over runtime OIDC, with the cron retained only as a failure fallback. A retryable pending draft with a sanitized failure code keeps its regeneration controls visible.
+
 ## Safety rules
 
 - No draft generation authorizes delivery.
