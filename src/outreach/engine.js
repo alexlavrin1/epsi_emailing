@@ -44,7 +44,7 @@ function isAfterBusinessHours() {
  * 4. Step 1 → new email thread; step 2+ → threaded reply.
  * 5. After sending: mark sent, schedule the next step.
  */
-async function runOutreachCycle() {
+async function runOutreachCycle(dependencies = {}) {
   logger.info('Starting outreach cycle...');
 
   if (!config.supabase.isServerKey) {
@@ -59,7 +59,7 @@ async function runOutreachCycle() {
   // disabled or outside business hours.
   await syncExistingClientWorkspace();
   await prepareClientSuccessDrafts();
-  await processReplyAutomationRuns();
+  await processReplyAutomationRuns({ leadAgentDependencies: { authToken: dependencies.authToken } });
   await deliverOperatorEmailReplies();
   await checkForReplies();
 
@@ -252,7 +252,7 @@ async function runMonitoredOutreachCycle(dependencies = {}) {
   }
 
   try {
-    const result = await cycle();
+    const result = await cycle(dependencies.cycleDependencies || {});
     if (tracking) {
       try {
         await database.finishAutomationWorkerCycle(cycleKey, 'succeeded', null);

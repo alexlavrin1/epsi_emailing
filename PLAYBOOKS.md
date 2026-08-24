@@ -129,7 +129,7 @@ Migration 033 implements the disabled-by-default Slice 5 agent queue. The bounde
 - Store citations to source message IDs and surface missing context
 - Never infer that a Stripe cancellation closes the CRM relationship
 - Default to `openai/gpt-5.6-luna` with `medium` reasoning to balance drafting quality and cost
-- Authenticate with Vercel's automatic short-lived `VERCEL_OIDC_TOKEN` in deployments, or a server-only `AI_GATEWAY_API_KEY` for local development
+- Authenticate with Vercel's automatic short-lived `x-vercel-oidc-token` function-request header in deployments, or a server-only `AI_GATEWAY_API_KEY` for local development
 - Require `CLIENT_SUCCESS_AGENT_ENABLED=true`; otherwise no model request is made
 
 Wise balance and top-up tracking is deferred until the core CRM automation, approvals, and delivery loop is operational.

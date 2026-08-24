@@ -37,7 +37,7 @@ async function generateLeadReplyDraft(version, context, dependencies = {}) {
   const client = dependencies.aiGateway || aiGateway;
   const serialized = JSON.stringify(context);
   if (serialized.length > config.aiGateway.clientSuccessMaxContextChars) throw Object.assign(new Error('Complete lead context exceeds the configured safe limit'), { code: 'lead_context_too_large' });
-  const response = await client.createStructuredResponse({ ...buildLeadPrompts(version, context), schemaName: 'lead_reply_draft', schema: LEAD_REPLY_SCHEMA });
+  const response = await client.createStructuredResponse({ ...buildLeadPrompts(version, context), schemaName: 'lead_reply_draft', schema: LEAD_REPLY_SCHEMA }, { authToken: dependencies.authToken });
   const output = response.output;
   const body = String(output?.body || '').trim();
   if (!body || body.length > 10000) throw Object.assign(new Error('Invalid lead reply body'), { code: 'model_body_invalid' });

@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const config = require('../src/config');
 const { generateClientSuccessAgentDrafts, validateOutput } = require('../src/client-success/agent');
 const { createStructuredClientDraft, AI_GATEWAY_RESPONSES_URL } = require('../src/integrations/ai-gateway/client');
+const { getVercelOidcToken } = require('../src/integrations/ai-gateway/vercel-auth');
 const { createClientSuccessHandler } = require('../api/cron/client-success');
 
 const messageId = 'da94562f-a209-421e-b482-d2631a89097a';
@@ -36,7 +37,9 @@ test('generates an approval draft from complete context with validated citations
     const result = await generateClientSuccessAgentDrafts({
       db: { claimClientPlaybookAgentDrafts: async () => [job], completeClientPlaybookAgentDraft: async value => completed.push(value), failClientPlaybookAgentDraft: async () => assert.fail('must not fail') },
       getContext: async () => context,
-      aiGateway: { createStructuredClientDraft: async prompts => {
+      authToken: 'runtime-oidc-token',
+      aiGateway: { createStructuredClientDraft: async (prompts, auth) => {
+        assert.equal(auth.authToken, 'runtime-oidc-token');
         assert.match(prompts.system, /untrusted evidence/i); assert.match(prompts.system, /Use every supplied message/i); assert.match(prompts.system, /answer every one directly/i); assert.match(prompts.system, /EpsiFlow Direct costs \$66 per month/); assert.match(prompts.system, /\$1,160 for \$1,000/); assert.match(prompts.system, /approximately \$91 per direct transfer/); assert.match(prompts.user, /How is the account balance/); assert.match(prompts.user, /Never infer payment status/);
         return { model: 'test-model', responseId: 'resp-safe', output: { subject: 'A quick check-in', body: 'Hi Tarang, how are things going?', source_message_ids: [messageId], context_warnings: [] } };
       } },
@@ -71,11 +74,17 @@ test('uses Vercel AI Gateway with medium reasoning, strict output, and storage d
 });
 
 test('client-success Vercel cron requires the configured bearer secret', async () => {
-  const original = process.env.CRON_SECRET; process.env.CRON_SECRET = 'configured-secret'; let calls = 0;
-  const handler = createClientSuccessHandler({ generate: async () => { calls++; return { enabled: true, claimed: 1, completed: 1, failed: 0 }; } });
+  const original = process.env.CRON_SECRET; process.env.CRON_SECRET = 'configured-secret'; let calls = 0; let receivedToken;
+  const handler = createClientSuccessHandler({ generate: async dependencies => { calls++; receivedToken=dependencies.authToken; return { enabled: true, claimed: 1, completed: 1, failed: 0 }; } });
   const response = () => ({ statusCode: 0, body: null, status(code) { this.statusCode=code; return this; }, json(body) { this.body=body; return this; } });
   try {
     const denied=response(); await handler({ headers:{} },denied); assert.equal(denied.statusCode,401); assert.equal(calls,0);
-    const accepted=response(); await handler({ headers:{authorization:'Bearer configured-secret'} },accepted); assert.equal(accepted.statusCode,200); assert.equal(accepted.body.result.completed,1); assert.equal(calls,1);
+    const accepted=response(); await handler({ headers:{authorization:'Bearer configured-secret','x-vercel-oidc-token':'runtime-oidc-token'} },accepted); assert.equal(accepted.statusCode,200); assert.equal(accepted.body.result.completed,1); assert.equal(calls,1); assert.equal(receivedToken,'runtime-oidc-token');
   } finally { if (original === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET=original; }
+});
+
+test('accepts only one bounded Vercel runtime OIDC header value', () => {
+  assert.equal(getVercelOidcToken({ 'x-vercel-oidc-token': '  signed.token  ' }), 'signed.token');
+  assert.equal(getVercelOidcToken({ 'x-vercel-oidc-token': ['one','two'] }), undefined);
+  assert.equal(getVercelOidcToken({ 'x-vercel-oidc-token': 'x'.repeat(16385) }), undefined);
 });

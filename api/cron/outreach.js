@@ -1,5 +1,6 @@
 require('../../src/env');
 const { runMonitoredOutreachCycle } = require('../../src/outreach/engine');
+const { getVercelOidcToken } = require('../../src/integrations/ai-gateway/vercel-auth');
 const logger = require('../../src/utils/logger');
 
 module.exports = async function handler(req, res) {
@@ -11,7 +12,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    await runMonitoredOutreachCycle();
+    await runMonitoredOutreachCycle({ cycleDependencies: { authToken: getVercelOidcToken(req.headers) } });
     return res.status(200).json({ ok: true, ts: new Date().toISOString() });
   } catch (err) {
     logger.error('Cron handler error', err);

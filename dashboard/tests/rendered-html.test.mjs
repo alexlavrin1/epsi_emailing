@@ -1045,3 +1045,27 @@ test("pins authoritative EpsiFlow pricing in a new immutable lead playbook versi
   assert.match(productContext, /\| \$3,500 \| \$3,770 \|/);
   assert.match(plan, /Slice 8 — authoritative pricing/);
 });
+
+test("forwards Vercel runtime AI credentials and safely retries failed client drafts", async () => {
+  const [migration, clientCron, outreachCron, agent, actions, controls, page] = await Promise.all([
+    readFile(new URL("../database/migrations/038_client_agent_retry.sql", root), "utf8"),
+    readFile(new URL("../api/cron/client-success.js", root), "utf8"),
+    readFile(new URL("../api/cron/outreach.js", root), "utf8"),
+    readFile(new URL("../src/client-success/agent.js", root), "utf8"),
+    readFile(new URL("app/dashboard/approvals/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/approval-controls.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/approvals/page.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /dashboard_retry_client_playbook_agent_draft/);
+  assert.match(migration, /agent_attempt_count=0/);
+  assert.match(migration, /dashboard_is_org_member/);
+  assert.match(migration, /client\.playbook\.agent_draft_retry_queued/);
+  assert.doesNotMatch(migration, /sendTransactionalEmail|sendDirectMessage|chat\.postMessage/);
+  assert.match(clientCron, /getVercelOidcToken\(req\.headers\)/);
+  assert.match(outreachCron, /getVercelOidcToken\(req\.headers\)/);
+  assert.match(agent, /authToken: dependencies\.authToken/);
+  assert.match(actions, /dashboard_retry_client_playbook_agent_draft/);
+  assert.match(controls, /Retry AI draft/);
+  assert.match(controls, /Queueing retry/);
+  assert.match(page, /agentStatus=\{draft\.agentStatus\}/);
+});

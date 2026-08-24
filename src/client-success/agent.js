@@ -89,7 +89,7 @@ async function generateClientSuccessAgentDrafts(dependencies = {}) {
       const serialized = serializeContext(context);
       if (serialized.length > config.aiGateway.clientSuccessMaxContextChars) throw Object.assign(new Error('Complete client context exceeds the configured safe limit'), { code: 'client_context_too_large' });
       const contextSha256 = createHash('sha256').update(serialized).digest('hex');
-      const response = await modelClient.createStructuredClientDraft(buildPrompts(job, context, serialized));
+      const response = await modelClient.createStructuredClientDraft(buildPrompts(job, context, serialized), { authToken: dependencies.authToken });
       const draft = validateOutput(job, context, response.output);
       await db.completeClientPlaybookAgentDraft({ draftId: job.id, ...draft, contextSha256, contextMessageCount: context.sourceMessageCount, contextLatestMessageAt: context.conversations.email.at(-1)?.occurred_at || null, model: response.model, responseId: response.responseId });
       completed++;
