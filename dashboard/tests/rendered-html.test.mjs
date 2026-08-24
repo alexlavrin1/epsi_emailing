@@ -1118,3 +1118,23 @@ test("runs feedback regeneration immediately for exactly one authenticated clien
   assert.match(gateway, /dependencies\.apiKey \|\| config\.aiGateway\.apiKey \|\| dependencies\.authToken/);
   assert.match(vercel, /api\/client-playbook-generate\.js/);
 });
+
+test("edits the displayed client playbook draft inline before approval", async () => {
+  const [controls, page, actions, styles] = await Promise.all([
+    readFile(new URL("app/components/approval-controls.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/approvals/page.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/approvals/actions.ts", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
+  assert.match(controls, /client-inline-draft-editor/);
+  assert.match(controls, /Draft subject/);
+  assert.match(controls, /Draft message/);
+  assert.match(controls, /Save changes/);
+  assert.match(controls, /Unsaved changes — save them before approval/);
+  assert.match(controls, /disabled=\{dirty\}/);
+  const clientControl = controls.match(/export function ClientPlaybookDraftControl[\s\S]+/)?.[0] || "";
+  assert.doesNotMatch(clientControl, /<summary>Edit draft<\/summary>/);
+  assert.match(page, /editable \? <ClientPlaybookDraftControl/);
+  assert.match(actions, /dashboard_update_client_playbook_draft/);
+  assert.match(styles, /\.client-inline-draft-editor textarea \{ min-height: 220px/);
+});

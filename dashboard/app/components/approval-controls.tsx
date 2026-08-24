@@ -1,14 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { decideClientPlaybookDraft, disposeReply, queueReply, regenerateClientPlaybookAgentDraft, retryRecoveryMessage, updateClientPlaybookDraft, updateReplyDraft, type ApprovalActionState } from "../dashboard/approvals/actions";
 
 const initialState: ApprovalActionState = { ok: false, message: "" };
 
-function ActionButton({ label, pendingLabel, tone = "primary" }: { label: string; pendingLabel: string; tone?: "primary" | "secondary" | "danger" }) {
+function ActionButton({ label, pendingLabel, tone = "primary", disabled = false }: { label: string; pendingLabel: string; tone?: "primary" | "secondary" | "danger"; disabled?: boolean }) {
   const { pending } = useFormStatus();
-  return <button className={`${tone}-button compact-button`} disabled={pending} type="submit">{pending ? pendingLabel : label}</button>;
+  return <button className={`${tone}-button compact-button`} disabled={pending || disabled} type="submit">{pending ? pendingLabel : label}</button>;
 }
 
 function Feedback({ state }: { state: ApprovalActionState }) {
@@ -34,6 +34,27 @@ export function ClientPlaybookDraftControl({ id, clientAppId, channel, subject, 
   const [cancelState, cancelAction] = useActionState(decideClientPlaybookDraft, initialState);
   const [editState, editAction] = useActionState(updateClientPlaybookDraft, initialState);
   const [regenerateState, regenerateAction] = useActionState(regenerateClientPlaybookAgentDraft, initialState);
+  const [draftSubject, setDraftSubject] = useState(subject || "");
+  const [draftBody, setDraftBody] = useState(body);
   const feedbackHelpId = `ai-feedback-help-${id}`;
-  return <div className="approval-control client-draft-control"><form className="action-form ai-regeneration-form" action={regenerateAction} onSubmit={event => { if (!window.confirm(`Regenerate this draft for ${contact} with AI? The current draft will remain unsent and the replacement will still require approval.`)) event.preventDefault(); }}><input type="hidden" name="draft_id" value={id} /><input type="hidden" name="client_app_id" value={clientAppId} /><label>Feedback for AI <span>(optional)</span><textarea name="feedback" maxLength={4000} aria-describedby={feedbackHelpId} placeholder="For example: answer the pricing question first, make the tone warmer, and suggest the $500 plan." /></label><small id={feedbackHelpId}>The AI will use this guidance together with the full stored conversation and playbook. Maximum 4,000 characters.</small><ActionButton label="Regenerate with AI" pendingLabel="Regenerating…" tone="secondary" /></form><Feedback state={regenerateState} /><form action={approveAction} onSubmit={event => { if (!window.confirm(`Approve this ${channel} draft for ${contact}? Approval records readiness only; it will not send.`)) event.preventDefault(); }}><input type="hidden" name="draft_id" value={id} /><input type="hidden" name="decision" value="approve" /><ActionButton label="Approve as ready" pendingLabel="Approving…" /></form><details className="approval-editor"><summary>Edit draft</summary><form className="action-form" action={editAction}><input type="hidden" name="draft_id" value={id} />{channel === "email" ? <label>Subject <span>(required)</span><input name="subject" required maxLength={998} defaultValue={subject || ""} /></label> : <input type="hidden" name="subject" value="" />}<label>Message <span>(required)</span><textarea name="body" required minLength={1} maxLength={10000} defaultValue={body} /></label><ActionButton label="Save draft" pendingLabel="Saving…" tone="secondary" /></form><Feedback state={editState} /></details><form action={cancelAction} onSubmit={event => { if (!window.confirm(`Cancel this ${channel} draft for ${contact}? Nothing will be sent.`)) event.preventDefault(); }}><input type="hidden" name="draft_id" value={id} /><input type="hidden" name="decision" value="cancel" /><ActionButton label="Cancel" pendingLabel="Cancelling…" tone="danger" /></form><Feedback state={approveState} /><Feedback state={cancelState} /></div>;
+  const editorHelpId = `draft-editor-help-${id}`;
+  const dirty = draftSubject !== (subject || "") || draftBody !== body;
+  return <div className="approval-control client-draft-control">
+    <form className="action-form client-inline-draft-editor" action={editAction}>
+      <input type="hidden" name="draft_id" value={id} />
+      {channel === "email" ? <label>Draft subject <span>(required)</span><input name="subject" required maxLength={998} value={draftSubject} onChange={event => setDraftSubject(event.target.value)} /></label> : <input type="hidden" name="subject" value="" />}
+      <label>Draft message <span>(required)</span><textarea name="body" required minLength={1} maxLength={10000} value={draftBody} onChange={event => setDraftBody(event.target.value)} aria-describedby={editorHelpId} /></label>
+      <small id={editorHelpId}>Edit the generated text directly, then save your changes. Saving does not send the message.</small>
+      <ActionButton label="Save changes" pendingLabel="Saving…" tone="secondary" disabled={!dirty} />
+    </form>
+    <Feedback state={editState} />
+    <form className="action-form ai-regeneration-form" action={regenerateAction} onSubmit={event => { if (!window.confirm(`Regenerate this draft for ${contact} with AI? The current draft will remain unsent and the replacement will still require approval.`)) event.preventDefault(); }}><input type="hidden" name="draft_id" value={id} /><input type="hidden" name="client_app_id" value={clientAppId} /><label>Feedback for AI <span>(optional)</span><textarea name="feedback" maxLength={4000} aria-describedby={feedbackHelpId} placeholder="For example: answer the pricing question first, make the tone warmer, and suggest the $500 plan." /></label><small id={feedbackHelpId}>The AI will use this guidance together with the full stored conversation and playbook. Maximum 4,000 characters.</small><ActionButton label="Regenerate with AI" pendingLabel="Regenerating…" tone="secondary" disabled={dirty} /></form>
+    <Feedback state={regenerateState} />
+    {dirty ? <p className="client-draft-unsaved" role="status">Unsaved changes — save them before approval.</p> : null}
+    <div className="client-draft-actions">
+      <form action={approveAction} onSubmit={event => { if (!window.confirm(`Approve this ${channel} draft for ${contact}? Approval records readiness only; it will not send.`)) event.preventDefault(); }}><input type="hidden" name="draft_id" value={id} /><input type="hidden" name="decision" value="approve" /><ActionButton label="Approve as ready" pendingLabel="Approving…" disabled={dirty} /></form>
+      <form action={cancelAction} onSubmit={event => { if (!window.confirm(`Cancel this ${channel} draft for ${contact}? Nothing will be sent.`)) event.preventDefault(); }}><input type="hidden" name="draft_id" value={id} /><input type="hidden" name="decision" value="cancel" /><ActionButton label="Cancel" pendingLabel="Cancelling…" tone="danger" /></form>
+    </div>
+    <Feedback state={approveState} /><Feedback state={cancelState} />
+  </div>;
 }
