@@ -151,7 +151,11 @@ Migration 036 changes the client-page picker from a one-time draft action into o
 
 The weekend-safe outreach cycle evaluates assigned playbooks after synchronizing mailbox history. It prepares a context-aware approval draft when the latest inbound email is unanswered, when an outbound email has received no reply for the assignment's follow-up interval, or when the relationship is due for periodic review. Default cadences are 15 minutes for replies, 5 days for lead follow-ups, 7 days for Direct/payment follow-ups, 14 days for lead and Stripe recovery reviews, and 30 days for Direct payment reviews. Exact source-message and time-window keys prevent duplicate drafts.
 
-The lead education prompt now treats the latest unanswered message as the primary task and must answer every explicit request before offering a next step. It includes the confirmed EpsiFlow onboarding path and both known commercial routes. Because the current product record still lacks a confirmed Direct price and fee table, the model must identify those terms for human confirmation rather than inventing them.
+The lead education prompt now treats the latest unanswered message as the primary task and must answer every explicit request before offering a next step. It includes the confirmed EpsiFlow onboarding path and both known commercial routes.
+
+### Slice 8 — authoritative pricing
+
+Migration 037 creates a new immutable version of the lead education playbook with the confirmed Stripe budget/payment pairs and EpsiFlow Direct charges. Pricing questions must be answered directly, the approximate $91 Direct transfer charge must remain qualified, and unconfirmed refund, custody, tax, and FX terms still require human confirmation. Existing approvals retain the exact older version that produced them.
 
 ## Safety rules
 

@@ -107,7 +107,7 @@ A short call is scheduled with the customer to provide or transfer the relevant 
 
 The customer adds the EpsiFlow-provided payment method to the relevant Shopify advertising billing setup and can then begin paying for Shopify Ads through the EpsiFlow infrastructure.
 
-The customer adds funds according to the relevant EpsiFlow plan or funding process. Project discussions reference Stripe-based plans and card top-ups, including a $500 plan example.
+The customer adds funds through either an automatically renewing Stripe plan or EpsiFlow Direct. The confirmed commercial terms are listed below.
 
 Through the EpsiFund application, the customer can monitor ad spending, invoices, and funding/account-related information.
 
@@ -115,15 +115,30 @@ The customer may also share a Slack email address so EpsiFlow can add them to th
 
 ## 10. Payments and Funding Model
 
-EpsiFlow customers fund their advertising payment setup and then use the issued card for supported transactions.
+EpsiFlow customers fund their advertising payment setup and then use the issued card for supported transactions. The following terms were confirmed by the operator on 2026-08-24.
 
-Project discussions reference Stripe plans corresponding to funding levels, including a $500 plan.
+Stripe plans automatically renew each month and top up the corresponding Ads budget:
+
+| Ads budget | Customer pays |
+| ---: | ---: |
+| $100 | $160 |
+| $500 | $630 |
+| $1,000 | $1,160 |
+| $1,500 | $1,695 |
+| $2,000 | $2,200 |
+| $2,500 | $2,720 |
+| $3,000 | $3,245 |
+| $3,500 | $3,770 |
+
+EpsiFlow Direct costs $66 per month regardless of top-up activity, plus approximately $91 per direct transfer. Customer-facing messages must describe the transfer amount as approximate.
+
+The Stripe route is positioned as the quickest start with no paperwork and predictable automatic monthly top-ups. The Direct route avoids Stripe as an intermediary, gives the customer more control over when funds are allocated, and may reduce intermediary fees.
 
 A prospect specifically asked for the exact Stripe fee for a $500 top-up, the effective percentage fee by plan, whether unused balances are refundable, refund timelines, refund fees or minimums, and where customer balances are held before they are spent.
 
 These questions reveal what sophisticated prospects care about most: total cost, liquidity, custody/security of funds, exit mechanics, and operational transparency.
 
-At present, the project context does not contain a fully confirmed fee table, refund policy, or legal custody description, so those details should not be invented.
+The price table and Direct charges above are confirmed. Refund policy, taxes, FX costs, legal custody, and other unlisted terms remain unconfirmed and must not be invented.
 
 ## 11. Known Payment Reliability Issue: 3DS / Stripe
 
@@ -289,15 +304,11 @@ The strongest claim is narrower:
 
 ## 22. Business Model
 
-The EpsiFlow model appears to generate revenue from customer plans and/or fees related to funding or card usage.
-
-The project references Stripe plans and top-up amounts.
-
-However, the current project context does not contain a confirmed complete pricing table.
+The EpsiFlow model generates revenue from Stripe-plan price differences and from EpsiFlow Direct subscription and transfer charges. The confirmed customer-facing price table is in Section 10.
 
 Important commercial variables include fee per top-up, effective percentage charged to the customer, plan tiers, FX costs, card/network fees, banking or issuer fees, Stripe fees, EpsiFlow gross margin, refund costs, support costs, chargebacks, failed-payment costs, and compliance costs.
 
-A transparent customer-facing pricing page should ideally state the final effective cost rather than forcing customers to reverse-engineer fee percentages.
+Customer-facing drafts should state both the Ads budget and total amount paid so customers do not need to reverse-engineer the cost.
 
 ## 23. Possible Pricing / Sales Positioning
 

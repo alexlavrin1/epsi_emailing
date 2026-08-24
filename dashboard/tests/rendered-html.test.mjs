@@ -1023,8 +1023,25 @@ test("persists one playbook assignment per client and monitors reply and follow-
   assert.match(detail, /getClientPlaybookAssignment/);
   assert.match(data, /client_playbook_assignments/);
   assert.match(agent, /Never respond to a request for details/);
-  assert.match(agent, /EpsiFlow Direct monthly subscription/);
+  assert.match(agent, /EpsiFlow Direct costs \$66 per month/);
   assert.match(exportRoute, /clientPlaybookAssignments/);
   assert.match(exportRoute, /schemaVersion: 6/);
   assert.match(verifier, /clientPlaybookAssignments/);
+});
+
+test("pins authoritative EpsiFlow pricing in a new immutable lead playbook version", async () => {
+  const [migration, agent, productContext, plan] = await Promise.all([
+    readFile(new URL("../database/migrations/037_authoritative_epsiflow_pricing.sql", root), "utf8"),
+    readFile(new URL("../src/client-success/agent.js", root), "utf8"),
+    readFile(new URL("../EPSIFLOW.md", root), "utf8"),
+    readFile(new URL("../PLAYBOOKS.md", root), "utf8"),
+  ]);
+  assert.match(migration, /preset_key='lead_education_manual'/);
+  assert.match(migration, /current_version\+1/);
+  assert.match(migration, /\$1,160 for \$1,000/);
+  assert.match(migration, /approximately \$91 per direct transfer/);
+  assert.doesNotMatch(migration, /sendTransactionalEmail|sendDirectMessage|chat\.postMessage/);
+  assert.match(agent, /EpsiFlow Direct costs \$66 per month/);
+  assert.match(productContext, /\| \$3,500 \| \$3,770 \|/);
+  assert.match(plan, /Slice 8 — authoritative pricing/);
 });

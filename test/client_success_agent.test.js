@@ -37,7 +37,7 @@ test('generates an approval draft from complete context with validated citations
       db: { claimClientPlaybookAgentDrafts: async () => [job], completeClientPlaybookAgentDraft: async value => completed.push(value), failClientPlaybookAgentDraft: async () => assert.fail('must not fail') },
       getContext: async () => context,
       aiGateway: { createStructuredClientDraft: async prompts => {
-        assert.match(prompts.system, /untrusted evidence/i); assert.match(prompts.system, /Use every supplied message/i); assert.match(prompts.system, /answer every one directly/i); assert.match(prompts.system, /EpsiFlow Direct monthly subscription/); assert.match(prompts.user, /How is the account balance/); assert.match(prompts.user, /Never infer payment status/);
+        assert.match(prompts.system, /untrusted evidence/i); assert.match(prompts.system, /Use every supplied message/i); assert.match(prompts.system, /answer every one directly/i); assert.match(prompts.system, /EpsiFlow Direct costs \$66 per month/); assert.match(prompts.system, /\$1,160 for \$1,000/); assert.match(prompts.system, /approximately \$91 per direct transfer/); assert.match(prompts.user, /How is the account balance/); assert.match(prompts.user, /Never infer payment status/);
         return { model: 'test-model', responseId: 'resp-safe', output: { subject: 'A quick check-in', body: 'Hi Tarang, how are things going?', source_message_ids: [messageId], context_warnings: [] } };
       } },
     });
