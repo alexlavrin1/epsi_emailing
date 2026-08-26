@@ -73,7 +73,7 @@ function validateOutput(job, context, output) {
 }
 
 async function generateClientSuccessAgentDrafts(dependencies = {}) {
-  if (!config.aiGateway.clientSuccessAgentEnabled) return { enabled: false, claimed: 0, completed: 0, failed: 0 };
+  if (!config.aiGateway.clientSuccessAgentEnabled) return { enabled: false, claimed: 0, completed: 0, failed: 0, failureCodes: [], unavailableCode: 'client_agent_disabled' };
   const db = dependencies.db || database;
   const modelClient = dependencies.aiGateway || aiGateway;
   const contextLoader = dependencies.getContext || getClientConversationContext;
@@ -86,11 +86,11 @@ async function generateClientSuccessAgentDrafts(dependencies = {}) {
   catch (error) {
     if (error?.code === 'PGRST202' || /service_claim_client_playbook_agent_drafts|schema cache/i.test(error?.message || '')) {
       logger.warn('Client-success drafting agent is not installed yet; continuing the client-success cycle');
-      return { enabled: false, claimed: 0, completed: 0, failed: 0 };
+      return { enabled: false, claimed: 0, completed: 0, failed: 0, failureCodes: [], unavailableCode: dependencies.targetDraftId ? 'client_agent_immediate_claim_unavailable' : 'client_agent_migration_missing' };
     }
     throw error;
   }
-  let completed = 0; let failed = 0;
+  let completed = 0; let failed = 0; const failureCodes = [];
   for (const job of jobs) {
     try {
       const context = await contextLoader(job.client_app_id, dependencies.contextDependencies || {});
@@ -104,11 +104,13 @@ async function generateClientSuccessAgentDrafts(dependencies = {}) {
       completed++;
     } catch (error) {
       failed++;
-      await db.failClientPlaybookAgentDraft(job.id, failureCode(error));
-      logger.error(`Client-success agent failed [draft=${job.id} code=${failureCode(error)}]`);
+      const code = failureCode(error);
+      failureCodes.push(code);
+      await db.failClientPlaybookAgentDraft(job.id, code);
+      logger.error(`Client-success agent failed [draft=${job.id} code=${code}]`);
     }
   }
-  return { enabled: true, claimed: jobs.length, completed, failed };
+  return { enabled: true, claimed: jobs.length, completed, failed, failureCodes, unavailableCode: null };
 }
 
 module.exports = { generateClientSuccessAgentDrafts, buildPrompts, validateOutput, serializeContext, failureCode };

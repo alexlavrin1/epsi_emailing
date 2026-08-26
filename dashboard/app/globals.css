@@ -823,11 +823,19 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .client-inline-draft-editor textarea { min-height: 220px; }
 .client-inline-draft-editor small { color: var(--faint); font-size: 10px; line-height: 1.5; }
 .client-inline-draft-editor button { grid-column: 2; justify-self: end; }
-.client-draft-control .ai-regeneration-form { flex: 1 0 100%; grid-template-columns: minmax(0,1fr) auto; align-items: end; margin: 0 0 12px; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: #091310; text-align: left; }
-.ai-regeneration-form label, .ai-regeneration-form small { grid-column: 1; }
-.ai-regeneration-form textarea { min-height: 88px; }
+.ai-regeneration-panel { grid-column: 1 / -1; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); }
+.ai-regeneration-panel summary { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 4px 16px; min-height: 52px; padding: 8px 42px 8px 13px; position: relative; color: var(--accent-strong); cursor: pointer; list-style: none; }
+.ai-regeneration-panel summary::-webkit-details-marker { display: none; }
+.ai-regeneration-panel summary::after { width: 8px; height: 8px; position: absolute; right: 17px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; content: ""; transform: rotate(45deg); transition: transform 180ms ease; }
+.ai-regeneration-panel[open] summary::after { transform: rotate(225deg); }
+.ai-regeneration-panel summary span { font-size: 11px; font-weight: 700; }
+.ai-regeneration-panel summary small { color: var(--faint); font-size: 10px; }
+.client-draft-control .ai-regeneration-form { grid-template-columns: minmax(0,1fr); align-items: stretch; gap: 9px; margin: 0; padding: 0 13px 13px; border-top: 1px solid var(--border); text-align: left; }
+.ai-regeneration-form label, .ai-regeneration-form small, .ai-regeneration-form button { grid-column: 1; }
+.ai-regeneration-form textarea { min-height: 112px; }
 .ai-regeneration-form small { color: var(--faint); font-size: 10px; line-height: 1.5; }
-.ai-regeneration-form button { grid-column: 2; grid-row: 1 / span 2; }
+.ai-regeneration-form button { justify-self: start; }
+.ai-regeneration-panel > .action-feedback { max-width: none; margin: 0 13px 13px; text-align: left; }
 .client-draft-control > .action-feedback { grid-column: 1 / -1; max-width: none; text-align: left; }
 .client-draft-unsaved { grid-column: 1; margin: 0; color: #f0bd65; font-size: 11px; }
 .client-draft-actions { grid-column: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
@@ -1022,8 +1030,8 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .client-inline-draft-editor { grid-template-columns: 1fr; }
   .client-inline-draft-editor button, .client-draft-unsaved, .client-draft-actions { grid-column: 1; }
   .client-draft-actions { flex-direction: column; }
-  .client-draft-control .ai-regeneration-form { grid-template-columns: 1fr; }
-  .ai-regeneration-form button { grid-column: 1; grid-row: auto; }
+  .ai-regeneration-panel summary { grid-template-columns: 1fr; }
+  .ai-regeneration-form button { width: 100%; }
   .client-summary, .client-app-grid, .client-create-form { grid-template-columns: 1fr; }
   .client-create-form label:last-of-type, .client-form-submit, .client-create-form .action-feedback { grid-column: auto; }
   .client-form-submit { align-items: stretch; flex-direction: column; }

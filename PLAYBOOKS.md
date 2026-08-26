@@ -163,6 +163,8 @@ Migration 039 adds a regeneration loop to every open client-success draft. An op
 
 Migration 040 makes that loop immediate: after the audited database reset, the dashboard calls a user-authenticated engine endpoint that authorizes the client app and atomically claims only the selected draft. The configured AI Gateway API key takes precedence over runtime OIDC, with the cron retained only as a failure fallback. A retryable pending draft with a sanitized failure code keeps its regeneration controls visible.
 
+Migration 041 repairs skipped immediate-claim installation and allows an authenticated operator to restart a pending draft only while no worker holds its claim. The immediate endpoint now returns a sanitized operational code instead of silently treating disabled, unavailable, unclaimed, and model-failed jobs as equivalent. The optional AI feedback form uses progressive disclosure and remains closed until the operator chooses to regenerate.
+
 ## Safety rules
 
 - No draft generation authorizes delivery.

@@ -268,6 +268,8 @@ Status: in progress. The first slice adds an explicit, audited Stripe customer l
 
 Open client playbook drafts are edited directly in their visible approval card. Subject and message changes must be saved before approval, and saving remains an audited no-delivery action.
 
+Migration `041_immediate_draft_recovery.sql` reinstalls exact-draft claiming when migration 040 was skipped, lets an operator safely restart an unclaimed pending draft, and surfaces the sanitized reason when immediate generation cannot complete. AI feedback is hidden behind an accessible disclosure until regeneration is requested.
+
 - Reviewable client-to-Stripe customer linking
 - Current subscription, product, price, billing period, cancellation, trial, and payment-state visibility
 - Verified webhook updates plus scheduled and on-demand reconciliation

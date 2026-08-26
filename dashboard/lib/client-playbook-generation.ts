@@ -6,7 +6,7 @@ export async function triggerClientPlaybookGeneration(supabase: SupabaseClient, 
   const engineUrl = process.env.EPSIFLOW_ENGINE_URL?.trim() || defaultEngineUrl;
   const { data } = await supabase.auth.getSession();
   const accessToken = data.session?.access_token;
-  if (!accessToken) return { completed: false };
+  if (!accessToken) return { completed: false, errorCode: "dashboard_session_missing" };
   try {
     const response = await fetch(new URL("/api/client-playbook-generate", engineUrl), {
       method: "POST",
@@ -15,10 +15,14 @@ export async function triggerClientPlaybookGeneration(supabase: SupabaseClient, 
       cache: "no-store",
       signal: AbortSignal.timeout(55_000),
     });
-    if (!response.ok) return { completed: false };
     const payload = await response.json().catch(() => null);
-    return { completed: payload?.result?.completed === 1 };
+    if (!response.ok) {
+      const candidate = String(payload?.code || "client_agent_immediate_request_failed");
+      const errorCode = /^[a-z0-9_.:-]{1,100}$/i.test(candidate) ? candidate : "client_agent_immediate_request_failed";
+      return { completed: false, errorCode };
+    }
+    return { completed: payload?.result?.completed === 1, errorCode: null };
   } catch {
-    return { completed: false };
+    return { completed: false, errorCode: "client_agent_immediate_request_failed" };
   }
 }

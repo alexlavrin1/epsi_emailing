@@ -113,7 +113,9 @@ export async function regenerateClientPlaybookAgentDraft(_state: ApprovalActionS
   if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "AI regeneration requires migration 039." : "Unable to regenerate this AI draft." };
   const immediate = await triggerClientPlaybookGeneration(supabase, draftId, clientAppId);
   revalidatePath("/dashboard/approvals"); revalidatePath("/dashboard/audit");
-  return immediate.completed
-    ? { ok: true, message: "AI draft regenerated with your feedback. Review the replacement below; nothing was sent." }
-    : { ok: true, message: "Regeneration is queued. The immediate attempt did not finish, so the background worker will retry it safely." };
+  if (immediate.completed) return { ok: true, message: "AI draft regenerated with your feedback. Review the replacement below; nothing was sent." };
+  if (immediate.errorCode === "client_agent_immediate_claim_unavailable") return { ok: false, message: "Immediate AI generation is not installed on the backend. Apply migration 041, redeploy the engine, and retry." };
+  if (immediate.errorCode === "client_agent_disabled") return { ok: false, message: "Immediate AI generation is disabled on the backend. Set CLIENT_SUCCESS_AGENT_ENABLED=true and redeploy the engine." };
+  if (immediate.errorCode === "client_agent_draft_not_claimed") return { ok: false, message: "The selected draft could not start immediately. Apply migration 041, confirm automations are not globally paused, and retry." };
+  return { ok: false, message: `AI generation ran immediately but did not complete (${immediate.errorCode || "client_agent_immediate_request_failed"}). The draft was not sent.` };
 }

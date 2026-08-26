@@ -27,7 +27,7 @@ test('context-aware drafting is disabled by default', async () => {
   try {
     config.aiGateway.clientSuccessAgentEnabled = false;
     const result = await generateClientSuccessAgentDrafts({ db: { claimClientPlaybookAgentDrafts: async () => { throw new Error('must not claim'); } } });
-    assert.deepEqual(result, { enabled: false, claimed: 0, completed: 0, failed: 0 });
+    assert.deepEqual(result, { enabled: false, claimed: 0, completed: 0, failed: 0, failureCodes: [], unavailableCode: 'client_agent_disabled' });
   } finally { config.aiGateway.clientSuccessAgentEnabled = original; }
 });
 
@@ -45,7 +45,7 @@ test('generates an approval draft from complete context with validated citations
         return { model: 'test-model', responseId: 'resp-safe', output: { subject: 'A quick check-in', body: 'Hi Tarang, how are things going?', source_message_ids: [messageId], context_warnings: [] } };
       } },
     });
-    assert.deepEqual(result, { enabled: true, claimed: 1, completed: 1, failed: 0 });
+    assert.deepEqual(result, { enabled: true, claimed: 1, completed: 1, failed: 0, failureCodes: [], unavailableCode: null });
     assert.equal(completed[0].draftId, 'draft-1'); assert.deepEqual(completed[0].sourceMessageIds, [messageId]); assert.match(completed[0].contextSha256, /^[0-9a-f]{64}$/);
     assert.equal(completed[0].contextMessageCount, 1); assert.equal(completed[0].contextLatestMessageAt, '2025-10-14T11:41:00Z');
     assert.deepEqual(completed[0].warnings, ['slack_history_unavailable']);
@@ -86,6 +86,10 @@ test('immediately generates only the authenticated client draft requested', asyn
   const denied=response(); await handler({method:'POST',headers:{},body:{draft_id:draftId,client_app_id:appId}},denied); assert.equal(denied.statusCode,401);
   const accepted=response(); await handler({method:'POST',headers:{authorization:'Bearer user-token','x-vercel-oidc-token':'runtime-token'},body:{draft_id:draftId,client_app_id:appId}},accepted);
   assert.equal(accepted.statusCode,200); assert.equal(accepted.body.result.completed,1); assert.equal(generation.targetDraftId,draftId); assert.equal(generation.targetClientAppId,appId); assert.equal(generation.authToken,'runtime-token');
+
+  const failedHandler=createClientPlaybookGenerateHandler({ db:{ authorizeClientSync:async ()=>({ id:appId }) }, generate:async ()=>({ enabled:true,claimed:1,completed:0,failed:1,failureCodes:['ai_gateway_http_403'],unavailableCode:null }) });
+  const failed=response(); await failedHandler({method:'POST',headers:{authorization:'Bearer user-token'},body:{draft_id:draftId,client_app_id:appId}},failed);
+  assert.equal(failed.statusCode,502); assert.equal(failed.body.code,'ai_gateway_http_403');
 });
 
 test('client-success Vercel cron requires the configured bearer secret', async () => {

@@ -22,7 +22,10 @@ function createClientPlaybookGenerateHandler(dependencies = {}) {
       const app = await database.authorizeClientSync(token, clientAppId);
       if (!app) return res.status(403).json({ error: 'Forbidden' });
       const result = await generate({ authToken: getVercelOidcToken(req.headers), targetDraftId: draftId, targetClientAppId: clientAppId });
-      if (result.completed !== 1) return res.status(result.claimed ? 502 : 409).json({ error: 'Immediate AI generation did not complete' });
+      if (result.completed !== 1) {
+        const code = String(result.failureCodes?.[0] || result.unavailableCode || (result.claimed ? 'client_agent_generation_failed' : 'client_agent_draft_not_claimed')).slice(0, 100);
+        return res.status(result.claimed ? 502 : 409).json({ error: 'Immediate AI generation did not complete', code });
+      }
       return res.status(200).json({ ok: true, result: { completed: 1 } });
     } catch (error) {
       logger.error(`Immediate client draft generation failed [code=${String(error?.code || 'client_draft_generation_failed').slice(0,100)}]`);

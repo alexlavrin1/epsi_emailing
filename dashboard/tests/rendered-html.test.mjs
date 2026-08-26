@@ -1084,7 +1084,7 @@ test("regenerates an open AI draft with audited operator feedback and no deliver
   assert.match(controls, /Feedback for AI/);
   assert.match(controls, /Regenerate with AI/);
   assert.match(controls, /maxLength=\{4000\}/);
-  assert.match(controls, /Regenerating/);
+  assert.match(controls, /Generating/);
   assert.match(page, /agentRegenerationCount/);
   assert.match(exportRoute, /agent_regeneration_feedback/);
 });
@@ -1112,11 +1112,35 @@ test("runs feedback regeneration immediately for exactly one authenticated clien
   assert.match(trigger, /\/api\/client-playbook-generate/);
   assert.match(actions, /await triggerClientPlaybookGeneration/);
   assert.match(controls, /client_app_id/);
-  assert.match(controls, /pendingLabel="Regenerating…"/);
-  assert.match(page, /draft\.agentStatus === "pending" && Boolean\(draft\.agentFailureCode\)/);
+  assert.match(controls, /pendingLabel="Generating…"/);
+  assert.match(page, /draft\.agentStatus === "pending" && !draft\.agentClaimedAt/);
   assert.match(config, /apiKey: process\.env\.AI_GATEWAY_API_KEY/);
   assert.match(gateway, /dependencies\.apiKey \|\| config\.aiGateway\.apiKey \|\| dependencies\.authToken/);
   assert.match(vercel, /api\/client-playbook-generate\.js/);
+});
+
+test("recovers unclaimed pending drafts and reports immediate generation failures", async () => {
+  const [migration, endpoint, trigger, actions, controls, styles, data] = await Promise.all([
+    readFile(new URL("../database/migrations/041_immediate_draft_recovery.sql", root), "utf8"),
+    readFile(new URL("../api/client-playbook-generate.js", root), "utf8"),
+    readFile(new URL("lib/client-playbook-generation.ts", root), "utf8"),
+    readFile(new URL("app/dashboard/approvals/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/approval-controls.tsx", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+    readFile(new URL("lib/dashboard-data.ts", root), "utf8"),
+  ]);
+  assert.match(migration, /service_claim_client_playbook_agent_draft/);
+  assert.match(migration, /draft\.agent_claimed_at IS NULL/);
+  assert.match(migration, /target\.agent_status='pending' AND target\.agent_claimed_at IS NOT NULL/);
+  assert.doesNotMatch(migration + endpoint, /sendTransactionalEmail|sendDirectMessage|chat\.postMessage/);
+  assert.match(endpoint, /result\.failureCodes\?\.\[0\]/);
+  assert.match(trigger, /errorCode/);
+  assert.match(actions, /Apply migration 041/);
+  assert.match(controls, /<details className="ai-regeneration-panel">/);
+  assert.match(controls, /Generate replacement/);
+  assert.match(styles, /\.ai-regeneration-panel summary/);
+  assert.match(styles, /\.ai-regeneration-form textarea \{ min-height: 112px/);
+  assert.match(data, /agent_claimed_at/);
 });
 
 test("edits the displayed client playbook draft inline before approval", async () => {
