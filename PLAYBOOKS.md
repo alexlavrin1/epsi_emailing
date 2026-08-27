@@ -165,6 +165,8 @@ Migration 040 makes that loop immediate: after the audited database reset, the d
 
 Migration 041 repairs skipped immediate-claim installation and allows an authenticated operator to restart a pending draft only while no worker holds its claim. The immediate endpoint now returns a sanitized operational code instead of silently treating disabled, unavailable, unclaimed, and model-failed jobs as equivalent. The optional AI feedback form uses progressive disclosure and remains closed until the operator chooses to regenerate.
 
+Gateway failures preserve no provider message or credential, but their sanitized structured type is surfaced when available. This distinguishes team-level `access_denied`, free-credit `RestrictedModelsError`, insufficient credits, and ordinary HTTP failures without exposing billing or account details.
+
 ## Safety rules
 
 - No draft generation authorizes delivery.

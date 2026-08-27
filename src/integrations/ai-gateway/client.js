@@ -30,7 +30,7 @@ function extractOutputText(response) {
 }
 
 async function createStructuredResponse({ system, user, schemaName, schema }, dependencies = {}) {
-  const authToken = dependencies.apiKey || config.aiGateway.apiKey || dependencies.authToken || config.aiGateway.oidcToken || config.aiGateway.authToken;
+  const authToken = String(dependencies.apiKey || config.aiGateway.apiKey || dependencies.authToken || config.aiGateway.oidcToken || config.aiGateway.authToken || '').trim();
   const model = dependencies.model || config.aiGateway.clientSuccessModel;
   const reasoningEffort = dependencies.reasoningEffort || config.aiGateway.reasoningEffort;
   const request = dependencies.fetch || fetch;
@@ -53,7 +53,7 @@ async function createStructuredResponse({ system, user, schemaName, schema }, de
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const detail = String(payload?.error?.code || payload?.code || '').toLowerCase().replace(/[^a-z0-9_.:-]/g, '_').slice(0, 60);
+    const detail = String(payload?.error?.code || payload?.error?.param?.name || payload?.error?.name || payload?.name || payload?.error?.type || payload?.type || payload?.code || '').toLowerCase().replace(/[^a-z0-9_.:-]/g, '_').slice(0, 60);
     throw Object.assign(new Error('AI Gateway draft request failed'), { code: `ai_gateway_http_${response.status}${detail ? `_${detail}` : ''}` });
   }
   if (payload.status === 'incomplete') throw Object.assign(new Error('AI Gateway draft response was incomplete'), { code: `model_incomplete_${payload.incomplete_details?.reason || 'unknown'}` });

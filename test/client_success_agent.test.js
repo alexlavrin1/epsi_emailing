@@ -77,6 +77,8 @@ test('uses Vercel AI Gateway with medium reasoning, strict output, and storage d
 
 test('uses a sanitized Gateway error code without retaining provider details', async () => {
   await assert.rejects(() => createStructuredClientDraft({ system: 'System', user: 'User' }, { apiKey: 'configured-gateway-key', fetch: async () => ({ ok: false, status: 403, json: async () => ({ error: { code: 'insufficient_credits', message: 'private billing detail' } }) }) }), error => error.code === 'ai_gateway_http_403_insufficient_credits' && !error.message.includes('billing'));
+  await assert.rejects(() => createStructuredClientDraft({ system: 'System', user: 'User' }, { apiKey: '  configured-gateway-key  ', fetch: async (_url, options) => { assert.equal(options.headers.authorization, 'Bearer configured-gateway-key'); return { ok: false, status: 403, json: async () => ({ error: { type: 'access_denied', message: 'private team detail' } }) }; } }), error => error.code === 'ai_gateway_http_403_access_denied');
+  await assert.rejects(() => createStructuredClientDraft({ system: 'System', user: 'User' }, { apiKey: 'configured-gateway-key', fetch: async () => ({ ok: false, status: 403, json: async () => ({ error: { type: 'no_providers_available', param: { name: 'RestrictedModelsError' }, message: 'private model restriction detail' } }) }) }), error => error.code === 'ai_gateway_http_403_restrictedmodelserror');
 });
 
 test('immediately generates only the authenticated client draft requested', async () => {
