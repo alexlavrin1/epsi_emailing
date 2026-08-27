@@ -89,7 +89,7 @@ Initial template variables:
 - Run a playbook from an existing-client page
 - Pin every draft to the playbook version used
 - Edit, approve, or cancel in the approval queue
-- Keep approved drafts inert; no provider delivery exists in this slice
+- Keep drafts inert until explicit approval; approved email drafts can be queued after migration 042, while Slack remains inert
 - Audit every configuration and draft decision
 
 ### Slice 2 — Approved email delivery
@@ -170,7 +170,7 @@ Gateway failures preserve no provider message or credential, but their sanitized
 ## Safety rules
 
 - No draft generation authorizes delivery.
-- Approved drafts remain inert until the corresponding delivery slice is installed.
+- Approved email drafts are delivered only by the migration 042 backend queue when its independent kill switch is enabled; Slack drafts remain inert.
 - Templates accept only allowlisted variables.
 - Every server action validates tenant membership and record ownership.
 - Browser users never write playbook or draft tables directly.

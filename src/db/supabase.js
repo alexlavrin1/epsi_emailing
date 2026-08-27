@@ -999,6 +999,29 @@ async function failClientPlaybookAgentDraft(draftId, code) {
   if (error) throw error;
 }
 
+async function claimClientPlaybookEmailDeliveries(limit = 10) {
+  const { data, error } = await supabase.rpc('service_claim_client_playbook_email_deliveries', { target_limit: limit });
+  if (error) throw error;
+  return data || [];
+}
+
+async function completeClientPlaybookEmailDelivery(draftId, providerMessageId) {
+  const { error } = await supabase.rpc('service_complete_client_playbook_email_delivery', {
+    target_draft_id: draftId,
+    target_provider_message_id: providerMessageId,
+  });
+  if (error) throw error;
+}
+
+async function failClientPlaybookEmailDelivery(draftId, failureCode, retryable = true) {
+  const { error } = await supabase.rpc('service_fail_client_playbook_email_delivery', {
+    target_draft_id: draftId,
+    target_failure_code: failureCode,
+    target_retryable: retryable,
+  });
+  if (error) throw error;
+}
+
 module.exports = {
   supabase,
   getMailboxByEmail,
@@ -1077,4 +1100,7 @@ module.exports = {
   claimClientPlaybookAgentDraft,
   completeClientPlaybookAgentDraft,
   failClientPlaybookAgentDraft,
+  claimClientPlaybookEmailDeliveries,
+  completeClientPlaybookEmailDelivery,
+  failClientPlaybookEmailDelivery,
 };

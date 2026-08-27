@@ -171,6 +171,25 @@ async function sendTransactionalEmail(fromEmail, to, subject, body, options = {}
   };
 }
 
+async function sendClientSuccessEmail(fromEmail, to, subject, body, options = {}) {
+  const headers = buildHeaders(fromEmail);
+  if (options.inReplyTo) {
+    headers['In-Reply-To'] = options.inReplyTo;
+    headers.References = options.inReplyTo;
+  }
+  const info = await submitMessage({
+    from: buildFrom(fromEmail, options.displayName),
+    replyTo: options.replyTo || fromEmail,
+    to,
+    subject,
+    text: body,
+    messageId: options.messageId,
+    headers,
+  });
+  logger.info('Client-success email submitted', { messageId: info.messageId, archived: info.archive.archived });
+  return { rfcMessageId: info.messageId, archive: info.archive };
+}
+
 function normalizeAddress(address) {
   return String(address || '').trim().toLowerCase();
 }
@@ -371,6 +390,7 @@ module.exports = {
   sendEmail,
   sendReply,
   sendTransactionalEmail,
+  sendClientSuccessEmail,
   findRecentInboundMessages,
   findRecentClientCorrespondence,
   getUserEmail,

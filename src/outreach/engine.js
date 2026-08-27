@@ -61,6 +61,7 @@ async function runOutreachCycle(dependencies = {}) {
   await prepareClientSuccessDrafts();
   await processReplyAutomationRuns({ leadAgentDependencies: { authToken: dependencies.authToken } });
   await deliverOperatorEmailReplies();
+  await deliverClientPlaybookEmails();
   await checkForReplies();
 
   if (!config.outreachEnabled) {
@@ -508,4 +509,55 @@ async function deliverOperatorEmailReplies(dependencies = {}) {
   return { due: queued.length, sent, failed };
 }
 
-module.exports = { runOutreachCycle, runMonitoredOutreachCycle, deliverOperatorEmailReplies, processReplyAutomationRuns, syncExistingClientWorkspace, prepareClientSuccessDrafts };
+function clientEmailFailureCode(error) {
+  const value = String(error?.code || error?.message || 'email_delivery_failed').toLowerCase();
+  if (/auth|credential|password|535/.test(value)) return 'smtp_auth_failed';
+  if (/timeout|timed out|etimedout/.test(value)) return 'smtp_timeout';
+  if (/recipient|mailbox|address|550|553/.test(value)) return 'smtp_recipient_rejected';
+  return 'smtp_delivery_failed';
+}
+
+async function deliverClientPlaybookEmails(dependencies = {}) {
+  if (!config.clientSuccessEmail.enabled || config.clientSuccessEmail.dryRun) {
+    return { enabled: config.clientSuccessEmail.enabled, dryRun: config.clientSuccessEmail.dryRun, due: 0, sent: 0, failed: 0 };
+  }
+  const database = dependencies.db || db;
+  const mailer = dependencies.mailer || gmail;
+  let claimed;
+  try {
+    claimed = await database.claimClientPlaybookEmailDeliveries(config.clientSuccessEmail.limit);
+  } catch (error) {
+    if (error?.code === 'PGRST202' || /service_claim_client_playbook_email_deliveries|schema cache/i.test(error?.message || '')) {
+      logger.warn('Client-success email delivery migration is not installed; leaving approvals unsent');
+      return { enabled: false, dryRun: false, due: 0, sent: 0, failed: 0 };
+    }
+    throw error;
+  }
+  let sent = 0;
+  let failed = 0;
+  const allowlist = new Set(config.clientSuccessEmail.allowlist);
+  const allowAll = allowlist.has('*');
+  for (const draft of claimed) {
+    const recipient = String(draft.recipient_email || '').trim().toLowerCase();
+    try {
+      if (!recipient || !draft.subject || !draft.body || !config.yandex.email) throw Object.assign(new Error('Incomplete approved email context'), { code: 'email_context_invalid', retryable: false });
+      if (!allowAll && !allowlist.has(recipient)) throw Object.assign(new Error('Recipient is not authorized by the delivery allowlist'), { code: 'recipient_not_allowlisted', retryable: false });
+      const domain = String(config.yandex.email).split('@')[1] || 'epsiflow.local';
+      const result = await mailer.sendClientSuccessEmail(config.yandex.email, recipient, draft.subject, draft.body, {
+        displayName: 'EpsiFlow',
+        inReplyTo: draft.reply_to_message_id || undefined,
+        messageId: `<epsiflow-client-${draft.id}@${domain}>`,
+      });
+      await database.completeClientPlaybookEmailDelivery(draft.id, result.rfcMessageId);
+      sent++;
+    } catch (error) {
+      failed++;
+      const code = error?.code && /^[A-Za-z0-9_.:-]{1,100}$/.test(error.code) ? error.code : clientEmailFailureCode(error);
+      await database.failClientPlaybookEmailDelivery(draft.id, code, error?.retryable !== false);
+      logger.error(`Client-success email delivery failed [draft=${draft.id} code=${code}]`);
+    }
+  }
+  return { enabled: true, dryRun: false, due: claimed.length, sent, failed };
+}
+
+module.exports = { runOutreachCycle, runMonitoredOutreachCycle, deliverOperatorEmailReplies, deliverClientPlaybookEmails, processReplyAutomationRuns, syncExistingClientWorkspace, prepareClientSuccessDrafts };

@@ -801,9 +801,11 @@ test("keeps client Stripe subscription reads tenant-scoped and provider writes s
   assert.match(recoveryEngine, /ignored_payment_processing_disabled/);
 });
 
-test("keeps client-success playbook drafts versioned, tenant-scoped, and inert", async () => {
-  const [migration, playbookPage, controls, clientActions, approvalActions, approvalControls, clientPage, nav, exportRoute, verifier, plan] = await Promise.all([
+test("keeps client-success playbook drafts versioned, tenant-scoped, and approval-gated", async () => {
+  const [migration, deliveryMigration, engine, playbookPage, controls, clientActions, approvalActions, approvalControls, clientPage, nav, exportRoute, verifier, plan] = await Promise.all([
     readFile(new URL("../database/migrations/030_client_success_playbook_drafts.sql", root), "utf8"),
+    readFile(new URL("../database/migrations/042_client_playbook_email_delivery.sql", root), "utf8"),
+    readFile(new URL("../src/outreach/engine.js", root), "utf8"),
     readFile(new URL("app/dashboard/playbooks/page.tsx", root), "utf8"),
     readFile(new URL("app/components/client-playbook-controls.tsx", root), "utf8"),
     readFile(new URL("app/dashboard/clients/actions.ts", root), "utf8"),
@@ -824,14 +826,17 @@ test("keeps client-success playbook drafts versioned, tenant-scoped, and inert",
   assert.match(migration, /client\.playbook\.draft_approved|client\.playbook\.draft_cancelled/);
   assert.match(migration, /COUNT\(\*\) FROM client_playbook_drafts/);
   assert.match(nav, /href="\/dashboard\/playbooks"[\s\S]*?<span>Playbooks<\/span>/);
-  assert.match(playbookPage, /Draft preparation only/);
-  assert.match(playbookPage, /does not send email or Slack/);
+  assert.match(playbookPage, /Approval-gated email/);
+  assert.match(playbookPage, /Slack remains draft-only/);
   assert.match(clientPage, /Assigned playbook/);
   assert.match(controls, /nothing is sent/i);
   assert.match(clientActions, /dashboard_create_client_playbook_draft/);
   assert.match(approvalActions, /dashboard_decide_client_playbook_draft/);
-  assert.match(approvalControls, /Approval records readiness only/);
-  assert.match(plan, /approved drafts? remain inert/i);
+  assert.match(approvalControls, /Approve & queue email/);
+  assert.match(deliveryMigration, /service_claim_client_playbook_email_deliveries/);
+  assert.match(deliveryMigration, /delivery_status='uncertain'/);
+  assert.match(engine, /deliverClientPlaybookEmails/);
+  assert.match(plan, /migration 042 backend queue/i);
   const deliverySurface = [migration, playbookPage, controls, clientActions, approvalActions, approvalControls].join("\n");
   assert.doesNotMatch(deliverySurface, /sendTransactionalEmail|sendDirectMessage|chat\.postMessage/);
   for (const dataset of ["clientPlaybooks", "clientPlaybookVersions", "clientPlaybookDrafts"]) {

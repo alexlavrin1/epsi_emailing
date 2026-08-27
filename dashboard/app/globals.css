@@ -246,7 +246,8 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .status-interested { border-color: rgba(183,163,255,.3); background: rgba(183,163,255,.08); color: #c6b7ff; }
 .status-client { border-color: rgba(71,209,140,.3); background: var(--accent-soft); color: var(--accent-strong); }
 .status-draft { border-color: rgba(139,185,255,.3); background: rgba(139,185,255,.08); color: #a8c9ff; }
-.status-queued, .status-sending, .status-paused { border-color: rgba(240,189,101,.3); background: rgba(240,189,101,.08); color: #f0bd65; }
+.status-queued, .status-sending, .status-processing, .status-paused { border-color: rgba(240,189,101,.3); background: rgba(240,189,101,.08); color: #f0bd65; }
+.status-uncertain { border-color: rgba(248,113,113,.35); background: rgba(248,113,113,.09); color: #fca5a5; }
 .status-sent, .status-completed, .status-succeeded { border-color: rgba(71,209,140,.3); background: var(--accent-soft); color: var(--accent-strong); }
 .status-bounced, .status-failed, .status-suppressed { border-color: rgba(255,133,133,.3); background: rgba(255,133,133,.07); color: var(--danger); }
 .status-waiting-approval, .status-preparing, .status-running { border-color: rgba(183,163,255,.3); background: rgba(183,163,255,.08); color: #c6b7ff; }

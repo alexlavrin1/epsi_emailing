@@ -122,7 +122,7 @@ export type ApprovalData = {
   clientDraftsReady: boolean;
   replies: Array<{ id: string; status: string; body: string; lastError: string | null; createdAt: string; contact: string; email: string; subject: string; automationName: string | null }>;
   retries: Array<{ id: string; channel: string; attempts: number; error: string; updatedAt: string; customer: string }>;
-  clientDrafts: Array<{ id: string; channel: "email" | "slack"; recipient: string; subject: string | null; body: string; status: string; createdAt: string; playbookVersion: number; generationMode: string; contextMessageCount: number; agentStatus: string; agentClaimedAt: string | null; agentModel: string | null; agentWarnings: string[]; agentFailureCode: string | null; agentRegenerationCount: number; sources: Array<{ id: string; subject: string; direction: string; occurredAt: string }>; appId: string; appName: string; contactName: string; playbookName: string }>;
+  clientDrafts: Array<{ id: string; channel: "email" | "slack"; recipient: string; subject: string | null; body: string; status: string; deliveryStatus: string; deliveryFailureCode: string | null; deliveredAt: string | null; createdAt: string; playbookVersion: number; generationMode: string; contextMessageCount: number; agentStatus: string; agentClaimedAt: string | null; agentModel: string | null; agentWarnings: string[]; agentFailureCode: string | null; agentRegenerationCount: number; sources: Array<{ id: string; subject: string; direction: string; occurredAt: string }>; appId: string; appName: string; contactName: string; playbookName: string }>;
 };
 
 export type AutomationWorkflow = {
@@ -582,7 +582,7 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
     supabase.rpc("dashboard_reply_controls_ready"),
     supabase.from("operator_email_replies").select("id,body,status,last_error,created_at,source_reply:prospect_replies(subject,prospect:prospects(first_name,last_name,email))").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
     supabase.from("payment_recovery_messages").select("id,channel,attempt_count,last_error,updated_at,recovery_case:payment_recovery_cases(customer:crm_customers(name,email,organization_id))").eq("status", "failed").order("updated_at", { ascending: false }).limit(100),
-    supabase.from("client_playbook_drafts").select("id,channel,recipient_label,subject,body,status,created_at,playbook_version,generation_mode,context_message_count,agent_status,agent_claimed_at,agent_model,agent_context_warnings,agent_failure_code,agent_regeneration_count,client_app_id,app:client_apps(name),contact:client_contacts(name),playbook:client_playbooks(name),sources:client_playbook_draft_sources(ordinal,message:client_email_messages(id,subject,direction,occurred_at))").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
+    supabase.from("client_playbook_drafts").select("id,channel,recipient_label,subject,body,status,delivery_status,delivery_failure_code,delivered_at,created_at,playbook_version,generation_mode,context_message_count,agent_status,agent_claimed_at,agent_model,agent_context_warnings,agent_failure_code,agent_regeneration_count,client_app_id,app:client_apps(name),contact:client_contacts(name),playbook:client_playbooks(name),sources:client_playbook_draft_sources(ordinal,message:client_email_messages(id,subject,direction,occurred_at))").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
   ]);
   const ready = !readiness.error && readiness.data === true && !replies.error;
   const automationSources = automationReady
@@ -612,7 +612,7 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
     }),
     clientDrafts: (clientDrafts.data ?? []).map(item => ({
       id: item.id, channel: item.channel as "email" | "slack", recipient: item.recipient_label,
-      subject: item.subject, body: item.body, status: item.status, createdAt: item.created_at,
+      subject: item.subject, body: item.body, status: item.status, deliveryStatus: item.delivery_status, deliveryFailureCode: item.delivery_failure_code, deliveredAt: item.delivered_at, createdAt: item.created_at,
       playbookVersion: item.playbook_version, generationMode: item.generation_mode, contextMessageCount: item.context_message_count,
       agentStatus: item.agent_status, agentClaimedAt: item.agent_claimed_at, agentModel: item.agent_model, agentWarnings: item.agent_context_warnings || [], agentFailureCode: item.agent_failure_code, agentRegenerationCount: item.agent_regeneration_count || 0,
       sources: ((item.sources || []) as Array<{ ordinal: number; message: Related<{ id: string; subject: string | null; direction: string; occurred_at: string }> }>).sort((a,b) => a.ordinal-b.ordinal).flatMap(source => { const message=one(source.message); return message ? [{ id:message.id, subject:message.subject || "No subject", direction:message.direction, occurredAt:message.occurred_at }] : []; }),

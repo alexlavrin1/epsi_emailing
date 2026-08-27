@@ -97,9 +97,10 @@ export async function decideClientPlaybookDraft(_state: ApprovalActionState, for
   if (!uuidPattern.test(draftId) || !["approve","cancel"].includes(decision)) return { ok: false, message: "Invalid draft decision." };
   const supabase = await createSupabaseServerClient(); if (!supabase) return { ok: false, message: "Unable to record this decision." };
   const { error } = await supabase.rpc("dashboard_decide_client_playbook_draft", { target_draft_id: draftId, target_decision: decision });
-  if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "Client playbooks require migration 030." : "Unable to record this decision." };
+  if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "Email delivery requires migration 042." : "Unable to record this decision." };
   revalidatePath("/dashboard/approvals"); revalidatePath("/dashboard/audit");
-  return { ok: true, message: decision === "approve" ? "Draft approved and retained as ready. No message was sent." : "Draft cancelled. Nothing was sent." };
+  const channel = String(formData.get("channel") || "");
+  return { ok: true, message: decision === "approve" ? (channel === "email" ? "Email approved and queued for the backend delivery worker." : "Draft approved as ready. Slack was not sent.") : "Draft cancelled. Nothing was sent." };
 }
 
 export async function regenerateClientPlaybookAgentDraft(_state: ApprovalActionState, formData: FormData): Promise<ApprovalActionState> {

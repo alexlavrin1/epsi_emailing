@@ -78,6 +78,15 @@ module.exports = {
       .filter(Boolean),
     maxAttempts: parseInt(process.env.TRANSACTIONAL_EMAIL_MAX_ATTEMPTS || '3', 10),
   },
+  clientSuccessEmail: {
+    enabled: String(process.env.CLIENT_SUCCESS_EMAIL_DELIVERY_ENABLED || 'false').toLowerCase() === 'true',
+    dryRun: String(process.env.CLIENT_SUCCESS_EMAIL_DELIVERY_DRY_RUN || 'true').toLowerCase() !== 'false',
+    allowlist: String(process.env.CLIENT_SUCCESS_EMAIL_DELIVERY_ALLOWLIST || '')
+      .split(',')
+      .map(email => email.trim().toLowerCase())
+      .filter(Boolean),
+    limit: parseInt(process.env.CLIENT_SUCCESS_EMAIL_DELIVERY_LIMIT || '10', 10),
+  },
   slack: {
     botToken: process.env.SLACK_BOT_TOKEN,
     teamId: process.env.SLACK_TEAM_ID,
