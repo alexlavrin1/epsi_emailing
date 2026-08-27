@@ -43,16 +43,16 @@ export function RecoveryRetryControl({ id, customer, channel }: { id: string; cu
   return <div className="approval-control"><form action={action} onSubmit={event => { if (!window.confirm(`Retry this failed ${channel} delivery for ${customer}? The recovery worker will re-check payment state and recipient permissions first.`)) event.preventDefault(); }}><input type="hidden" name="message_id" value={id} /><ActionButton label="Approve retry" pendingLabel="Queueing…" tone="secondary" /></form>{state.message ? <p className={state.ok ? "action-feedback success" : "action-feedback error"} role={state.ok ? "status" : "alert"}>{state.message}</p> : null}</div>;
 }
 
-export function ClientPlaybookDraftControl({ id, clientAppId, channel, subject, body, contact, revision }: { id: string; clientAppId: string; channel: "email" | "slack"; subject: string | null; body: string; contact: string; revision: number }) {
+export function ClientPlaybookDraftControl({ id, clientAppId, channel, subject, body, contact, revision, agentStatus }: { id: string; clientAppId: string; channel: "email" | "slack"; subject: string | null; body: string; contact: string; revision: number; agentStatus: string }) {
   const [approveState, approveAction] = useActionState(decideClientPlaybookDraft, initialState);
   const [cancelState, cancelAction] = useActionState(decideClientPlaybookDraft, initialState);
   const [editState, editAction] = useActionState(updateClientPlaybookDraft, initialState);
   const [regenerateState, regenerateAction] = useActionState(regenerateClientPlaybookAgentDraft, initialState);
   const [dirty, setDirty] = useState(false);
+  const generationPending = ["pending", "processing"].includes(agentStatus);
   const feedbackHelpId = `ai-feedback-help-${id}`;
   return <div className="approval-control client-draft-control">
-    <InlineClientDraftEditor key={`${id}:${revision}`} id={id} channel={channel} subject={subject} body={body} action={editAction} onDirtyChange={setDirty} />
-    <Feedback state={editState} />
+    {generationPending ? <p className="client-draft-unsaved" role="status">AI generation is pending. Generate the replacement below, then review and approve the completed draft.</p> : <><InlineClientDraftEditor key={`${id}:${revision}`} id={id} channel={channel} subject={subject} body={body} action={editAction} onDirtyChange={setDirty} /><Feedback state={editState} /></>}
     <details className="ai-regeneration-panel">
       <summary><span>Regenerate with AI</span><small>Optionally tell the agent what to change</small></summary>
       <form className="action-form ai-regeneration-form" action={regenerateAction} onSubmit={event => { if (!window.confirm(`Regenerate this draft for ${contact} with AI? The current draft will remain unsent and the replacement will still require approval.`)) event.preventDefault(); }}>
@@ -65,7 +65,7 @@ export function ClientPlaybookDraftControl({ id, clientAppId, channel, subject, 
     </details>
     {dirty ? <p className="client-draft-unsaved" role="status">Unsaved changes — save them before approval.</p> : null}
     <div className="client-draft-actions">
-      <form action={approveAction} onSubmit={event => { const message=channel === "email" ? `Approve and queue this email to ${contact}? The backend will re-check the client and recipient, then send it on the next cron cycle when email delivery is enabled.` : `Approve this Slack draft for ${contact}? Slack delivery is not enabled, so this only records readiness.`; if (!window.confirm(message)) event.preventDefault(); }}><input type="hidden" name="draft_id" value={id} /><input type="hidden" name="decision" value="approve" /><input type="hidden" name="channel" value={channel} /><ActionButton label={channel === "email" ? "Approve & queue email" : "Approve as ready"} pendingLabel={channel === "email" ? "Queueing…" : "Approving…"} disabled={dirty} /></form>
+      <form action={approveAction} onSubmit={event => { const message=channel === "email" ? `Approve and queue this email to ${contact}? The backend will re-check the client and recipient, then send it on the next cron cycle when email delivery is enabled.` : `Approve this Slack draft for ${contact}? Slack delivery is not enabled, so this only records readiness.`; if (!window.confirm(message)) event.preventDefault(); }}><input type="hidden" name="draft_id" value={id} /><input type="hidden" name="decision" value="approve" /><input type="hidden" name="channel" value={channel} /><ActionButton label={generationPending ? "Awaiting AI draft" : channel === "email" ? "Approve & queue email" : "Approve as ready"} pendingLabel={channel === "email" ? "Queueing…" : "Approving…"} disabled={dirty || generationPending} /></form>
       <form action={cancelAction} onSubmit={event => { if (!window.confirm(`Cancel this ${channel} draft for ${contact}? Nothing will be sent.`)) event.preventDefault(); }}><input type="hidden" name="draft_id" value={id} /><input type="hidden" name="decision" value="cancel" /><ActionButton label="Cancel" pendingLabel="Cancelling…" tone="danger" /></form>
     </div>
     <Feedback state={approveState} /><Feedback state={cancelState} />
