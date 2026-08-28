@@ -81,6 +81,17 @@ function validateEnvironment(env) {
       message: 'PAYMENT_RECOVERY_INTERNAL_SLACK_CHANNEL_ID or SLACK_FAILURE_ALERT_CHANNEL_ID required while PAYMENT_RECOVERY_INTERNAL_ALERTS_ENABLED=true',
     });
   }
+  if (
+    String(env.CLIENT_SUCCESS_EMAIL_DELIVERY_ENABLED).toLowerCase() === 'true'
+    && String(env.CLIENT_SUCCESS_EMAIL_DELIVERY_DRY_RUN).toLowerCase() === 'false'
+    && !String(env.CLIENT_SUCCESS_EMAIL_DELIVERY_ALLOWLIST || '').split(',').some(value => isConfigured(value.trim()))
+  ) {
+    findings.push({
+      level: 'error',
+      name: 'CLIENT_SUCCESS_EMAIL_DELIVERY_ALLOWLIST',
+      message: 'at least one recipient or * is required while client-success email delivery is active',
+    });
+  }
   if (String(env.CLIENT_SUCCESS_AGENT_ENABLED).toLowerCase() === 'true'
       && !isConfigured(env.AI_GATEWAY_API_KEY)
       && !isConfigured(env.VERCEL_OIDC_TOKEN)) {

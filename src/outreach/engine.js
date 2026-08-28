@@ -57,11 +57,13 @@ async function runOutreachCycle(dependencies = {}) {
 
   // Replies, unsubscribes, and bounces are processed even when sending is
   // disabled or outside business hours.
+  // Deliver already-approved operator work before slower mailbox sync and
+  // draft preparation so unrelated timeouts cannot starve the delivery queue.
+  await deliverClientPlaybookEmails();
+  await deliverOperatorEmailReplies();
   await syncExistingClientWorkspace();
   await prepareClientSuccessDrafts();
   await processReplyAutomationRuns({ leadAgentDependencies: { authToken: dependencies.authToken } });
-  await deliverOperatorEmailReplies();
-  await deliverClientPlaybookEmails();
   await checkForReplies();
 
   if (!config.outreachEnabled) {

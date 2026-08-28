@@ -92,7 +92,7 @@ BEGIN
 EXCEPTION WHEN unique_violation THEN RAISE EXCEPTION 'An open draft already exists for this playbook and contact'; END; $$;
 
 CREATE OR REPLACE FUNCTION service_prepare_due_client_playbook_drafts(target_limit INTEGER DEFAULT 10) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
-DECLARE item RECORD; run_id UUID; draft_id UUID; trigger_key TEXT; trigger_kind TEXT; rendered_subject TEXT; rendered_body TEXT; context_count INTEGER; context_latest TIMESTAMPTZ; drafted INTEGER:=0; skipped INTEGER:=0;
+DECLARE item RECORD; new_run_id UUID; new_draft_id UUID; trigger_key TEXT; trigger_kind TEXT; rendered_subject TEXT; rendered_body TEXT; context_count INTEGER; context_latest TIMESTAMPTZ; drafted INTEGER:=0; skipped INTEGER:=0;
 BEGIN
   IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Service role required'; END IF;
   IF target_limit NOT BETWEEN 1 AND 50 THEN RAISE EXCEPTION 'Invalid limit'; END IF;
@@ -120,23 +120,23 @@ BEGIN
     END IF;
     UPDATE client_playbook_assignments SET last_evaluated_at=NOW() WHERE id=item.id;
     IF trigger_key IS NULL THEN skipped:=skipped+1; CONTINUE; END IF;
-    INSERT INTO client_playbook_automation_runs(organization_id,playbook_id,playbook_version,client_app_id,client_contact_id,trigger_key) VALUES(item.organization_id,item.playbook_id,item.current_version,item.client_app_id,item.client_contact_id,trigger_key) ON CONFLICT DO NOTHING RETURNING id INTO run_id;
-    IF run_id IS NULL AND trigger_kind='followup' AND item.latest_at<=NOW()-make_interval(days=>item.periodic_days) THEN
+    INSERT INTO client_playbook_automation_runs(organization_id,playbook_id,playbook_version,client_app_id,client_contact_id,trigger_key) VALUES(item.organization_id,item.playbook_id,item.current_version,item.client_app_id,item.client_contact_id,trigger_key) ON CONFLICT DO NOTHING RETURNING id INTO new_run_id;
+    IF new_run_id IS NULL AND trigger_kind='followup' AND item.latest_at<=NOW()-make_interval(days=>item.periodic_days) THEN
       trigger_kind:='periodic'; trigger_key:='periodic:'||floor(extract(epoch FROM NOW())/(item.periodic_days*86400))::BIGINT::TEXT;
-      INSERT INTO client_playbook_automation_runs(organization_id,playbook_id,playbook_version,client_app_id,client_contact_id,trigger_key) VALUES(item.organization_id,item.playbook_id,item.current_version,item.client_app_id,item.client_contact_id,trigger_key) ON CONFLICT DO NOTHING RETURNING id INTO run_id;
+      INSERT INTO client_playbook_automation_runs(organization_id,playbook_id,playbook_version,client_app_id,client_contact_id,trigger_key) VALUES(item.organization_id,item.playbook_id,item.current_version,item.client_app_id,item.client_contact_id,trigger_key) ON CONFLICT DO NOTHING RETURNING id INTO new_run_id;
     END IF;
-    IF run_id IS NULL THEN skipped:=skipped+1; CONTINUE; END IF;
+    IF new_run_id IS NULL THEN skipped:=skipped+1; CONTINUE; END IF;
     SELECT COUNT(*),MAX(occurred_at) INTO context_count,context_latest FROM client_email_messages WHERE organization_id=item.organization_id AND client_app_id=item.client_app_id;
     rendered_subject:=replace(replace(replace(replace(replace(replace(COALESCE(item.subject_template,''),'{{clientName}}',item.app_name),'{{contactName}}',item.contact_name),'{{contactFirstName}}',split_part(item.contact_name,' ',1)),'{{subscriptionStatus}}',item.subscription_status),'{{productName}}',item.product_name),'{{billingInterval}}',item.billing_interval);
     rendered_body:=replace(replace(replace(replace(replace(replace(item.body_template,'{{clientName}}',item.app_name),'{{contactName}}',item.contact_name),'{{contactFirstName}}',split_part(item.contact_name,' ',1)),'{{subscriptionStatus}}',item.subscription_status),'{{productName}}',item.product_name),'{{billingInterval}}',item.billing_interval);
     BEGIN
-      INSERT INTO client_playbook_drafts(organization_id,playbook_id,playbook_version,client_app_id,client_contact_id,client_subscription_id,channel,recipient_label,subject,body,created_by_user_id,generation_mode,context_message_count,context_latest_message_at,agent_status) VALUES(item.organization_id,item.playbook_id,item.current_version,item.client_app_id,item.client_contact_id,item.subscription_id,item.channel,CASE WHEN item.channel='email' THEN item.email ELSE item.contact_name END,NULLIF(rendered_subject,''),rendered_body,item.assigned_by_user_id,'template',context_count,context_latest,'pending') RETURNING id INTO draft_id;
-      UPDATE client_playbook_automation_runs SET status='drafted',draft_id=draft_id,context_message_count=context_count,completed_at=NOW() WHERE id=run_id;
+      INSERT INTO client_playbook_drafts(organization_id,playbook_id,playbook_version,client_app_id,client_contact_id,client_subscription_id,channel,recipient_label,subject,body,created_by_user_id,generation_mode,context_message_count,context_latest_message_at,agent_status) VALUES(item.organization_id,item.playbook_id,item.current_version,item.client_app_id,item.client_contact_id,item.subscription_id,item.channel,CASE WHEN item.channel='email' THEN item.email ELSE item.contact_name END,NULLIF(rendered_subject,''),rendered_body,item.assigned_by_user_id,'template',context_count,context_latest,'pending') RETURNING id INTO new_draft_id;
+      UPDATE client_playbook_automation_runs automation_run SET status='drafted',draft_id=new_draft_id,context_message_count=context_count,completed_at=NOW() WHERE automation_run.id=new_run_id;
       UPDATE client_playbook_assignments SET last_draft_at=NOW(),last_trigger_kind=trigger_kind WHERE id=item.id;
-      INSERT INTO audit_events(organization_id,event_type,target_type,target_id,metadata) VALUES(item.organization_id,'client.playbook.automatic_draft_created','client_playbook_draft',draft_id::TEXT,jsonb_build_object('client_app_id',item.client_app_id,'playbook_id',item.playbook_id,'trigger_kind',trigger_kind,'context_message_count',context_count,'status','draft'));
+      INSERT INTO audit_events(organization_id,event_type,target_type,target_id,metadata) VALUES(item.organization_id,'client.playbook.automatic_draft_created','client_playbook_draft',new_draft_id::TEXT,jsonb_build_object('client_app_id',item.client_app_id,'playbook_id',item.playbook_id,'trigger_kind',trigger_kind,'context_message_count',context_count,'status','draft'));
       drafted:=drafted+1;
-    EXCEPTION WHEN unique_violation THEN UPDATE client_playbook_automation_runs SET status='skipped',failure_code='open_draft_exists',completed_at=NOW() WHERE id=run_id; skipped:=skipped+1; END;
-    run_id:=NULL; draft_id:=NULL;
+    EXCEPTION WHEN unique_violation THEN UPDATE client_playbook_automation_runs automation_run SET status='skipped',failure_code='open_draft_exists',completed_at=NOW() WHERE automation_run.id=new_run_id; skipped:=skipped+1; END;
+    new_run_id:=NULL; new_draft_id:=NULL;
   END LOOP;
   RETURN jsonb_build_object('drafted',drafted,'skipped',skipped);
 END; $$;

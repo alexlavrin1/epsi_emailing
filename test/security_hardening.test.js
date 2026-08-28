@@ -70,6 +70,19 @@ test('internal payment alerts require a configured Slack workspace and channel',
   assert.ok(findings.some(item => item.name === 'PAYMENT_RECOVERY_INTERNAL_SLACK_CHANNEL_ID'));
 });
 
+test('active client email delivery requires an explicit recipient allowlist', () => {
+  const findings = validateEnvironment({
+    SUPABASE_URL: 'https://project.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: ['sb', 'secret', 'configured_server_key_123456789'].join('_'),
+    YANDEX_EMAIL: 'operator@example.com',
+    YANDEX_PASSWORD: 'configured',
+    CRON_SECRET: 'a'.repeat(32),
+    CLIENT_SUCCESS_EMAIL_DELIVERY_ENABLED: 'true',
+    CLIENT_SUCCESS_EMAIL_DELIVERY_DRY_RUN: 'false',
+  });
+  assert.ok(findings.some(item => item.name === 'CLIENT_SUCCESS_EMAIL_DELIVERY_ALLOWLIST'));
+});
+
 test('keeps local env files ignored and recognizable live secrets out of tracked files', () => {
   assert.deepEqual(ignoredEnvironmentFiles(root), []);
   assert.deepEqual(scanTrackedFiles(root), []);
