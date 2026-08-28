@@ -94,7 +94,7 @@ module.exports = {
       .split(',')
       .map(email => email.trim().toLowerCase())
       .filter(Boolean),
-    limit: parseInt(process.env.CLIENT_SUCCESS_EMAIL_DELIVERY_LIMIT || '10', 10),
+    limit: parseInt(process.env.CLIENT_SUCCESS_EMAIL_DELIVERY_LIMIT || '1', 10),
   },
   slack: {
     botToken: process.env.SLACK_BOT_TOKEN,

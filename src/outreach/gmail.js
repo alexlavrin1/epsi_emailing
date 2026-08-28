@@ -11,11 +11,27 @@ function createTransporter() {
     host: config.yandex.smtpHost,
     port: 465,
     secure: true,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
     auth: {
       user: config.yandex.email,
       pass: config.yandex.password,
     },
   });
+}
+
+function imapOptions() {
+  return {
+    host: config.yandex.imapHost,
+    port: 993,
+    secure: true,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
+    auth: { user: config.yandex.email, pass: config.yandex.password },
+    logger: false,
+  };
 }
 
 function buildFrom(fromEmail, displayName) {
@@ -56,13 +72,7 @@ function findSentMailbox(mailboxes) {
  * so an IMAP failure must not make the outreach engine retry the recipient.
  */
 async function archiveSentMessage(raw, sentAt = new Date()) {
-  const client = new ImapFlow({
-    host: config.yandex.imapHost,
-    port: 993,
-    secure: true,
-    auth: { user: config.yandex.email, pass: config.yandex.password },
-    logger: false,
-  });
+  const client = new ImapFlow(imapOptions());
 
   try {
     await client.connect();
@@ -247,13 +257,7 @@ async function findRecentInboundMessages(prospectEmails, since) {
   const targets = new Set(prospectEmails.map(normalizeAddress).filter(Boolean));
   if (!targets.size) return [];
 
-  const client = new ImapFlow({
-    host: config.yandex.imapHost,
-    port: 993,
-    secure: true,
-    auth: { user: config.yandex.email, pass: config.yandex.password },
-    logger: false,
-  });
+  const client = new ImapFlow(imapOptions());
 
   try {
     await client.connect();
@@ -320,13 +324,7 @@ async function findRecentInboundMessages(prospectEmails, since) {
 async function findRecentClientCorrespondence(contactEmails, since) {
   const targets = new Set(contactEmails.map(normalizeAddress).filter(Boolean));
   if (!targets.size) return [];
-  const client = new ImapFlow({
-    host: config.yandex.imapHost,
-    port: 993,
-    secure: true,
-    auth: { user: config.yandex.email, pass: config.yandex.password },
-    logger: false,
-  });
+  const client = new ImapFlow(imapOptions());
 
   try {
     await client.connect();

@@ -55,7 +55,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 BEGIN
   IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Service role required'; END IF;
   IF target_limit NOT BETWEEN 1 AND 25 THEN RAISE EXCEPTION 'Invalid limit'; END IF;
-  UPDATE client_playbook_drafts SET delivery_status='uncertain',delivery_failure_code='delivery_claim_expired',delivery_claimed_at=NULL
+  UPDATE client_playbook_drafts SET delivery_status=CASE WHEN delivery_attempt_count<3 THEN 'queued' ELSE 'failed' END,delivery_failure_code='delivery_claim_expired',delivery_claimed_at=NULL
   WHERE channel='email' AND status='approved' AND delivery_status='processing' AND delivery_claimed_at<NOW()-INTERVAL '15 minutes';
   RETURN QUERY WITH candidates AS (
     SELECT draft.id FROM client_playbook_drafts draft

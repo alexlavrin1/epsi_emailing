@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 
 const { render, buildVars, pickSubject } = require('../src/outreach/templates');
 const {
@@ -80,6 +81,13 @@ test('finds the provider Sent mailbox by special-use flag or path', () => {
     { path: 'Sent', specialUse: '\\Sent' },
   ]).path, 'Sent');
   assert.equal(findSentMailbox([{ path: 'Sent Items' }]).path, 'Sent Items');
+});
+
+test('mailbox connections have bounded network timeouts', () => {
+  const source = fs.readFileSync(require.resolve('../src/outreach/gmail'), 'utf8');
+  assert.match(source, /connectionTimeout:\s*10000/);
+  assert.match(source, /greetingTimeout:\s*10000/);
+  assert.match(source, /socketTimeout:\s*20000/);
 });
 
 test('groups an original email and its replies under one privacy-safe thread key', () => {

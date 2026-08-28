@@ -527,7 +527,9 @@ async function deliverClientPlaybookEmails(dependencies = {}) {
   const mailer = dependencies.mailer || gmail;
   let claimed;
   try {
-    claimed = await database.claimClientPlaybookEmailDeliveries(config.clientSuccessEmail.limit);
+    // A submission plus best-effort Sent archiving can use most of a 60-second
+    // serverless invocation. Claim only one so a timeout cannot strand a batch.
+    claimed = await database.claimClientPlaybookEmailDeliveries(1);
   } catch (error) {
     if (error?.code === 'PGRST202' || /service_claim_client_playbook_email_deliveries|schema cache/i.test(error?.message || '')) {
       logger.warn('Client-success email delivery migration is not installed; leaving approvals unsent');

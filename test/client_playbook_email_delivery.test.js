@@ -39,6 +39,7 @@ test('approved client email is claimed, threaded, and completed once', async () 
   const mailer = { sendClientSuccessEmail: async (...args) => { calls.push(['send', ...args]); return { rfcMessageId: '<outbound@epsifund.com>' }; } };
   const result = await deliverClientPlaybookEmails({ db, mailer });
   assert.deepEqual(result, { enabled: true, dryRun: false, due: 1, sent: 1, failed: 0 });
+  assert.deepEqual(calls[0], ['claim', 1]);
   assert.equal(calls[1][0], 'send');
   assert.equal(calls[1][2], 'client@example.com');
   assert.equal(calls[1][5].inReplyTo, '<inbound@example.com>');
