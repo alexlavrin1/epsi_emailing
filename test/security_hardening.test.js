@@ -56,6 +56,20 @@ test('accepts Vercel OIDC instead of a persistent AI Gateway key', () => {
   assert.equal(findings.some(item => item.name === 'AI_GATEWAY_API_KEY'), false);
 });
 
+test('internal payment alerts require a configured Slack workspace and channel', () => {
+  const findings = validateEnvironment({
+    SUPABASE_URL: 'https://project.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: ['sb', 'secret', 'configured_server_key_123456789'].join('_'),
+    YANDEX_EMAIL: 'operator@example.com',
+    YANDEX_PASSWORD: 'configured',
+    CRON_SECRET: 'a'.repeat(32),
+    PAYMENT_RECOVERY_INTERNAL_ALERTS_ENABLED: 'true',
+  });
+  assert.ok(findings.some(item => item.name === 'SLACK_BOT_TOKEN'));
+  assert.ok(findings.some(item => item.name === 'SLACK_TEAM_ID'));
+  assert.ok(findings.some(item => item.name === 'PAYMENT_RECOVERY_INTERNAL_SLACK_CHANNEL_ID'));
+});
+
 test('keeps local env files ignored and recognizable live secrets out of tracked files', () => {
   assert.deepEqual(ignoredEnvironmentFiles(root), []);
   assert.deepEqual(scanTrackedFiles(root), []);

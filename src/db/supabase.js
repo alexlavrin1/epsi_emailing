@@ -617,7 +617,7 @@ async function schedulePaymentRecoveryMessage(messageRecord) {
 }
 
 async function getDuePaymentRecoveryMessages(limit = 100, channel = null) {
-  const maxAttempts = channel === 'slack'
+  const maxAttempts = String(channel || '').endsWith('slack')
     ? config.slack.maxAttempts
     : config.transactionalEmail.maxAttempts;
   let query = supabase

@@ -67,6 +67,15 @@ module.exports = {
     caseLimit:
       parseInt(process.env.PAYMENT_RECOVERY_REMINDER_CASE_LIMIT || '25', 10),
   },
+  paymentRecoveryInternalAlerts: {
+    enabled:
+      String(process.env.PAYMENT_RECOVERY_INTERNAL_ALERTS_ENABLED || 'false').toLowerCase() === 'true',
+    dryRun:
+      String(process.env.PAYMENT_RECOVERY_INTERNAL_ALERTS_DRY_RUN || 'true').toLowerCase() !== 'false',
+    email: process.env.PAYMENT_RECOVERY_INTERNAL_EMAIL || process.env.YANDEX_EMAIL,
+    slackChannelId:
+      process.env.PAYMENT_RECOVERY_INTERNAL_SLACK_CHANNEL_ID || process.env.SLACK_FAILURE_ALERT_CHANNEL_ID,
+  },
   transactionalEmail: {
     enabled:
       String(process.env.TRANSACTIONAL_EMAIL_ENABLED || 'false').toLowerCase() === 'true',

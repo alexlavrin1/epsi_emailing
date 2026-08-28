@@ -103,8 +103,8 @@ function buildPaymentRecoveryCaseRecord({
 }
 
 function buildRecoveryMessageRecord({ recoveryCaseId, channel, stepNumber, scheduledFor }) {
-  if (!['email', 'slack'].includes(channel)) {
-    throw new Error('Recovery message channel must be email or slack');
+  if (!['email', 'slack', 'internal_email', 'internal_slack'].includes(channel)) {
+    throw new Error('Recovery message channel must be email or slack, customer or internal');
   }
   if (!Number.isInteger(stepNumber) || stepNumber < 1) {
     throw new Error('Recovery message stepNumber must be a positive integer');

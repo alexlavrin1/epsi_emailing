@@ -6,6 +6,7 @@ const {
   processStripeEventRow,
   reconcilePaymentRecoveryCases,
   scheduleDuePaymentRecoveryReminders,
+  deliverDueInternalRecoveryAlerts,
   deliverRecoveryFailureAlerts,
 } = require('../src/payment-recovery/engine');
 
@@ -264,6 +265,99 @@ test('failure-alert dry-run reports exhausted jobs without claiming them', async
     assert.equal(claimed, 0);
   } finally {
     Object.assign(config.slack, original);
+  }
+});
+
+test('internal recovery alerts schedule operator email and channel jobs without customer delivery', async () => {
+  const originalStripe = { ...config.stripe };
+  const originalInternal = { ...config.paymentRecoveryInternalAlerts };
+  Object.assign(config.stripe, { paymentRecoveryEnabled: false, allowLiveEvents: false });
+  Object.assign(config.paymentRecoveryInternalAlerts, {
+    enabled: true,
+    dryRun: true,
+    email: 'operator@example.com',
+    slackChannelId: 'C_INTERNAL',
+  });
+  const context = stripeContext();
+  const messages = [];
+  try {
+    const result = await processStripeEventRow({ id: 'evt_phase6' }, {
+      stripe: stripeStub(context),
+      db: {
+        getPaymentRecoveryCaseByInvoiceId: async () => null,
+        upsertCrmCustomer: async record => customer(record),
+        upsertPaymentRecoveryCase: async record => ({ id: 'case_internal', ...record }),
+        schedulePaymentRecoveryMessage: async record => {
+          messages.push(record);
+          return { duplicate: false, message: record };
+        },
+      },
+    });
+    assert.equal(result.outcome, 'messages_scheduled');
+    assert.deepEqual(messages.map(message => message.channel), ['internal_email', 'internal_slack']);
+  } finally {
+    Object.assign(config.stripe, originalStripe);
+    Object.assign(config.paymentRecoveryInternalAlerts, originalInternal);
+  }
+});
+
+test('internal recovery delivery emails the operator and posts to the configured channel', async () => {
+  const original = { ...config.paymentRecoveryInternalAlerts };
+  Object.assign(config.paymentRecoveryInternalAlerts, {
+    enabled: true,
+    dryRun: false,
+    email: 'operator@example.com',
+    slackChannelId: 'C_INTERNAL',
+  });
+  const context = stripeContext();
+  const recoveryCase = {
+    id: 'case_internal',
+    state: 'open',
+    stripe_invoice_id: context.invoice.id,
+    customer: { name: 'Priya Shah', email: 'client@example.com' },
+  };
+  const sent = [];
+  try {
+    const result = await deliverDueInternalRecoveryAlerts({
+      stripe: stripeStub(context),
+      db: {
+        getDuePaymentRecoveryMessages: async (_limit, channel) => [{
+          id: `msg_${channel}`,
+          channel,
+          recovery_case: recoveryCase,
+        }],
+        markPaymentRecoveryMessageSending: async id => ({ id }),
+        markPaymentRecoveryMessageSent: async (id, providerId) => sent.push([id, providerId]),
+        markPaymentRecoveryMessageFailed: async () => assert.fail('delivery must not fail'),
+        cancelPaymentRecoveryMessage: async () => assert.fail('action is still required'),
+        cancelPaymentRecoveryMessages: async () => assert.fail('action is still required'),
+      },
+      mailer: {
+        sendTransactionalEmail: async (_from, to, subject, body) => {
+          assert.equal(to, 'operator@example.com');
+          assert.match(subject, /Priya Shah/);
+          assert.match(body, /no customer message was sent/i);
+          return { rfcMessageId: '<internal@example.com>' };
+        },
+      },
+      slack: {
+        sendChannelMessage: async (channel, text) => {
+          assert.equal(channel, 'C_INTERNAL');
+          assert.match(text, /Customer payment requires authentication/);
+          assert.match(text, /in_phase6/);
+          return { messageId: 'C_INTERNAL:123.456' };
+        },
+      },
+    });
+    assert.deepEqual(result, {
+      enabled: true, dryRun: false, due: 2, sent: 2, failed: 0, blocked: 0,
+    });
+    assert.deepEqual(sent, [
+      ['msg_internal_email', '<internal@example.com>'],
+      ['msg_internal_slack', 'C_INTERNAL:123.456'],
+    ]);
+  } finally {
+    Object.assign(config.paymentRecoveryInternalAlerts, original);
   }
 });
 

@@ -237,7 +237,7 @@ ALTER TABLE payment_recovery_cases ENABLE ROW LEVEL SECURITY;
 CREATE TABLE IF NOT EXISTS payment_recovery_messages (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   recovery_case_id    UUID NOT NULL REFERENCES payment_recovery_cases(id) ON DELETE CASCADE,
-  channel             TEXT NOT NULL CHECK (channel IN ('email', 'slack')),
+  channel             TEXT NOT NULL CHECK (channel IN ('email', 'slack', 'internal_email', 'internal_slack')),
   step_number         INTEGER NOT NULL CHECK (step_number >= 1),
   status              TEXT NOT NULL DEFAULT 'queued'
                       CHECK (status IN ('queued', 'sending', 'sent', 'failed', 'cancelled')),

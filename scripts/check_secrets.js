@@ -62,12 +62,24 @@ function validateEnvironment(env) {
     ['STRIPE_PAYMENT_RECOVERY_ENABLED', ['STRIPE_RESTRICTED_KEY']],
     ['SLACK_DELIVERY_ENABLED', ['SLACK_BOT_TOKEN', 'SLACK_TEAM_ID']],
     ['SLACK_FAILURE_ALERTS_ENABLED', ['SLACK_BOT_TOKEN', 'SLACK_FAILURE_ALERT_CHANNEL_ID']],
+    ['PAYMENT_RECOVERY_INTERNAL_ALERTS_ENABLED', ['SLACK_BOT_TOKEN', 'SLACK_TEAM_ID']],
   ];
   for (const [toggle, names] of conditional) {
     if (String(env[toggle]).toLowerCase() !== 'true') continue;
     for (const name of names) {
       if (!isConfigured(env[name])) findings.push({ level: 'error', name, message: `required while ${toggle}=true` });
     }
+  }
+  if (
+    String(env.PAYMENT_RECOVERY_INTERNAL_ALERTS_ENABLED).toLowerCase() === 'true'
+    && !isConfigured(env.PAYMENT_RECOVERY_INTERNAL_SLACK_CHANNEL_ID)
+    && !isConfigured(env.SLACK_FAILURE_ALERT_CHANNEL_ID)
+  ) {
+    findings.push({
+      level: 'error',
+      name: 'PAYMENT_RECOVERY_INTERNAL_SLACK_CHANNEL_ID',
+      message: 'PAYMENT_RECOVERY_INTERNAL_SLACK_CHANNEL_ID or SLACK_FAILURE_ALERT_CHANNEL_ID required while PAYMENT_RECOVERY_INTERNAL_ALERTS_ENABLED=true',
+    });
   }
   if (String(env.CLIENT_SUCCESS_AGENT_ENABLED).toLowerCase() === 'true'
       && !isConfigured(env.AI_GATEWAY_API_KEY)

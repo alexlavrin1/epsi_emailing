@@ -79,10 +79,51 @@ function renderRecoveryFailureAlert(message) {
   ].join('\n');
 }
 
+function renderInternalPaymentRecoveryAlert({
+  customerName,
+  customerEmail,
+  invoiceId,
+  amountRemaining,
+  currency,
+  hostedInvoiceUrl,
+}) {
+  if (!isTrustedHostedInvoiceUrl(hostedInvoiceUrl)) {
+    throw new Error('Refusing to render an untrusted hosted invoice URL');
+  }
+  const amount = formatAmount(amountRemaining, currency);
+  const customer = customerName || customerEmail || 'Unknown customer';
+  const details = [
+    `Customer: ${customer}`,
+    customerEmail && customerEmail !== customer ? `Email: ${customerEmail}` : null,
+    `Amount: ${amount}`,
+    `Invoice: ${invoiceId}`,
+    '',
+    'Stripe requires the customer to complete authentication:',
+    hostedInvoiceUrl,
+  ].filter(value => value !== null).join('\n');
+  return {
+    subject: `Payment action required: ${customer} (${amount})`,
+    emailBody: [
+      'A customer payment requires authentication.',
+      '',
+      details,
+      '',
+      'This alert is internal. No customer message was sent.',
+    ].join('\n'),
+    slackText: [
+      ':warning: *Customer payment requires authentication*',
+      details,
+      '',
+      '_Internal alert — no customer message was sent._',
+    ].join('\n'),
+  };
+}
+
 module.exports = {
   isTrustedHostedInvoiceUrl,
   formatAmount,
   renderPaymentActionEmail,
   renderPaymentActionSlack,
   renderRecoveryFailureAlert,
+  renderInternalPaymentRecoveryAlert,
 };

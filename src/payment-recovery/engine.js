@@ -14,6 +14,7 @@ const {
   isTrustedHostedInvoiceUrl,
   renderPaymentActionEmail,
   renderPaymentActionSlack,
+  renderInternalPaymentRecoveryAlert,
   renderRecoveryFailureAlert,
 } = require('./templates');
 
@@ -140,6 +141,29 @@ async function scheduleRecoveryChannels({
   return { channels, duplicates };
 }
 
+async function scheduleInternalRecoveryAlerts({ database, recoveryCase, scheduledFor }) {
+  const channels = [];
+  const duplicates = [];
+  const configuredChannels = [
+    ['internal_email', config.paymentRecoveryInternalAlerts.email],
+    ['internal_slack', config.paymentRecoveryInternalAlerts.slackChannelId],
+  ];
+  for (const [channel, destination] of configuredChannels) {
+    if (!destination) continue;
+    const scheduled = await database.schedulePaymentRecoveryMessage(
+      buildRecoveryMessageRecord({
+        recoveryCaseId: recoveryCase.id,
+        channel,
+        stepNumber: 1,
+        scheduledFor,
+      })
+    );
+    channels.push(channel);
+    if (scheduled.duplicate) duplicates.push(channel);
+  }
+  return { channels, duplicates };
+}
+
 async function persistRecoveryContext({
   context,
   eventType,
@@ -196,7 +220,8 @@ async function persistRecoveryContext({
       created,
     };
   }
-  if (!config.stripe.paymentRecoveryEnabled) {
+  const internalAlertsEnabled = config.paymentRecoveryInternalAlerts.enabled;
+  if (!config.stripe.paymentRecoveryEnabled && !internalAlertsEnabled) {
     return {
       result: { outcome: 'case_open_recovery_disabled' },
       recoveryCase,
@@ -205,7 +230,7 @@ async function persistRecoveryContext({
       created,
     };
   }
-  if (customer.status !== 'active') {
+  if (customer.status !== 'active' && !internalAlertsEnabled) {
     return {
       result: { outcome: 'case_open_customer_suppressed' },
       recoveryCase,
@@ -215,14 +240,28 @@ async function persistRecoveryContext({
     };
   }
 
-  const scheduled = await scheduleRecoveryChannels({
-    database,
-    recoveryCase,
-    customer,
-    stepNumber: 1,
-    scheduledFor: now,
-    slackScheduledFor: initialSlackTimestamp(now),
-  });
+  const scheduled = { channels: [], duplicates: [] };
+  if (config.stripe.paymentRecoveryEnabled && customer.status === 'active') {
+    const customerChannels = await scheduleRecoveryChannels({
+      database,
+      recoveryCase,
+      customer,
+      stepNumber: 1,
+      scheduledFor: now,
+      slackScheduledFor: initialSlackTimestamp(now),
+    });
+    scheduled.channels.push(...customerChannels.channels);
+    scheduled.duplicates.push(...customerChannels.duplicates);
+  }
+  if (internalAlertsEnabled) {
+    const internalChannels = await scheduleInternalRecoveryAlerts({
+      database,
+      recoveryCase,
+      scheduledFor: now,
+    });
+    scheduled.channels.push(...internalChannels.channels);
+    scheduled.duplicates.push(...internalChannels.duplicates);
+  }
   const result = scheduled.channels.length
     ? { outcome: 'messages_scheduled', ...scheduled }
     : { outcome: 'case_open_channels_unavailable' };
@@ -617,6 +656,94 @@ async function deliverDueSlackMessages(dependencies = {}) {
   return { enabled: true, dryRun: false, due: due.length, sent, failed, blocked };
 }
 
+async function deliverDueInternalRecoveryAlerts(dependencies = {}) {
+  if (!config.paymentRecoveryInternalAlerts.enabled) {
+    return { enabled: false, due: 0, sent: 0, failed: 0, blocked: 0 };
+  }
+  const database = dependencies.db || db;
+  const stripe = dependencies.stripe || getStripeClient();
+  const mailer = dependencies.mailer || gmail;
+  const slack = dependencies.slack || slackClient;
+  const [emailDue, slackDue] = await Promise.all([
+    database.getDuePaymentRecoveryMessages(100, 'internal_email'),
+    database.getDuePaymentRecoveryMessages(100, 'internal_slack'),
+  ]);
+  const due = [...emailDue, ...slackDue];
+
+  if (config.paymentRecoveryInternalAlerts.dryRun) {
+    return { enabled: true, dryRun: true, due: due.length, sent: 0, failed: 0, blocked: 0 };
+  }
+
+  let sent = 0;
+  let failed = 0;
+  let blocked = 0;
+  for (const message of due) {
+    const destination = message.channel === 'internal_email'
+      ? config.paymentRecoveryInternalAlerts.email
+      : config.paymentRecoveryInternalAlerts.slackChannelId;
+    if (!destination) {
+      blocked++;
+      continue;
+    }
+    const claimed = await database.markPaymentRecoveryMessageSending(message.id);
+    if (!claimed) continue;
+
+    try {
+      const invoice = await stripe.invoices.retrieve(
+        message.recovery_case.stripe_invoice_id,
+        { expand: ['payment_intent'] }
+      );
+      let paymentIntent = invoice.payment_intent || null;
+      if (typeof paymentIntent === 'string') {
+        paymentIntent = await stripe.paymentIntents.retrieve(paymentIntent);
+      }
+      if (!requiresCustomerAction({ invoice, paymentIntent })) {
+        await database.cancelPaymentRecoveryMessage(message.id);
+        await database.cancelPaymentRecoveryMessages(message.recovery_case.id);
+        continue;
+      }
+
+      const customer = message.recovery_case.customer || {};
+      const rendered = renderInternalPaymentRecoveryAlert({
+        customerName: customer.name,
+        customerEmail: customer.email,
+        invoiceId: invoice.id,
+        amountRemaining: invoice.amount_remaining,
+        currency: invoice.currency,
+        hostedInvoiceUrl: invoice.hosted_invoice_url,
+      });
+      let providerMessageId;
+      if (message.channel === 'internal_email') {
+        const result = await mailer.sendTransactionalEmail(
+          config.yandex.email,
+          destination,
+          rendered.subject,
+          rendered.emailBody,
+          { displayName: 'EpsiFlow' }
+        );
+        providerMessageId = result.rfcMessageId;
+      } else {
+        const result = await slack.sendChannelMessage(destination, rendered.slackText);
+        providerMessageId = result.messageId;
+      }
+      await database.markPaymentRecoveryMessageSent(message.id, providerMessageId);
+      sent++;
+    } catch (error) {
+      failed++;
+      await database.markPaymentRecoveryMessageFailed(message.id, error.message);
+      logger.error(`Internal payment-recovery alert failed [message=${message.id}]: ${error.message}`);
+    }
+  }
+  return {
+    enabled: true,
+    dryRun: false,
+    due: due.length,
+    sent,
+    failed,
+    blocked,
+  };
+}
+
 async function deliverRecoveryFailureAlerts(dependencies = {}) {
   if (!config.slack.failureAlertsEnabled) {
     return { enabled: false, due: 0, sent: 0, failed: 0 };
@@ -664,8 +791,9 @@ async function runPaymentRecoveryCycle(dependencies = {}) {
   const reminders = await scheduleDuePaymentRecoveryReminders(dependencies);
   const email = await deliverDueTransactionalEmails(dependencies);
   const slack = await deliverDueSlackMessages(dependencies);
+  const internalAlerts = await deliverDueInternalRecoveryAlerts(dependencies);
   const alerts = await deliverRecoveryFailureAlerts(dependencies);
-  return { events, clientSubscriptions, reconciliation, reminders, email, slack, alerts };
+  return { events, clientSubscriptions, reconciliation, reminders, email, slack, internalAlerts, alerts };
 }
 
 module.exports = {
@@ -680,6 +808,7 @@ module.exports = {
   scheduleDuePaymentRecoveryReminders,
   deliverDueTransactionalEmails,
   deliverDueSlackMessages,
+  deliverDueInternalRecoveryAlerts,
   deliverRecoveryFailureAlerts,
   runPaymentRecoveryCycle,
 };
