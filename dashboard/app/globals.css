@@ -555,6 +555,7 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .performance-range a:hover { color: var(--text); }
 .performance-range a[aria-current="page"] { background: var(--accent-soft); color: var(--accent-strong); }
 .draft-filter { grid-template-columns: repeat(3, 1fr); }
+.client-type-filter { grid-template-columns: repeat(4, 1fr); }
 .performance-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
 .performance-kpis article { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 7px 9px; padding: 13px; border: 1px solid var(--border); border-radius: 10px; background: #091310; }
 .performance-kpis svg { color: var(--accent); }
@@ -1063,3 +1064,9 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .playbook-assignment-status { display:grid; gap:5px; padding:12px; border:1px solid var(--border); border-radius:10px; background:var(--surface-raised); }
 .playbook-assignment-status .status-badge { justify-self:start; }
 .playbook-assignment-status small { color:var(--muted); line-height:1.5; }
+.client-playbook-runner-shell { display:grid; gap:12px; }
+.playbook-assignment-list { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.playbook-assignment-list .playbook-assignment-status { display:flex; align-items:center; gap:10px; }
+.playbook-assignment-list .playbook-assignment-status > div { flex:1; display:grid; gap:4px; min-width:0; }
+.playbook-assignment-list .playbook-assignment-status > div strong { font-size:13px; overflow-wrap:anywhere; }
+.playbook-assignment-list .playbook-assignment-status form { margin:0; flex:0 0 auto; }

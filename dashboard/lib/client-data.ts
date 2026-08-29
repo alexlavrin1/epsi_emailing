@@ -15,6 +15,12 @@ export type ClientContact = {
   lastEmailSyncAt: string | null;
 };
 
+export type ClientPlan = {
+  label: string;
+  status: string;
+  price: string | null;
+};
+
 export type ClientAppSummary = {
   id: string;
   name: string;
@@ -26,7 +32,32 @@ export type ClientAppSummary = {
   relationshipNote: string;
   updatedAt: string;
   contacts: ClientContact[];
+  plan: ClientPlan | null;
 };
+
+type SubscriptionSummaryRecord = {
+  status: string; product_name: string | null; price_nickname: string | null;
+  billing_interval: string | null; interval_count?: number | null;
+  unit_amount: number | null; currency: string | null;
+};
+
+const subscriptionRank: Record<string, number> = { active: 1, trialing: 2, past_due: 3, unpaid: 4 };
+
+function planPrice(record: SubscriptionSummaryRecord): string | null {
+  if (record.unit_amount === null || !record.currency) return null;
+  let amount: string;
+  try { amount = new Intl.NumberFormat("en", { style: "currency", currency: record.currency.toUpperCase() }).format(record.unit_amount / 100); }
+  catch { amount = `${record.unit_amount / 100} ${record.currency.toUpperCase()}`; }
+  if (!record.billing_interval) return amount;
+  const count = record.interval_count && record.interval_count > 1 ? `${record.interval_count} ` : "";
+  return `${amount} / ${count}${record.billing_interval}`;
+}
+
+function primaryPlan(records: SubscriptionSummaryRecord[]): ClientPlan | null {
+  if (!records.length) return null;
+  const best = [...records].sort((a, b) => (subscriptionRank[a.status] ?? 5) - (subscriptionRank[b.status] ?? 5))[0];
+  return { label: best.product_name || best.price_nickname || "Subscription", status: best.status, price: planPrice(best) };
+}
 
 export type ClientSubscription = {
   id: string; stripeSubscriptionId: string; status: string; productName: string | null;
@@ -73,12 +104,13 @@ function contact(record: ContactRecord): ClientContact {
 
 export async function getClientApps(supabase: SupabaseClient, organizationId: string) {
   const { data, error } = await supabase.from("client_apps")
-    .select("id,name,website_url,status,client_segment,relationship_state,client_success_enabled,relationship_note,updated_at,contacts:client_contacts(id,name,email,slack_name,slack_display_name,slack_assignment_status,slack_team_id,slack_channel_id,slack_chat_url,slack_chat_label,slack_failure_code,last_email_sync_at)")
+    .select("id,name,website_url,status,client_segment,relationship_state,client_success_enabled,relationship_note,updated_at,contacts:client_contacts(id,name,email,slack_name,slack_display_name,slack_assignment_status,slack_team_id,slack_channel_id,slack_chat_url,slack_chat_label,slack_failure_code,last_email_sync_at),subscriptions:client_subscriptions(status,product_name,price_nickname,billing_interval,interval_count,unit_amount,currency)")
     .eq("organization_id", organizationId).order("updated_at", { ascending: false });
   if (error) return { ready: false, apps: [] as ClientAppSummary[] };
   const apps = (data ?? []).map(row => ({
     id: row.id, name: row.name, websiteUrl: row.website_url, status: row.status, clientSegment: row.client_segment, relationshipState: row.relationship_state, clientSuccessEnabled: row.client_success_enabled, relationshipNote: row.relationship_note,
     updatedAt: row.updated_at, contacts: ((row.contacts ?? []) as ContactRecord[]).map(contact),
+    plan: primaryPlan((row.subscriptions ?? []) as SubscriptionSummaryRecord[]),
   }));
   return { ready: true, apps };
 }
@@ -105,6 +137,7 @@ export async function getClientAppDetail(supabase: SupabaseClient, organizationI
   const app: ClientAppSummary = {
     id: row.id, name: row.name, websiteUrl: row.website_url, status: row.status, clientSegment: row.client_segment, relationshipState: row.relationship_state, clientSuccessEnabled: row.client_success_enabled, relationshipNote: row.relationship_note,
     updatedAt: row.updated_at, contacts: ((row.contacts ?? []) as ContactRecord[]).map(contact),
+    plan: primaryPlan((subscriptionsResult.data ?? []) as SubscriptionSummaryRecord[]),
   };
   const messages = (messagesResult.data ?? []).map(message => ({
     id: message.id, clientContactId: message.client_contact_id,

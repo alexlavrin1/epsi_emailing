@@ -6,7 +6,7 @@ import { X } from "lucide-react";
 import type { ManagedPlaybook, ClientPlaybook, ClientPlaybookAssignment } from "../../lib/client-playbook-data";
 import { setWorkflowStatus, updateReplyWorkflow } from "../dashboard/automations/actions";
 import { createClientPlaybook, setClientPlaybookStatus, updateClientPlaybook, type PlaybookActionState } from "../dashboard/playbooks/actions";
-import { createClientPlaybookDraftAction } from "../dashboard/clients/actions";
+import { createClientPlaybookDraftAction, removeClientPlaybookAssignmentAction } from "../dashboard/clients/actions";
 
 const initial: PlaybookActionState = { ok: false, message: "" };
 function Submit({ idle, pending, tone = "primary" }: { idle: string; pending: string; tone?: "primary" | "secondary" }) { const status = useFormStatus(); return <button className={`${tone}-button compact-button`} type="submit" disabled={status.pending}>{status.pending ? pending : idle}</button>; }
@@ -81,12 +81,21 @@ export function PlaybookDetailsModal({ playbook, isAdmin }: { playbook: ManagedP
   </>;
 }
 
-export function ClientPlaybookRunner({ clientAppId, contacts, playbooks, assignment }: { clientAppId: string; contacts: Array<{ id: string; name: string }>; playbooks: Array<{ id: string; name: string; channel: string }>; assignment:ClientPlaybookAssignment|null }) {
+export function ClientPlaybookRunner({ clientAppId, contacts, playbooks, eligiblePlaybookIds, assignments }: { clientAppId: string; contacts: Array<{ id: string; name: string }>; playbooks: Array<{ id: string; name: string; channel: string }>; eligiblePlaybookIds: string[]; assignments: ClientPlaybookAssignment[] }) {
   const [state, action] = useActionState(createClientPlaybookDraftAction, initial);
-  return <form className="action-form client-playbook-runner" action={action}><input type="hidden" name="client_app_id" value={clientAppId} />
-    {assignment ? <div className="playbook-assignment-status" role="status"><span className="status-badge status-active">Monitoring</span><strong>{playbooks.find(playbook=>playbook.id===assignment.playbookId)?.name || "Assigned playbook"}</strong><small>Replies after {assignment.replyDelayMinutes} min · follow-up after {assignment.followupDays} days · periodic review every {assignment.periodicDays} days</small></div> : <p className="muted">Choose once to keep this playbook attached to the relationship.</p>}
-    <label>Playbook<select name="playbook_id" required defaultValue={assignment?.playbookId || ""}><option value="" disabled>Select a playbook</option>{playbooks.map(playbook => <option value={playbook.id} key={playbook.id}>{playbook.name} · {playbook.channel}</option>)}</select></label>
-    <label>Primary contact<select name="contact_id" required defaultValue={assignment?.contactId || contacts[0]?.id || ""}>{contacts.map(contact => <option value={contact.id} key={contact.id}>{contact.name}</option>)}</select></label>
-    <Submit idle={assignment ? "Save assignment & prepare now" : "Assign playbook & prepare now"} pending="Saving assignment…" /><small>The 15-minute job checks synchronized mail for an unanswered inbound message, a due follow-up, or a periodic reminder. It only prepares an AI draft in Approvals; nothing is sent.</small><Feedback state={state} />
-  </form>;
+  const [removeState, removeAction] = useActionState(removeClientPlaybookAssignmentAction, initial);
+  const assignedIds = new Set(assignments.map(assignment => assignment.playbookId));
+  const eligible = new Set(eligiblePlaybookIds);
+  const addable = playbooks.filter(playbook => eligible.has(playbook.id) && !assignedIds.has(playbook.id));
+  const playbookName = (id: string) => playbooks.find(playbook => playbook.id === id)?.name || "Assigned playbook";
+  const playbookChannel = (id: string) => playbooks.find(playbook => playbook.id === id)?.channel;
+  return <div className="client-playbook-runner-shell">
+    {assignments.length ? <ul className="playbook-assignment-list">{assignments.map(assignment => <li className="playbook-assignment-status" key={assignment.id}><span className="status-badge status-active">Monitoring</span><div><strong>{playbookName(assignment.playbookId)}{playbookChannel(assignment.playbookId) ? ` · ${playbookChannel(assignment.playbookId)}` : ""}</strong><small>Replies after {assignment.replyDelayMinutes} min · follow-up after {assignment.followupDays} days · periodic review every {assignment.periodicDays} days</small></div><form action={removeAction} onSubmit={event => { if (!window.confirm(`Remove "${playbookName(assignment.playbookId)}" from this client? Monitoring stops; drafts already prepared stay in Approvals.`)) event.preventDefault(); }}><input type="hidden" name="client_app_id" value={clientAppId} /><input type="hidden" name="assignment_id" value={assignment.id} /><button className="icon-button" type="submit" aria-label={`Remove ${playbookName(assignment.playbookId)}`}><X size={16} aria-hidden="true" /></button></form></li>)}</ul> : <p className="muted">No playbook is attached yet. Assign one or more to keep this relationship monitored.</p>}
+    <Feedback state={removeState} />
+    {addable.length ? <form className="action-form client-playbook-runner" action={action}><input type="hidden" name="client_app_id" value={clientAppId} />
+      <label>Add a playbook<select name="playbook_id" required defaultValue=""><option value="" disabled>Select a playbook</option>{addable.map(playbook => <option value={playbook.id} key={playbook.id}>{playbook.name} · {playbook.channel}</option>)}</select></label>
+      <label>Primary contact<select name="contact_id" required defaultValue={contacts[0]?.id || ""}>{contacts.map(contact => <option value={contact.id} key={contact.id}>{contact.name}</option>)}</select></label>
+      <Submit idle="Assign playbook & prepare now" pending="Saving assignment…" /><small>The 15-minute job checks synchronized mail for an unanswered inbound message, a due follow-up, or a periodic reminder. It only prepares an AI draft in Approvals; nothing is sent.</small><Feedback state={state} />
+    </form> : <p className="muted">{assignments.length ? "Every eligible playbook is already assigned to this client." : "Activate a playbook whose audience includes this relationship to assign it here."}</p>}
+  </div>;
 }

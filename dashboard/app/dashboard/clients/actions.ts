@@ -126,6 +126,21 @@ export async function createClientPlaybookDraftAction(_previous: ClientActionSta
   return { ok: true, message: "Playbook assigned permanently and a context-aware draft was queued for Approvals. Nothing has been sent." };
 }
 
+export async function removeClientPlaybookAssignmentAction(_previous: ClientActionState, form: FormData): Promise<ClientActionState> {
+  const { membership } = await requireMembership();
+  if (!membership) return { ok: false, message: "An active workspace membership is required." };
+  const appId = formValue(form, "client_app_id"); const assignmentId = formValue(form, "assignment_id");
+  if (!uuidPattern.test(appId) || !uuidPattern.test(assignmentId)) return { ok: false, message: "Choose a valid playbook assignment to remove." };
+  const supabase = await createSupabaseServerClient(); if (!supabase) return { ok: false, message: "Client playbooks are unavailable." };
+  const { error } = await supabase.rpc("dashboard_unassign_client_playbook", { target_assignment_id: assignmentId });
+  if (error) {
+    if (/schema cache|Could not find|does not exist/i.test(error.message)) return { ok: false, message: "Multiple playbook assignments require migration 047." };
+    return { ok: false, message: "The playbook could not be removed from this client." };
+  }
+  revalidatePath(`/dashboard/clients/${appId}`); revalidatePath("/dashboard/audit");
+  return { ok: true, message: "Playbook removed from this client. Drafts already prepared remain in Approvals." };
+}
+
 export async function setClientRelationshipAction(_previous: ClientActionState, form: FormData): Promise<ClientActionState> {
   const { membership } = await requireMembership(); if (!membership) return { ok: false, message: "An active workspace membership is required." };
   const appId=formValue(form,"client_app_id"), segment=formValue(form,"client_segment"), relationshipState=formValue(form,"relationship_state"), note=formValue(form,"relationship_note");
