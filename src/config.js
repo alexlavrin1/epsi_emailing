@@ -72,6 +72,8 @@ module.exports = {
       String(process.env.PAYMENT_RECOVERY_INTERNAL_ALERTS_ENABLED || 'false').toLowerCase() === 'true',
     dryRun:
       String(process.env.PAYMENT_RECOVERY_INTERNAL_ALERTS_DRY_RUN || 'true').toLowerCase() !== 'false',
+    emailEnabled:
+      String(process.env.PAYMENT_RECOVERY_INTERNAL_EMAIL_ENABLED || 'false').toLowerCase() === 'true',
     email: process.env.PAYMENT_RECOVERY_INTERNAL_EMAIL || process.env.YANDEX_EMAIL,
     slackChannelId:
       process.env.PAYMENT_RECOVERY_INTERNAL_SLACK_CHANNEL_ID || process.env.SLACK_FAILURE_ALERT_CHANNEL_ID,

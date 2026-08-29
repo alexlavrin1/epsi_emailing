@@ -22,30 +22,31 @@ function firstName(name) {
 
 function renderPaymentActionEmail({
   customerName,
-  amountRemaining,
-  currency,
   hostedInvoiceUrl,
   reminder = false,
 }) {
   if (!isTrustedHostedInvoiceUrl(hostedInvoiceUrl)) {
     throw new Error('Refusing to render an untrusted hosted invoice URL');
   }
-  const amount = formatAmount(amountRemaining, currency);
   const greeting = firstName(customerName) ? `Hi ${firstName(customerName)},` : 'Hi,';
   return {
-    subject: `${reminder ? 'Reminder: action' : 'Action'} needed to complete your ${amount} payment`,
+    subject: 'EpsiFlow: Payment action required',
     body: [
       greeting,
       '',
-      `Your ${amount} payment to EpsiFlow is waiting for your bank's authentication.`,
+      'Hope you are doing well.',
       '',
-      'Please complete it using this secure Stripe page:',
+      reminder
+        ? 'I am following up because the EpsiFlow top-up is still awaiting 3D Secure authentication through Stripe.'
+        : 'The EpsiFlow top-up did not go through because Stripe requires 3D Secure authentication.',
+      '',
+      'Please use the secure link below to open the invoice and verify your payment:',
       hostedInvoiceUrl,
       '',
-      'If you have already completed the payment, no action is needed.',
+      'If you have any questions, feel free to contact me.',
       '',
-      'Best,',
-      'EpsiFlow',
+      'Best regards,',
+      'Alex Lavrin',
     ].join('\n'),
   };
 }
@@ -108,13 +109,13 @@ function renderInternalPaymentRecoveryAlert({
       '',
       details,
       '',
-      'This alert is internal. No customer message was sent.',
+      'This is an internal alert.',
     ].join('\n'),
     slackText: [
       ':warning: *Customer payment requires authentication*',
       details,
       '',
-      '_Internal alert — no customer message was sent._',
+      '_Internal alert._',
     ].join('\n'),
   };
 }

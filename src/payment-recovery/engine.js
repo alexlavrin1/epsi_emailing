@@ -145,7 +145,12 @@ async function scheduleInternalRecoveryAlerts({ database, recoveryCase, schedule
   const channels = [];
   const duplicates = [];
   const configuredChannels = [
-    ['internal_email', config.paymentRecoveryInternalAlerts.email],
+    [
+      'internal_email',
+      config.paymentRecoveryInternalAlerts.emailEnabled
+        ? config.paymentRecoveryInternalAlerts.email
+        : null,
+    ],
     ['internal_slack', config.paymentRecoveryInternalAlerts.slackChannelId],
   ];
   for (const [channel, destination] of configuredChannels) {
@@ -511,7 +516,8 @@ async function scheduleDuePaymentRecoveryReminders(dependencies = {}) {
 }
 
 function isAllowedRecipient(email) {
-  return config.transactionalEmail.allowlist.includes(String(email || '').toLowerCase());
+  return config.transactionalEmail.allowlist.includes('*') ||
+    config.transactionalEmail.allowlist.includes(String(email || '').toLowerCase());
 }
 
 async function deliverDueTransactionalEmails(dependencies = {}) {
@@ -679,7 +685,9 @@ async function deliverDueInternalRecoveryAlerts(dependencies = {}) {
   let blocked = 0;
   for (const message of due) {
     const destination = message.channel === 'internal_email'
-      ? config.paymentRecoveryInternalAlerts.email
+      ? (config.paymentRecoveryInternalAlerts.emailEnabled
+          ? config.paymentRecoveryInternalAlerts.email
+          : null)
       : config.paymentRecoveryInternalAlerts.slackChannelId;
     if (!destination) {
       blocked++;

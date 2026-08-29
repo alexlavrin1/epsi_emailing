@@ -91,9 +91,13 @@ test('renders a concise payment-action email without outreach headers or secrets
     currency: 'usd',
     hostedInvoiceUrl: 'https://invoice.stripe.com/i/test',
   });
-  assert.match(rendered.subject, /\$123\.45/);
+  assert.equal(rendered.subject, 'EpsiFlow: Payment action required');
   assert.match(rendered.body, /^Hi Priya,/);
+  assert.match(rendered.body, /Hope you are doing well\./);
+  assert.match(rendered.body, /EpsiFlow top-up did not go through/);
+  assert.match(rendered.body, /3D Secure authentication/);
   assert.match(rendered.body, /https:\/\/invoice\.stripe\.com\/i\/test/);
+  assert.match(rendered.body, /Best regards,\nAlex Lavrin$/);
   assert.doesNotMatch(rendered.body, /unsubscribe/i);
   assert.doesNotMatch(rendered.body, /client_secret|sk_test|rk_test|whsec/i);
 });
@@ -260,6 +264,55 @@ test('non-allowlisted delivery remains queued and sends nothing', async () => {
     assert.equal(result.blocked, 1);
     assert.equal(claimed, 0);
     assert.equal(sent, 0);
+  } finally {
+    Object.assign(config.transactionalEmail, original);
+  }
+});
+
+test('wildcard recovery allowlist authorizes an active customer email', async () => {
+  const original = { ...config.transactionalEmail };
+  Object.assign(config.transactionalEmail, {
+    enabled: true,
+    dryRun: false,
+    allowlist: ['*'],
+  });
+  const context = buildStripeContext();
+  let sent = 0;
+  try {
+    const result = await deliverDueTransactionalEmails({
+      stripe: {
+        invoices: { retrieve: async () => context.invoice },
+        paymentIntents: { retrieve: async () => context.invoice.payment_intent },
+      },
+      db: {
+        getDuePaymentRecoveryMessages: async () => [{
+          id: 'msg_wildcard',
+          channel: 'email',
+          recovery_case: {
+            id: 'case_wildcard',
+            state: 'open',
+            stripe_invoice_id: context.invoice.id,
+            customer: {
+              email: 'new-client@example.com', name: 'Arpit Sharma', status: 'active', email_enabled: true,
+            },
+          },
+        }],
+        markPaymentRecoveryMessageSending: async id => ({ id }),
+        markPaymentRecoveryMessageSent: async () => {},
+        markPaymentRecoveryMessageFailed: async () => assert.fail('send must not fail'),
+      },
+      mailer: {
+        sendTransactionalEmail: async (_from, to, subject, body) => {
+          sent++;
+          assert.equal(to, 'new-client@example.com');
+          assert.equal(subject, 'EpsiFlow: Payment action required');
+          assert.match(body, /^Hi Arpit,/);
+          return { rfcMessageId: '<wildcard@example.com>' };
+        },
+      },
+    });
+    assert.equal(result.sent, 1);
+    assert.equal(sent, 1);
   } finally {
     Object.assign(config.transactionalEmail, original);
   }

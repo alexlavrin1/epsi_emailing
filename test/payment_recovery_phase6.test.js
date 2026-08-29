@@ -275,6 +275,7 @@ test('internal recovery alerts schedule operator email and channel jobs without 
   Object.assign(config.paymentRecoveryInternalAlerts, {
     enabled: true,
     dryRun: true,
+    emailEnabled: true,
     email: 'operator@example.com',
     slackChannelId: 'C_INTERNAL',
   });
@@ -306,6 +307,7 @@ test('internal recovery delivery emails the operator and posts to the configured
   Object.assign(config.paymentRecoveryInternalAlerts, {
     enabled: true,
     dryRun: false,
+    emailEnabled: true,
     email: 'operator@example.com',
     slackChannelId: 'C_INTERNAL',
   });
@@ -336,7 +338,7 @@ test('internal recovery delivery emails the operator and posts to the configured
         sendTransactionalEmail: async (_from, to, subject, body) => {
           assert.equal(to, 'operator@example.com');
           assert.match(subject, /Priya Shah/);
-          assert.match(body, /no customer message was sent/i);
+          assert.match(body, /internal alert/i);
           return { rfcMessageId: '<internal@example.com>' };
         },
       },

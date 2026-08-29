@@ -1,5 +1,6 @@
 node_modules/
 .env
 .env.local
+.mcp.json
 *.csv
 .DS_Store
