@@ -178,6 +178,22 @@ test("keeps outreach controls tenant-scoped, confirmed, and audited", async () =
   assert.doesNotMatch(campaignActions + campaignControls + contactControls, /SUPABASE_SERVICE_ROLE_KEY/);
 });
 
+test("shows the five-touch payment recovery campaign and its two-week cadence", async () => {
+  const [page, data, css] = await Promise.all([
+    readFile(new URL("app/dashboard/campaigns/page.tsx", root), "utf8"),
+    readFile(new URL("lib/dashboard-data.ts", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
+  for (const day of [0, 2, 5, 9, 14]) assert.match(page, new RegExp(`day: ${day}`));
+  for (const label of ["Incomplete invoice", "Payment reminder", "Issue discovery", "Soft warning", "Three-day notice"]) assert.match(page, new RegExp(label));
+  assert.match(page, /Stripe and synchronized replies are checked before every step/);
+  assert.match(data, /getPaymentRecoveryCampaignStats/);
+  assert.match(data, /payment_recovery_cases/);
+  assert.match(data, /payment_recovery_messages/);
+  assert.match(css, /\.recovery-sequence \{[^}]*grid-template-columns: repeat\(5/);
+  assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.recovery-sequence \{ grid-template-columns: 1fr; \}/);
+});
+
 test("approval-gates replies and recovery retries without exposing mailbox tokens", async () => {
   const [migration, actions, approvalControls, draftForm] = await Promise.all([
     readFile(new URL("../database/migrations/009_approved_replies_and_retries.sql", root), "utf8"),

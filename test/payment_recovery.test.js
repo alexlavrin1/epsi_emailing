@@ -91,15 +91,51 @@ test('renders a concise payment-action email without outreach headers or secrets
     currency: 'usd',
     hostedInvoiceUrl: 'https://invoice.stripe.com/i/test',
   });
-  assert.equal(rendered.subject, 'EpsiFlow: Payment action required');
+  assert.equal(rendered.subject, 'EpsiFlow: Invoice payment incomplete');
   assert.match(rendered.body, /^Hi Priya,/);
   assert.match(rendered.body, /Hope you are doing well\./);
-  assert.match(rendered.body, /EpsiFlow top-up did not go through/);
+  assert.match(rendered.body, /payment status for your EpsiFlow invoice is incomplete/);
   assert.match(rendered.body, /3D Secure authentication/);
   assert.match(rendered.body, /https:\/\/invoice\.stripe\.com\/i\/test/);
   assert.match(rendered.body, /Best regards,\nAlex Lavrin$/);
   assert.doesNotMatch(rendered.body, /unsubscribe/i);
   assert.doesNotMatch(rendered.body, /client_secret|sk_test|rk_test|whsec/i);
+});
+
+test('renders all four follow-ups as distinct recovery steps', () => {
+  const reminder = renderPaymentActionEmail({
+    customerName: 'Priya Shah',
+    hostedInvoiceUrl: 'https://invoice.stripe.com/i/test',
+    stepNumber: 2,
+  });
+  assert.equal(reminder.subject, 'Reminder: EpsiFlow payment action required');
+  assert.match(reminder.body, /previous email/);
+
+  const discovery = renderPaymentActionEmail({
+    customerName: 'Priya Shah',
+    hostedInvoiceUrl: 'https://invoice.stripe.com/i/test',
+    stepNumber: 3,
+  });
+  assert.equal(discovery.subject, 'Can we help with your EpsiFlow payment?');
+  assert.match(discovery.body, /what is preventing you/);
+  assert.match(discovery.body, /3D Secure, the payment link/);
+
+  const softWarning = renderPaymentActionEmail({
+    customerName: 'Priya Shah',
+    hostedInvoiceUrl: 'https://invoice.stripe.com/i/test',
+    stepNumber: 4,
+  });
+  assert.equal(softWarning.subject, 'EpsiFlow: Please respond to avoid card interruption');
+  assert.match(softWarning.body, /will need to block the EpsiFlow card/);
+
+  const finalNotice = renderPaymentActionEmail({
+    customerName: 'Priya Shah',
+    hostedInvoiceUrl: 'https://invoice.stripe.com/i/test',
+    stepNumber: 5,
+  });
+  assert.equal(finalNotice.subject, 'EpsiFlow: Your card will be blocked in 3 days');
+  assert.match(finalNotice.body, /three-day notice/i);
+  assert.match(finalNotice.body, /block the EpsiFlow card until the account is funded/);
 });
 
 test('classifies only canonical open requires_action invoices as actionable', () => {
@@ -305,7 +341,7 @@ test('wildcard recovery allowlist authorizes an active customer email', async ()
         sendTransactionalEmail: async (_from, to, subject, body) => {
           sent++;
           assert.equal(to, 'new-client@example.com');
-          assert.equal(subject, 'EpsiFlow: Payment action required');
+          assert.equal(subject, 'EpsiFlow: Invoice payment incomplete');
           assert.match(body, /^Hi Arpit,/);
           return { rfcMessageId: '<wildcard@example.com>' };
         },

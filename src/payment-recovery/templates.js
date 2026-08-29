@@ -23,22 +23,96 @@ function firstName(name) {
 function renderPaymentActionEmail({
   customerName,
   hostedInvoiceUrl,
-  reminder = false,
+  stepNumber = 1,
 }) {
   if (!isTrustedHostedInvoiceUrl(hostedInvoiceUrl)) {
     throw new Error('Refusing to render an untrusted hosted invoice URL');
   }
   const greeting = firstName(customerName) ? `Hi ${firstName(customerName)},` : 'Hi,';
+  if (stepNumber >= 5) {
+    return {
+      subject: 'EpsiFlow: Your card will be blocked in 3 days',
+      body: [
+        greeting,
+        '',
+        'We still have not received the EpsiFlow top-up payment or a reply from you.',
+        '',
+        'This is a three-day notice. If the payment is not completed and we do not hear from you within three days, we will block the EpsiFlow card until the account is funded.',
+        '',
+        'You can complete the payment securely here:',
+        hostedInvoiceUrl,
+        '',
+        'If you are experiencing an issue or no longer wish to continue, please reply so we can help.',
+        '',
+        'Best regards,',
+        'Alex Lavrin',
+      ].join('\n'),
+    };
+  }
+  if (stepNumber === 4) {
+    return {
+      subject: 'EpsiFlow: Please respond to avoid card interruption',
+      body: [
+        greeting,
+        '',
+        'We have not yet received the EpsiFlow top-up payment or heard back from you.',
+        '',
+        'If we do not receive the payment or a reply, we will need to block the EpsiFlow card until the account is funded.',
+        '',
+        'Please use the secure payment link below, or reply and let us know what is preventing you from completing the payment:',
+        hostedInvoiceUrl,
+        '',
+        'Best regards,',
+        'Alex Lavrin',
+      ].join('\n'),
+    };
+  }
+  if (stepNumber === 3) {
+    return {
+      subject: 'Can we help with your EpsiFlow payment?',
+      body: [
+        greeting,
+        '',
+        'I wanted to check in and understand what is preventing you from completing the EpsiFlow top-up.',
+        '',
+        'Are you having trouble with 3D Secure, the payment link, or is there something else we can help with?',
+        '',
+        'You can complete the payment securely here:',
+        hostedInvoiceUrl,
+        '',
+        'Please reply and let me know what issue you are facing. I will be happy to help.',
+        '',
+        'Best regards,',
+        'Alex Lavrin',
+      ].join('\n'),
+    };
+  }
+  if (stepNumber === 2) {
+    return {
+      subject: 'Reminder: EpsiFlow payment action required',
+      body: [
+        greeting,
+        '',
+        'I am following up on my previous email because the payment for your EpsiFlow invoice is still incomplete.',
+        '',
+        'Please use the secure link below to complete the required 3D Secure authentication:',
+        hostedInvoiceUrl,
+        '',
+        'If you have already completed the payment or need help, please reply and let me know.',
+        '',
+        'Best regards,',
+        'Alex Lavrin',
+      ].join('\n'),
+    };
+  }
   return {
-    subject: 'EpsiFlow: Payment action required',
+    subject: 'EpsiFlow: Invoice payment incomplete',
     body: [
       greeting,
       '',
       'Hope you are doing well.',
       '',
-      reminder
-        ? 'I am following up because the EpsiFlow top-up is still awaiting 3D Secure authentication through Stripe.'
-        : 'The EpsiFlow top-up did not go through because Stripe requires 3D Secure authentication.',
+      'The payment status for your EpsiFlow invoice is incomplete because Stripe requires 3D Secure authentication.',
       '',
       'Please use the secure link below to open the invoice and verify your payment:',
       hostedInvoiceUrl,
@@ -53,18 +127,10 @@ function renderPaymentActionEmail({
 
 function renderPaymentActionSlack({
   customerName,
-  amountRemaining,
-  currency,
   hostedInvoiceUrl,
-  reminder = false,
+  stepNumber = 1,
 }) {
-  if (!isTrustedHostedInvoiceUrl(hostedInvoiceUrl)) {
-    throw new Error('Refusing to render an untrusted hosted invoice URL');
-  }
-  const amount = formatAmount(amountRemaining, currency);
-  const greeting = firstName(customerName) ? `Hi ${firstName(customerName)} — ` : '';
-  const prefix = reminder ? 'Reminder — ' : '';
-  return `${greeting}${prefix}your ${amount} payment to EpsiFlow is waiting for your bank's authentication. Complete it securely through Stripe: ${hostedInvoiceUrl}\n\nIf you already completed it, no action is needed.`;
+  return renderPaymentActionEmail({ customerName, hostedInvoiceUrl, stepNumber }).body;
 }
 
 function renderRecoveryFailureAlert(message) {
@@ -87,12 +153,14 @@ function renderInternalPaymentRecoveryAlert({
   amountRemaining,
   currency,
   hostedInvoiceUrl,
+  stepNumber = 1,
 }) {
   if (!isTrustedHostedInvoiceUrl(hostedInvoiceUrl)) {
     throw new Error('Refusing to render an untrusted hosted invoice URL');
   }
   const amount = formatAmount(amountRemaining, currency);
   const customer = customerName || customerEmail || 'Unknown customer';
+  const customerMessage = renderPaymentActionSlack({ customerName, hostedInvoiceUrl, stepNumber });
   const details = [
     `Customer: ${customer}`,
     customerEmail && customerEmail !== customer ? `Email: ${customerEmail}` : null,
@@ -115,7 +183,10 @@ function renderInternalPaymentRecoveryAlert({
       ':warning: *Customer payment requires authentication*',
       details,
       '',
-      '_Internal alert._',
+      '*Copy/paste message for the customer:*',
+      '──────────',
+      customerMessage,
+      '──────────',
     ].join('\n'),
   };
 }

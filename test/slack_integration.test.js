@@ -157,8 +157,10 @@ test('renders a concise Slack action message with the trusted Stripe link', () =
     hostedInvoiceUrl: 'https://invoice.stripe.com/i/test_slack',
   });
   assert.match(text, /^Hi Priya/);
-  assert.match(text, /\$1\.00/);
+  assert.match(text, /payment status for your EpsiFlow invoice is incomplete/);
+  assert.match(text, /3D Secure authentication/);
   assert.match(text, /invoice\.stripe\.com/);
+  assert.match(text, /Best regards,\nAlex Lavrin$/);
   assert.doesNotMatch(text, /client_secret|rk_test|whsec/i);
 });
 

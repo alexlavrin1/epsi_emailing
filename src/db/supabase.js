@@ -616,6 +616,42 @@ async function schedulePaymentRecoveryMessage(messageRecord) {
   return { duplicate: true, message: existing };
 }
 
+async function getLatestPaymentRecoverySequenceStep(recoveryCaseId) {
+  const { data, error } = await supabase
+    .from('payment_recovery_messages')
+    .select('step_number')
+    .eq('recovery_case_id', recoveryCaseId)
+    .in('channel', ['email', 'slack'])
+    .order('step_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.step_number || 0;
+}
+
+async function hasPaymentRecoveryCustomerReplied(recoveryCase) {
+  const customer = recoveryCase?.customer;
+  if (!customer?.organization_id || !customer?.email || !recoveryCase?.opened_at) return false;
+  const { data: contacts, error: contactsError } = await supabase
+    .from('client_contacts')
+    .select('id')
+    .eq('organization_id', customer.organization_id)
+    .eq('email', String(customer.email).toLowerCase());
+  if (contactsError) throw contactsError;
+  const contactIds = (contacts || []).map(contact => contact.id);
+  if (!contactIds.length) return false;
+  const { data, error } = await supabase
+    .from('client_email_messages')
+    .select('id')
+    .in('client_contact_id', contactIds)
+    .eq('direction', 'inbound')
+    .gte('occurred_at', new Date(recoveryCase.opened_at).toISOString())
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
 async function getDuePaymentRecoveryMessages(limit = 100, channel = null) {
   const maxAttempts = String(channel || '').endsWith('slack')
     ? config.slack.maxAttempts
@@ -1068,6 +1104,8 @@ module.exports = {
   getDuePaymentRecoveryReminderCases,
   setPaymentRecoveryNextReminder,
   schedulePaymentRecoveryMessage,
+  getLatestPaymentRecoverySequenceStep,
+  hasPaymentRecoveryCustomerReplied,
   getDuePaymentRecoveryMessages,
   markPaymentRecoveryMessageSending,
   markPaymentRecoveryMessageSent,

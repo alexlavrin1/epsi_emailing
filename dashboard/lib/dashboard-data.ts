@@ -106,6 +106,12 @@ export type CampaignRow = {
   updatedAt: string;
 };
 
+export type PaymentRecoveryCampaignStats = {
+  openCases: number;
+  scheduledEmails: number;
+  sentEmails: number;
+};
+
 export type ReplyRow = {
   id: string;
   prospectId: string | null;
@@ -550,6 +556,22 @@ export async function getCampaigns(supabase: SupabaseClient, organizationId: str
       updatedAt: campaign.updated_at,
     };
   });
+}
+
+export async function getPaymentRecoveryCampaignStats(supabase: SupabaseClient): Promise<PaymentRecoveryCampaignStats> {
+  const [openCases, scheduledEmails, sentEmails] = await Promise.all([
+    supabase.from("payment_recovery_cases").select("id", { count: "exact", head: true }).eq("state", "open"),
+    supabase.from("payment_recovery_messages").select("id", { count: "exact", head: true }).eq("channel", "email").eq("status", "queued"),
+    supabase.from("payment_recovery_messages").select("id", { count: "exact", head: true }).eq("channel", "email").eq("status", "sent"),
+  ]);
+  logQueryError("payment recovery campaign open cases", openCases.error);
+  logQueryError("payment recovery campaign scheduled emails", scheduledEmails.error);
+  logQueryError("payment recovery campaign sent emails", sentEmails.error);
+  return {
+    openCases: openCases.count ?? 0,
+    scheduledEmails: scheduledEmails.count ?? 0,
+    sentEmails: sentEmails.count ?? 0,
+  };
 }
 
 export async function getOutreachControlsReady(supabase: SupabaseClient) {

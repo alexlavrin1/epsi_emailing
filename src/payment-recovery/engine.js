@@ -89,10 +89,12 @@ function positiveInteger(value, fallback) {
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
-function reminderTimestamp(now) {
+function sequenceTimestamp(now, nextStep) {
   if (!config.paymentRecoveryReminders.enabled) return null;
-  const minutes = positiveInteger(config.paymentRecoveryReminders.finalDelayMinutes, null);
-  const hours = positiveInteger(config.paymentRecoveryReminders.finalDelayHours, 8);
+  const defaultHours = { 2: 48, 3: 72, 4: 96, 5: 120 };
+  const delay = config.paymentRecoveryReminders.sequenceDelays[nextStep] || {};
+  const minutes = positiveInteger(delay.minutes, null);
+  const hours = positiveInteger(delay.hours, defaultHours[nextStep] || 24);
   const delayMinutes = minutes || (hours * 60);
   return new Date(now.getTime() + (delayMinutes * 60 * 1000));
 }
@@ -141,7 +143,7 @@ async function scheduleRecoveryChannels({
   return { channels, duplicates };
 }
 
-async function scheduleInternalRecoveryAlerts({ database, recoveryCase, scheduledFor }) {
+async function scheduleInternalRecoveryAlerts({ database, recoveryCase, scheduledFor, stepNumber = 1 }) {
   const channels = [];
   const duplicates = [];
   const configuredChannels = [
@@ -159,7 +161,7 @@ async function scheduleInternalRecoveryAlerts({ database, recoveryCase, schedule
       buildRecoveryMessageRecord({
         recoveryCaseId: recoveryCase.id,
         channel,
-        stepNumber: 1,
+        stepNumber,
         scheduledFor,
       })
     );
@@ -195,7 +197,7 @@ async function persistRecoveryContext({
   const now = dependencies.now ? new Date(dependencies.now) : new Date();
   const nextReminderAt = existing
     ? existing.next_reminder_at
-    : (actionRequired && config.stripe.paymentRecoveryEnabled ? reminderTimestamp(now) : null);
+    : (actionRequired && config.stripe.paymentRecoveryEnabled ? sequenceTimestamp(now, 2) : null);
   const eventCreatedAt = eventType.startsWith('reconciliation.') && existing
     ? (existing.last_stripe_event_created_at || observedAt)
     : observedAt;
@@ -495,17 +497,47 @@ async function scheduleDuePaymentRecoveryReminders(dependencies = {}) {
         dependencies,
       });
       if (persisted.recoveryCase?.state !== 'open' || !persisted.actionRequired) continue;
+      if (
+        database.hasPaymentRecoveryCustomerReplied &&
+        await database.hasPaymentRecoveryCustomerReplied(persisted.recoveryCase)
+      ) {
+        await database.cancelPaymentRecoveryMessages(persisted.recoveryCase.id);
+        await database.setPaymentRecoveryNextReminder(persisted.recoveryCase.id, null);
+        await database.markPaymentRecoveryCaseReconciled(persisted.recoveryCase.id);
+        continue;
+      }
+      const latestStep = await database.getLatestPaymentRecoverySequenceStep(
+        persisted.recoveryCase.id
+      );
+      const nextStep = Math.min(Math.max(latestStep + 1, 2), 5);
+      if (latestStep >= 5) {
+        await database.setPaymentRecoveryNextReminder(persisted.recoveryCase.id, null);
+        await database.markPaymentRecoveryCaseReconciled(persisted.recoveryCase.id);
+        continue;
+      }
       if (persisted.customer.status === 'active') {
         const result = await scheduleRecoveryChannels({
           database,
           recoveryCase: persisted.recoveryCase,
           customer: persisted.customer,
-          stepNumber: 2,
+          stepNumber: nextStep,
           scheduledFor: dependencies.now ? new Date(dependencies.now) : new Date(),
         });
         scheduled += result.channels.length - result.duplicates.length;
       }
-      await database.setPaymentRecoveryNextReminder(persisted.recoveryCase.id, null);
+      if (config.paymentRecoveryInternalAlerts.enabled) {
+        const internal = await scheduleInternalRecoveryAlerts({
+          database,
+          recoveryCase: persisted.recoveryCase,
+          stepNumber: nextStep,
+          scheduledFor: dependencies.now ? new Date(dependencies.now) : new Date(),
+        });
+        scheduled += internal.channels.length - internal.duplicates.length;
+      }
+      const nextReminderAt = nextStep < 5
+        ? sequenceTimestamp(dependencies.now ? new Date(dependencies.now) : new Date(), nextStep + 1)
+        : null;
+      await database.setPaymentRecoveryNextReminder(persisted.recoveryCase.id, nextReminderAt);
       await database.markPaymentRecoveryCaseReconciled(persisted.recoveryCase.id);
     } catch (error) {
       failed++;
@@ -572,7 +604,7 @@ async function deliverDueTransactionalEmails(dependencies = {}) {
         amountRemaining: invoice.amount_remaining,
         currency: invoice.currency,
         hostedInvoiceUrl: invoice.hosted_invoice_url,
-        reminder: message.step_number > 1,
+        stepNumber: message.step_number,
       });
       const result = await mailer.sendTransactionalEmail(
         config.yandex.email,
@@ -648,7 +680,7 @@ async function deliverDueSlackMessages(dependencies = {}) {
         amountRemaining: invoice.amount_remaining,
         currency: invoice.currency,
         hostedInvoiceUrl: invoice.hosted_invoice_url,
-        reminder: message.step_number > 1,
+        stepNumber: message.step_number,
       });
       const result = await slack.sendDirectMessage(customer.slack_user_id, text);
       await database.markPaymentRecoveryMessageSent(message.id, result.messageId);
@@ -719,6 +751,7 @@ async function deliverDueInternalRecoveryAlerts(dependencies = {}) {
         amountRemaining: invoice.amount_remaining,
         currency: invoice.currency,
         hostedInvoiceUrl: invoice.hosted_invoice_url,
+        stepNumber: message.step_number,
       });
       let providerMessageId;
       if (message.channel === 'internal_email') {

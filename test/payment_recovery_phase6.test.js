@@ -67,8 +67,12 @@ test('Phase 6 cadence sends email now, delays Slack, and sets the final reminder
   Object.assign(config.stripe, { paymentRecoveryEnabled: true, allowLiveEvents: false });
   Object.assign(config.paymentRecoveryReminders, {
     enabled: true,
-    finalDelayHours: 8,
-    finalDelayMinutes: 5,
+    sequenceDelays: {
+      2: { hours: 48, minutes: 5 },
+      3: { hours: 72, minutes: null },
+      4: { hours: 96, minutes: null },
+      5: { hours: 120, minutes: null },
+    },
     slackInitialDelayMinutes: 20,
   });
   const context = stripeContext();
@@ -205,7 +209,7 @@ test('reconciliation discovers an actionable invoice missed by webhooks', async 
   }
 });
 
-test('a due final reminder is scheduled once and clears the case reminder cursor', async () => {
+test('a due reminder is scheduled once and advances the case to discovery', async () => {
   const originalStripe = { ...config.stripe };
   const originalReminders = { ...config.paymentRecoveryReminders };
   Object.assign(config.stripe, { paymentRecoveryEnabled: true, allowLiveEvents: false });
@@ -231,6 +235,7 @@ test('a due final reminder is scheduled once and clears the case reminder cursor
           messages.push(record);
           return { duplicate: record.step_number === 1, message: record };
         },
+        getLatestPaymentRecoverySequenceStep: async () => 1,
         setPaymentRecoveryNextReminder: async (id, value) => reminderUpdates.push([id, value]),
         markPaymentRecoveryCaseReconciled: async () => ({}),
       },
@@ -238,7 +243,98 @@ test('a due final reminder is scheduled once and clears the case reminder cursor
     assert.equal(result.due, 1);
     assert.equal(result.scheduled, 1);
     assert.deepEqual(messages.map(message => message.step_number), [1, 2]);
-    assert.deepEqual(reminderUpdates, [['case_due', null]]);
+    assert.deepEqual(reminderUpdates, [[
+      'case_due',
+      new Date('2026-08-15T10:00:00.000Z'),
+    ]]);
+  } finally {
+    Object.assign(config.stripe, originalStripe);
+    Object.assign(config.paymentRecoveryReminders, originalReminders);
+  }
+});
+
+test('a due final notice is step five and clears the reminder cursor', async () => {
+  const originalStripe = { ...config.stripe };
+  const originalReminders = { ...config.paymentRecoveryReminders };
+  Object.assign(config.stripe, { paymentRecoveryEnabled: true, allowLiveEvents: false });
+  Object.assign(config.paymentRecoveryReminders, {
+    enabled: true,
+    caseLimit: 25,
+    sequenceDelays: {
+      2: { hours: 48, minutes: null },
+      3: { hours: 72, minutes: null },
+      4: { hours: 96, minutes: null },
+      5: { hours: 120, minutes: null },
+    },
+  });
+  const context = stripeContext();
+  const dueCase = {
+    id: 'case_final',
+    stripe_invoice_id: context.invoice.id,
+    next_reminder_at: '2026-08-14T10:00:00.000Z',
+  };
+  const messages = [];
+  const reminderUpdates = [];
+  try {
+    const result = await scheduleDuePaymentRecoveryReminders({
+      now: '2026-08-14T10:00:00.000Z',
+      stripe: stripeStub(context),
+      db: {
+        getDuePaymentRecoveryReminderCases: async () => [dueCase],
+        getPaymentRecoveryCaseByInvoiceId: async () => dueCase,
+        upsertCrmCustomer: async record => customer(record),
+        upsertPaymentRecoveryCase: async record => ({ id: dueCase.id, ...record }),
+        schedulePaymentRecoveryMessage: async record => {
+          messages.push(record);
+          return { duplicate: record.step_number === 1, message: record };
+        },
+        getLatestPaymentRecoverySequenceStep: async () => 4,
+        setPaymentRecoveryNextReminder: async (id, value) => reminderUpdates.push([id, value]),
+        markPaymentRecoveryCaseReconciled: async () => ({}),
+      },
+    });
+    assert.equal(result.scheduled, 1);
+    assert.deepEqual(messages.map(message => message.step_number), [1, 5]);
+    assert.deepEqual(reminderUpdates, [['case_final', null]]);
+  } finally {
+    Object.assign(config.stripe, originalStripe);
+    Object.assign(config.paymentRecoveryReminders, originalReminders);
+  }
+});
+
+test('a synchronized customer reply stops the remaining recovery sequence', async () => {
+  const originalStripe = { ...config.stripe };
+  const originalReminders = { ...config.paymentRecoveryReminders };
+  Object.assign(config.stripe, { paymentRecoveryEnabled: true, allowLiveEvents: false });
+  Object.assign(config.paymentRecoveryReminders, { enabled: true, caseLimit: 25 });
+  const context = stripeContext();
+  const dueCase = {
+    id: 'case_replied',
+    stripe_invoice_id: context.invoice.id,
+    next_reminder_at: '2026-08-12T00:00:00.000Z',
+  };
+  const cancelled = [];
+  const reminderUpdates = [];
+  try {
+    const result = await scheduleDuePaymentRecoveryReminders({
+      now: '2026-08-12T10:00:00.000Z',
+      stripe: stripeStub(context),
+      db: {
+        getDuePaymentRecoveryReminderCases: async () => [dueCase],
+        getPaymentRecoveryCaseByInvoiceId: async () => dueCase,
+        upsertCrmCustomer: async record => customer(record),
+        upsertPaymentRecoveryCase: async record => ({ id: dueCase.id, ...record }),
+        schedulePaymentRecoveryMessage: async record => ({ duplicate: true, message: record }),
+        hasPaymentRecoveryCustomerReplied: async () => true,
+        cancelPaymentRecoveryMessages: async id => { cancelled.push(id); return []; },
+        setPaymentRecoveryNextReminder: async (id, value) => reminderUpdates.push([id, value]),
+        markPaymentRecoveryCaseReconciled: async () => ({}),
+        getLatestPaymentRecoverySequenceStep: async () => assert.fail('reply must stop scheduling'),
+      },
+    });
+    assert.equal(result.scheduled, 0);
+    assert.deepEqual(cancelled, ['case_replied']);
+    assert.deepEqual(reminderUpdates, [['case_replied', null]]);
   } finally {
     Object.assign(config.stripe, originalStripe);
     Object.assign(config.paymentRecoveryReminders, originalReminders);
@@ -347,6 +443,9 @@ test('internal recovery delivery emails the operator and posts to the configured
           assert.equal(channel, 'C_INTERNAL');
           assert.match(text, /Customer payment requires authentication/);
           assert.match(text, /in_phase6/);
+          assert.match(text, /Copy\/paste message for the customer/);
+          assert.match(text, /Hi Priya,/);
+          assert.match(text, /Best regards,\nAlex Lavrin/);
           return { messageId: 'C_INTERNAL:123.456' };
         },
       },

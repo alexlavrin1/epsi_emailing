@@ -57,11 +57,28 @@ module.exports = {
   paymentRecoveryReminders: {
     enabled:
       String(process.env.PAYMENT_RECOVERY_REMINDERS_ENABLED || 'false').toLowerCase() === 'true',
-    finalDelayHours:
-      parseInt(process.env.PAYMENT_RECOVERY_FINAL_REMINDER_HOURS || '8', 10),
-    finalDelayMinutes: process.env.PAYMENT_RECOVERY_FINAL_REMINDER_MINUTES
-      ? parseInt(process.env.PAYMENT_RECOVERY_FINAL_REMINDER_MINUTES, 10)
-      : null,
+    sequenceDelays: {
+      2: {
+        hours: parseInt(process.env.PAYMENT_RECOVERY_REMINDER_HOURS || '48', 10),
+        minutes: process.env.PAYMENT_RECOVERY_REMINDER_MINUTES
+          ? parseInt(process.env.PAYMENT_RECOVERY_REMINDER_MINUTES, 10) : null,
+      },
+      3: {
+        hours: parseInt(process.env.PAYMENT_RECOVERY_DISCOVERY_HOURS || '72', 10),
+        minutes: process.env.PAYMENT_RECOVERY_DISCOVERY_MINUTES
+          ? parseInt(process.env.PAYMENT_RECOVERY_DISCOVERY_MINUTES, 10) : null,
+      },
+      4: {
+        hours: parseInt(process.env.PAYMENT_RECOVERY_SOFT_WARNING_HOURS || '96', 10),
+        minutes: process.env.PAYMENT_RECOVERY_SOFT_WARNING_MINUTES
+          ? parseInt(process.env.PAYMENT_RECOVERY_SOFT_WARNING_MINUTES, 10) : null,
+      },
+      5: {
+        hours: parseInt(process.env.PAYMENT_RECOVERY_FINAL_NOTICE_HOURS || '120', 10),
+        minutes: process.env.PAYMENT_RECOVERY_FINAL_NOTICE_MINUTES
+          ? parseInt(process.env.PAYMENT_RECOVERY_FINAL_NOTICE_MINUTES, 10) : null,
+      },
+    },
     slackInitialDelayMinutes:
       parseInt(process.env.PAYMENT_RECOVERY_SLACK_INITIAL_DELAY_MINUTES || '20', 10),
     caseLimit:

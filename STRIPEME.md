@@ -557,7 +557,7 @@ The existing authenticated `GET /api/cron/payment-recovery` endpoint now runs si
 
 1. Process verified Stripe webhook events.
 2. Reconcile open cases and discover recent actionable invoices missed by webhooks.
-3. Schedule due final reminders.
+3. Schedule the due step in the five-email recovery campaign.
 4. Deliver due transactional email jobs.
 5. Deliver due Slack jobs.
 6. Alert an internal Slack channel about delivery jobs that exhausted their retry limit.
@@ -569,10 +569,13 @@ Implemented Phase 6 components:
 - Open cases rotate by `last_reconciled_at`, preventing a fixed batch of long-running invoices from starving later cases.
 - Recent open invoices are scanned over a configurable lookback window. Only an open invoice with money remaining, a trusted Stripe Hosted Invoice Page, and PaymentIntent `requires_action` can be recovered when its webhook was missed.
 - Reconciliation uses the same unique case and message keys as webhook processing, so a later webhook cannot create duplicate jobs.
-- When reminder scheduling is enabled, the initial email remains immediate, mapped Slack delivery is delayed 20 minutes by default, and one final step-2 reminder is scheduled after eight hours by default.
-- The optional minute-based final-delay override takes precedence over the hour setting and exists only to make controlled sandbox testing practical. It must be removed for production cadence.
-- Reminder scheduling re-checks Stripe before creating step 2, and each delivery worker re-checks Stripe again immediately before sending.
-- A due reminder cursor is cleared after the unique step-2 jobs are created, so no third reminder can be scheduled.
+- When reminder scheduling is enabled, the five emails run on day 0, day 2, day 5, day 9, and day 14. The final email starts a separate three-day notice period before card blocking.
+- The sequence progresses from incomplete-payment notice, to reminder, to issue discovery, to a soft blocking warning, and finally to the three-day blocking notice.
+- Optional minute-based delay overrides take precedence over the hour settings and exist only for controlled sandbox testing. They must be removed for production cadence.
+- Reminder scheduling re-checks Stripe before creating steps 2 through 5, and each delivery worker re-checks Stripe again immediately before sending.
+- The reminder cursor advances after steps 2 through 4 and is cleared after the unique step-5 jobs are created, preventing any sixth recovery message.
+- A synchronized inbound customer email received after the recovery case opened cancels queued recovery messages and clears the reminder cursor, so warning emails are not sent after a reply.
+- Internal Slack alerts use the matching step copy so an operator has a ready-to-send customer message at each escalation.
 - Exhausted email or Slack jobs can be routed to one explicit internal Slack channel. Alert messages contain operational IDs and the provider error, but not the hosted invoice URL or customer email.
 - Failure alerts use a separate atomic claim, retry counter, provider message ID, and sent/error state, preventing duplicate operational alerts across concurrent cron runs.
 - Reconciliation, reminders, customer delivery, and failure alerts retain independent kill switches. Every new Phase 6 switch defaults off; alert delivery additionally defaults to dry-run.
@@ -586,8 +589,14 @@ STRIPE_RECONCILIATION_CASE_LIMIT=25
 
 PAYMENT_RECOVERY_REMINDERS_ENABLED=false
 PAYMENT_RECOVERY_SLACK_INITIAL_DELAY_MINUTES=20
-PAYMENT_RECOVERY_FINAL_REMINDER_HOURS=8
-PAYMENT_RECOVERY_FINAL_REMINDER_MINUTES=
+PAYMENT_RECOVERY_REMINDER_HOURS=48
+PAYMENT_RECOVERY_REMINDER_MINUTES=
+PAYMENT_RECOVERY_DISCOVERY_HOURS=72
+PAYMENT_RECOVERY_DISCOVERY_MINUTES=
+PAYMENT_RECOVERY_SOFT_WARNING_HOURS=96
+PAYMENT_RECOVERY_SOFT_WARNING_MINUTES=
+PAYMENT_RECOVERY_FINAL_NOTICE_HOURS=120
+PAYMENT_RECOVERY_FINAL_NOTICE_MINUTES=
 PAYMENT_RECOVERY_REMINDER_CASE_LIMIT=25
 
 SLACK_FAILURE_ALERTS_ENABLED=false
@@ -612,15 +621,15 @@ Controlled Phase 6 rollout:
 5. Verify known terminal cases remain terminal and reconciliation reports zero failures.
 6. Simulate a missed webhook by temporarily disabling event processing, creating one fresh sandbox 3DS-required invoice, and invoking reconciliation. Require exactly one open case and unique step-1 jobs.
 7. Re-enable event processing and verify the delayed webhook does not create duplicate cases or jobs.
-8. Enable reminders in sandbox with `PAYMENT_RECOVERY_FINAL_REMINDER_MINUTES=5` and, if testing Slack cadence, `PAYMENT_RECOVERY_SLACK_INITIAL_DELAY_MINUTES=1`. Keep channel delivery in dry-run or restricted to the exact internal allowlists.
-9. Verify exactly one step-2 job per enabled channel, then remove the minute override and restore the intended production delay.
+8. Enable reminders in sandbox with the four `PAYMENT_RECOVERY_*_MINUTES` overrides set to short test values and, if testing Slack cadence, `PAYMENT_RECOVERY_SLACK_INITIAL_DELAY_MINUTES=1`. Keep channel delivery in dry-run or restricted to the exact internal allowlists.
+9. Verify exactly one job for steps 2 through 5 per enabled channel, then remove the minute overrides and restore the intended production delays.
 10. Select an internal Slack channel, invite the bot if required, enable failure alerts in dry-run, and verify exhausted jobs are reported without being claimed.
 11. Disable alert dry-run only for the internal channel, verify one deduplicated alert, then return every feature to its safe resting configuration until live rollout is approved.
 
 Phase 6 local verification:
 
 - All 49 automated tests pass.
-- Phase 6 tests cover off-by-default reconciliation, terminal-case resolution, missed-webhook discovery, immediate-email/delayed-Slack cadence, one-time final reminder scheduling, alert dry-run non-mutation, atomic alert delivery, and internal-channel posting without link unfurls.
+- Phase 6 tests cover off-by-default reconciliation, terminal-case resolution, missed-webhook discovery, immediate-email/delayed-Slack cadence, the five-step two-week recovery sequence, alert dry-run non-mutation, atomic alert delivery, and internal-channel posting without link unfurls.
 - Migration 005 was applied in Supabase and verified on 2026-08-12: the reconciliation and failure-alert columns are readable, and `claim_payment_recovery_failure_alert` is callable. A nonexistent message-ID probe returned zero rows and made no mutation.
 - Production was verified on commit `94cb7c3`: reconciliation, reminders, customer email, customer Slack delivery, and failure alerts all reported disabled; no events were pending and no delivery occurred.
 - Reconciliation-only production gate passed on 2026-08-12 with `STRIPE_ALLOW_LIVE_EVENTS=false`: zero open cases checked, zero missed invoices discovered, and zero failures. The database audit found three recovery cases, all resolved, and two historical messages, both sent; there were no open cases or queued/failed messages. All reminder and delivery stages remained disabled.
