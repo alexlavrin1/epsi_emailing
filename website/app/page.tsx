@@ -1,0 +1,41 @@
+import Image from 'next/image';
+import { ArrowUpRight, ArrowRight, CreditCard, ReceiptText, ChartNoAxesCombined, MessagesSquare } from 'lucide-react';
+import { Faq } from './faq';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
+const accountUrl = 'https://app.epsifund.com/';
+const plans = [[100,160],[500,630],[1000,1160],[1500,1695],[2000,2200],[2500,2720],[3000,3245],[3500,3770]];
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+const benefits = [
+  { icon: CreditCard, title: 'A payment method for your ads', text: 'A dedicated account and digital debit card for eligible advertising spend, provisioned with help from our team.' },
+  { icon: ChartNoAxesCombined, title: 'Know where your budget goes', text: 'See advertising transactions and account activity in EpsiFund, so you can keep an eye on spend and available funds.' },
+  { icon: ReceiptText, title: 'Invoices within reach', text: 'Access your invoices in your EpsiFund account. Keep the records you need alongside your advertising spend.' },
+  { icon: MessagesSquare, title: 'People to help you get going', text: 'Get direct support through setup and a short call to hand over your card details. Join our optional Slack community.' },
+];
+function Brand() { return <a href="#top" className="brand" aria-label="EpsiFlow home"><span className="brand-mark" aria-hidden="true">e</span><span translate="no">epsiflow<span className="brand-period">.</span></span></a>; }
+function AccountLink({ className = '' }: { className?: string }) { return <a className={`button button-primary ${className}`} href={accountUrl}>Create your account <ArrowUpRight size={18} aria-hidden="true" /></a>; }
+
+export default function Home() {
+  return <>
+    <a href="#main" className="skip-link">Skip to content</a>
+    <header className="site-header" id="top"><div className="container nav-inner"><Brand /><nav aria-label="Main navigation" className="main-nav"><a href="#how-it-works">How it works</a><a href="#pricing">Pricing</a><a href="#questions">FAQs</a></nav><a className="login-link" href={accountUrl}>Client login <ArrowUpRight size={16} aria-hidden="true" /></a></div></header>
+    <main id="main">
+      <section className="container hero" aria-labelledby="hero-title"><div className="hero-copy"><p className="eyebrow">For Shopify app developers</p><h1 id="hero-title">Keep your Shopify Ads <span>moving.</span></h1><p className="hero-description">Payment infrastructure for Shopify app teams in India. Fund your ads, track spending, and keep building.</p><div className="hero-actions"><AccountLink /><a href="#how-it-works" className="text-link">See how it works <ArrowRight size={17} aria-hidden="true" /></a></div></div><div className="hero-visual"><Image priority src="/images/payment-flow.webp" width="1024" height="1024" alt="Conceptual illustration of a green payment card moving through a sculptural channel" fetchPriority="high" /></div></section>
+      <section className="problem-section"><div className="container problem-inner"><h2>Your next campaign shouldn’t depend on another card workaround.</h2><div><p>You’ve built the app. You’re ready to reach more merchants. But rejected international payments can put your Shopify Ads plans on hold.</p><p>EpsiFlow helps you set up and fund a dedicated payment method, so you can get back to growing your app.</p></div></div></section>
+      <section className="container section" id="product" aria-labelledby="product-title"><div className="section-heading"><h2 id="product-title">The setup behind your next campaign.</h2><p>Payment infrastructure, spending visibility, and human support in one service.</p></div><div className="benefit-grid">{benefits.map(({icon: Icon,title,text})=><article className="benefit" key={title}><Icon size={26} strokeWidth={1.5} aria-hidden="true" /><div><h3>{title}</h3><p>{text}</p></div></article>)}</div></section>
+      <section className="process-section section" id="how-it-works" aria-labelledby="process-title"><div className="container process-layout"><div className="process-intro"><p className="eyebrow">How it works</p><h2 id="process-title">From payment blocker to campaign ready.</h2><p>We help you get the payment setup in place. You stay in control of your campaigns.</p><a href={accountUrl} className="text-link">Open EpsiFund <ArrowUpRight size={18} aria-hidden="true" /></a></div><ol className="process-list">
+        <li><div className="step-mark" aria-hidden="true">1</div><div><h3>Confirm fit and create your account</h3><p>Agree on your intended ad spend with the team, then register in EpsiFund, your customer account app.</p></div></li>
+        <li><div className="step-mark" aria-hidden="true">2</div><div><h3>Get your dedicated payment setup</h3><p>We provision the relevant account and digital debit card, then arrange a short call to hand over the card details.</p></div></li>
+        <li><div className="step-mark" aria-hidden="true">3</div><div><h3>Fund your budget and connect your card</h3><p>Add the payment method to Shopify Ads and fund it through your agreed monthly plan or direct transfer route.</p></div></li>
+        <li><div className="step-mark" aria-hidden="true">4</div><div><h3>Run ads and follow your spending</h3><p>Manage your campaigns in Shopify. Use EpsiFund to monitor transactions, track available funds, and access invoices.</p></div></li>
+      </ol></div></section>
+      <section className="container section pricing-section" id="pricing" aria-labelledby="pricing-title"><div className="section-heading"><h2 id="pricing-title">Two ways to fund your growth.</h2><p>Choose monthly automatic top-ups or direct transfers. All amounts below are in USD.</p></div><div className="pricing-grid">
+        <article className="plan plan-monthly"><div className="plan-heading"><h3>Monthly top-ups</h3><span className="plan-tag">Via Stripe</span></div><p>Your plan renews automatically and tops up your advertising budget each month.</p><Table className="price-table"><TableHeader><TableRow><TableHead>Monthly ad budget</TableHead><TableHead className="text-right">You pay monthly</TableHead></TableRow></TableHeader><TableBody>{plans.map(([budget,payment])=><TableRow key={budget}><TableCell>{usd.format(budget)}</TableCell><TableCell className="text-right">{usd.format(payment)}</TableCell></TableRow>)}</TableBody></Table><AccountLink /></article>
+        <article className="plan plan-direct"><div className="plan-heading"><h3>EpsiFlow Direct</h3><span className="plan-tag">Direct transfers</span></div><p>Fund your advertising budget through the agreed direct transfer route.</p><div className="direct-price"><strong>$66</strong><span>/ month</span></div><p className="transfer-price">Plus approximately <strong>$91</strong> per direct transfer.</p><div className="direct-notes"><p>The monthly fee applies even when you don’t top up.</p><p>Your advertising funds are separate from these service and transfer fees.</p></div><a className="button button-outline" href={accountUrl}>Create your account <ArrowUpRight size={18} aria-hidden="true" /></a></article>
+      </div><p className="pricing-note">Confirm the funding route and applicable terms with the EpsiFlow team before proceeding.</p></section>
+      <section className="container section faq-section" id="questions" aria-labelledby="faq-title"><div className="faq-heading"><h2 id="faq-title">A few things you might be wondering.</h2><p>About the service, your account, and getting started.</p></div><Faq /></section>
+      <section className="container closing-section"><div><h2>Let your next campaign start with a working payment setup.</h2><p>Create your EpsiFund account to begin onboarding with EpsiFlow.</p></div><AccountLink /></section>
+    </main>
+    <footer className="container site-footer"><div className="footer-top"><Brand /><p>Payment infrastructure for Shopify app growth.</p><a className="text-link" href={accountUrl}>Go to EpsiFund <ArrowRight size={18} aria-hidden="true" /></a></div><div className="footer-bottom"><span>© {new Date().getUTCFullYear()} EpsiFlow</span><span>EpsiFlow is an independent service and is not affiliated with Shopify.</span></div></footer>
+  </>;
+}
