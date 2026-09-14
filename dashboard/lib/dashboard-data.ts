@@ -41,18 +41,21 @@ export type OverviewData = {
   slack: SlackHealth;
 };
 
-export type LifecycleStage = "prospect" | "interested" | "client" | "at_risk" | "suppressed";
+export type LifecycleStage = "prospect" | "interested" | "client" | "at_risk" | "churned" | "suppressed";
 
 export type PipelineContact = {
   key: string;
   id: string;
-  kind: "prospect" | "customer";
+  kind: "prospect" | "customer" | "client";
+  href: string;
   name: string;
   email: string;
   company: string;
   stage: LifecycleStage;
   channels: string;
   lastActivity: string;
+  monthlyValue: { currency: string; amount: number } | null;
+  stageOverride?: boolean;
 };
 
 export type PipelineStage = {
@@ -61,6 +64,32 @@ export type PipelineStage = {
   description: string;
   contacts: PipelineContact[];
 };
+
+type ClientAppSubscription = {
+  status: string;
+  quantity: number | null;
+  unit_amount: number | null;
+  currency: string | null;
+  billing_interval: string | null;
+  interval_count: number | null;
+  synced_at: string;
+};
+
+const subscriptionRank: Record<string, number> = { active: 1, trialing: 2, past_due: 3, unpaid: 4, paused: 5, incomplete: 6, incomplete_expired: 7, canceled: 8 };
+
+function monthlySubscriptionValue(subscriptions: ClientAppSubscription[]) {
+  const subscription = [...subscriptions]
+    .filter(item => item.unit_amount !== null && item.currency)
+    .sort((a, b) => (subscriptionRank[a.status] ?? 9) - (subscriptionRank[b.status] ?? 9))[0];
+  if (!subscription || subscription.unit_amount === null || !subscription.currency) return null;
+  const intervalCount = subscription.interval_count && subscription.interval_count > 0 ? subscription.interval_count : 1;
+  const baseAmount = subscription.unit_amount * (subscription.quantity ?? 1);
+  const monthlyAmount = subscription.billing_interval === "day" ? baseAmount * 365.2425 / 12 / intervalCount
+    : subscription.billing_interval === "week" ? baseAmount * 52 / 12 / intervalCount
+      : subscription.billing_interval === "year" ? baseAmount / 12 / intervalCount
+        : baseAmount / intervalCount;
+  return { currency: subscription.currency.toUpperCase(), amount: Math.round(monthlyAmount) };
+}
 
 export type SlackActivity = {
   id: string;
@@ -392,13 +421,15 @@ export async function getSlackHealth(supabase: SupabaseClient, organizationId: s
 }
 
 export async function getPipeline(supabase: SupabaseClient, organizationId: string): Promise<PipelineStage[]> {
-  const [prospects, customers, overrides] = await Promise.all([
+  const [prospects, customers, clientApps, overrides] = await Promise.all([
     supabase.from("prospects").select("id,email,first_name,last_name,company,status,updated_at,outreach_sends(status,sent_at,replied_at,updated_at)").eq("organization_id", organizationId).limit(500),
     supabase.from("crm_customers").select("id,email,name,status,email_enabled,slack_enabled,updated_at,payment_recovery_cases(state,opened_at,resolved_at,updated_at)").eq("organization_id", organizationId).limit(500),
+    supabase.from("client_apps").select("id,name,status,client_segment,relationship_state,updated_at,contacts:client_contacts(id,name,email,slack_assignment_status,updated_at,last_email_sync_at),subscriptions:client_subscriptions(status,quantity,unit_amount,currency,billing_interval,interval_count,synced_at)").eq("organization_id", organizationId).limit(500),
     supabase.from("crm_contact_overrides").select("contact_kind,contact_id,lifecycle_stage").eq("organization_id", organizationId),
   ]);
   logQueryError("pipeline prospects", prospects.error);
   logQueryError("pipeline customers", customers.error);
+  logQueryError("pipeline client apps", clientApps.error);
   if (overrides.error && !overrides.error.message.includes("crm_contact_overrides")) logQueryError("pipeline lifecycle overrides", overrides.error);
 
   const stageOverrides = new Map((overrides.data ?? []).map(item => [`${item.contact_kind}:${item.contact_id}`, item.lifecycle_stage as LifecycleStage]));
@@ -413,12 +444,15 @@ export async function getPipeline(supabase: SupabaseClient, organizationId: stri
       key,
       id: prospect.id,
       kind: "prospect",
+      href: `/dashboard/crm/prospect/${prospect.id}`,
       name: [prospect.first_name, prospect.last_name].filter(Boolean).join(" ") || prospect.email,
       email: prospect.email,
       company: prospect.company || "—",
       stage: stageOverrides.get(`prospect:${prospect.id}`) ?? (suppressed ? "suppressed" : replied ? "interested" : "prospect"),
       channels: "Email outreach",
       lastActivity: latestDate([prospect.updated_at, ...sends.flatMap(send => [send.updated_at, send.sent_at, send.replied_at])]),
+      monthlyValue: null,
+      stageOverride: stageOverrides.has(`prospect:${prospect.id}`),
     });
   }
 
@@ -426,18 +460,74 @@ export async function getPipeline(supabase: SupabaseClient, organizationId: stri
     const cases = (customer.payment_recovery_cases ?? []) as Array<{ state: string; opened_at: string; resolved_at: string | null; updated_at: string }>;
     const key = customer.email ? `email:${customer.email.trim().toLowerCase()}` : `customer:${customer.id}`;
     const existing = contacts.get(key);
-    const stage: LifecycleStage = stageOverrides.get(`customer:${customer.id}`) ?? (customer.status === "suppressed" ? "suppressed" : cases.some(item => item.state === "open") ? "at_risk" : "client");
+    const customerOverride = stageOverrides.get(`customer:${customer.id}`);
+    const stage: LifecycleStage = existing?.stageOverride
+      ? existing.stage
+      : customerOverride ?? (customer.status === "suppressed" ? "suppressed" : cases.some(item => item.state === "open") ? "at_risk" : "client");
     contacts.set(key, {
       key,
       id: customer.id,
       kind: "customer",
+      href: `/dashboard/crm/customer/${customer.id}`,
       name: customer.name || existing?.name || customer.email || "Unnamed client",
       email: customer.email || existing?.email || "—",
       company: existing?.company && existing.company !== "—" ? existing.company : "Client",
       stage,
       channels: [customer.email_enabled ? "Email" : null, customer.slack_enabled ? "Slack" : null].filter(Boolean).join(" + ") || "No channel",
       lastActivity: latestDate([existing?.lastActivity, customer.updated_at, ...cases.flatMap(item => [item.updated_at, item.opened_at, item.resolved_at])]),
+      monthlyValue: null,
+      stageOverride: existing?.stageOverride || customerOverride !== undefined,
     });
+  }
+
+  type ClientAppContact = {
+    id: string;
+    name: string;
+    email: string;
+    slack_assignment_status: string;
+    updated_at: string;
+    last_email_sync_at: string | null;
+  };
+  const paymentRiskStatuses = new Set(["past_due", "unpaid", "incomplete", "incomplete_expired"]);
+  for (const app of clientApps.data ?? []) {
+    const appContacts = (app.contacts ?? []) as ClientAppContact[];
+    const subscriptions = (app.subscriptions ?? []) as ClientAppSubscription[];
+    const hasPaymentRisk = subscriptions.some(subscription => paymentRiskStatuses.has(subscription.status));
+    const appOverride = stageOverrides.get(`client_app:${app.id}`);
+    const inheritedOverride = appContacts
+      .map(contact => contacts.get(`email:${contact.email.trim().toLowerCase()}`))
+      .find(contact => contact?.stageOverride)?.stage;
+    const hasInterestedLead = appContacts.some(contact => contacts.get(`email:${contact.email.trim().toLowerCase()}`)?.stage === "interested");
+    const allLeadContactsSuppressed = appContacts.length > 0 && appContacts.every(contact => contacts.get(`email:${contact.email.trim().toLowerCase()}`)?.stage === "suppressed");
+    let appStage: LifecycleStage;
+    if (appOverride) appStage = appOverride;
+    else if (inheritedOverride) appStage = inheritedOverride;
+    else if (app.status === "archived" || app.relationship_state === "closed") appStage = "suppressed";
+    else if (app.relationship_state === "churned") appStage = "churned";
+    else if (app.client_segment === "lead") appStage = hasInterestedLead ? "interested" : allLeadContactsSuppressed ? "suppressed" : "prospect";
+    else if (hasPaymentRisk || appContacts.some(contact => contacts.get(`email:${contact.email.trim().toLowerCase()}`)?.stage === "at_risk")) appStage = "at_risk";
+    else appStage = "client";
+    const monthlyValue = monthlySubscriptionValue(subscriptions);
+    for (const contact of appContacts) {
+      const key = `email:${contact.email.trim().toLowerCase()}`;
+      const existing = contacts.get(key);
+
+      const slackEnabled = ["assigned", "linked"].includes(contact.slack_assignment_status);
+      contacts.set(key, {
+        key,
+        id: app.id,
+        kind: "client",
+        href: `/dashboard/clients/${app.id}`,
+        name: contact.name || existing?.name || contact.email,
+        email: contact.email,
+        company: app.name,
+        stage: appStage,
+        channels: slackEnabled ? "Email + Slack" : "Email",
+        lastActivity: latestDate([existing?.lastActivity, app.updated_at, contact.updated_at, contact.last_email_sync_at, ...subscriptions.map(subscription => subscription.synced_at)]),
+        monthlyValue,
+        stageOverride: appOverride !== undefined || inheritedOverride !== undefined,
+      });
+    }
   }
 
   const definitions: Array<Omit<PipelineStage, "contacts">> = [
@@ -445,6 +535,7 @@ export async function getPipeline(supabase: SupabaseClient, organizationId: stri
     { id: "interested", label: "Interested", description: "Prospects who replied" },
     { id: "client", label: "Clients", description: "Active paying customers" },
     { id: "at_risk", label: "At risk", description: "Clients in payment recovery" },
+    { id: "churned", label: "Churned", description: "Former clients to re-engage" },
     { id: "suppressed", label: "Suppressed", description: "Contact is intentionally paused" },
   ];
   return definitions.map(stage => ({

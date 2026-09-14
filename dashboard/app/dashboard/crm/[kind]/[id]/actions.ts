@@ -8,7 +8,7 @@ export type ContactActionState = { ok: boolean; message: string };
 
 const initialError: ContactActionState = { ok: false, message: "Unable to complete this action." };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const lifecycleStages = new Set(["prospect", "interested", "client", "at_risk", "suppressed"]);
+const lifecycleStages = new Set(["prospect", "interested", "client", "at_risk", "churned", "suppressed"]);
 
 function contactFields(formData: FormData) {
   const kind = String(formData.get("kind") || "");

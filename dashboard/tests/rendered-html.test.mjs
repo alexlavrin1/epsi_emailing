@@ -124,11 +124,48 @@ test("ships the read-only Phase 2 CRM surfaces", async () => {
 });
 
 test("keeps lifecycle classification deterministic and read-only", async () => {
-  const source = await readFile(new URL("lib/dashboard-data.ts", root), "utf8");
+  const [source, pipelineBoard] = await Promise.all([
+    readFile(new URL("lib/dashboard-data.ts", root), "utf8"),
+    readFile(new URL("app/components/pipeline-board.tsx", root), "utf8"),
+  ]);
   assert.match(source, /email:\$\{prospect\.email\.trim\(\)\.toLowerCase\(\)\}/);
-  assert.match(source, /"prospect" \| "interested" \| "client" \| "at_risk" \| "suppressed"/);
+  assert.match(source, /"prospect" \| "interested" \| "client" \| "at_risk" \| "churned" \| "suppressed"/);
+  assert.match(source, /from\("client_apps"\)/);
+  assert.match(source, /contacts:client_contacts/);
+  assert.match(source, /app\.relationship_state === "churned"/);
+  assert.match(source, /existing\?\.stageOverride/);
+  assert.match(source, /paymentRiskStatuses/);
+  assert.match(pipelineBoard, /href=\{contact\.href\}/);
+  assert.match(pipelineBoard, /\["client", "at_risk", "churned"\]\.includes\(stage\.id\)/);
   assert.match(source, /\.eq\("channel", "slack"\)/);
   assert.doesNotMatch(source, /\.insert\(|\.update\(|\.delete\(/);
+});
+
+test("moves pipeline customers accessibly and totals monthly subscription value once per client", async () => {
+  const [migration, actions, board, data, styles, contactActions, contactForm] = await Promise.all([
+    readFile(new URL("../database/migrations/048_pipeline_drag_drop.sql", root), "utf8"),
+    readFile(new URL("app/dashboard/pipeline/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/pipeline-board.tsx", root), "utf8"),
+    readFile(new URL("lib/dashboard-data.ts", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+    readFile(new URL("app/dashboard/crm/[kind]/[id]/actions.ts", root), "utf8"),
+    readFile(new URL("app/components/contact-actions.tsx", root), "utf8"),
+  ]);
+  assert.match(migration, /contact_kind IN \('prospect', 'customer', 'client_app'\)/);
+  assert.match(migration, /'churned'/);
+  assert.match(migration, /pipeline_drag_drop/);
+  assert.match(migration, /INSERT INTO audit_events/);
+  assert.match(actions, /dashboard_set_lifecycle_stage/);
+  assert.match(actions, /kind === "client" \? "client_app" : kind/);
+  assert.match(board, /draggable=\{!pending\}/);
+  assert.match(board, /onDrop=\{event => drop\(event, stage\.id\)\}/);
+  assert.match(board, /aria-label=\{`Move \$\{contact\.company\} to stage`\}/);
+  assert.match(board, /const counted = new Set<string>\(\)/);
+  assert.match(data, /monthlySubscriptionValue/);
+  assert.match(data, /billing_interval/);
+  assert.match(styles, /\.pipeline-column\.pipeline-drop-target/);
+  assert.match(contactActions, /"at_risk", "churned", "suppressed"/);
+  assert.match(contactForm, /value: "churned", label: "Churned"/);
 });
 
 test("defines tenant RLS and an append-only audit log", async () => {

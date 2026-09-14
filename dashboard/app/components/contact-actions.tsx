@@ -12,6 +12,7 @@ const stages: Array<{ value: LifecycleStage; label: string }> = [
   { value: "interested", label: "Interested" },
   { value: "client", label: "Client" },
   { value: "at_risk", label: "At risk" },
+  { value: "churned", label: "Churned" },
   { value: "suppressed", label: "Suppressed" },
 ];
 
