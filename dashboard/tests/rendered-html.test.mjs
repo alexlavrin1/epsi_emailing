@@ -164,6 +164,9 @@ test("moves pipeline customers accessibly and totals monthly subscription value 
   assert.match(data, /monthlySubscriptionValue/);
   assert.match(data, /billing_interval/);
   assert.match(styles, /\.pipeline-column\.pipeline-drop-target/);
+  assert.match(styles, /\.pipeline-summary, \.pipeline-grid \{ --pipeline-column-gap: 10px; grid-template-columns: repeat\(6, minmax\(0, 1fr\)\); gap: var\(--pipeline-column-gap\); \}/);
+  assert.match(styles, /@media \(max-width: 1280px\)[\s\S]*\.pipeline-grid, \.pipeline-summary \{ grid-template-columns: repeat\(3, minmax\(0, 1fr\)\); \}/);
+  assert.match(styles, /@media \(max-width: 900px\)[\s\S]*\.pipeline-grid, \.pipeline-summary \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
   assert.match(contactActions, /"at_risk", "churned", "suppressed"/);
   assert.match(contactForm, /value: "churned", label: "Churned"/);
 });
