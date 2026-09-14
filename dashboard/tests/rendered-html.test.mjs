@@ -1013,10 +1013,19 @@ test("presents approvals as an in-page messenger with campaign history and guard
     readFile(new URL("../supabase/migrations/20260914113903_approval_messenger_reply_regeneration.sql", root), "utf8"),
   ]);
   assert.match(page, /<ApprovalInbox clientDrafts=\{clientDrafts\} replies=\{replyDrafts\}/);
+  assert.match(page, /pendingClientConversations = new Set/);
+  assert.match(page, /pendingReplyConversations = new Set/);
   assert.doesNotMatch(page + inbox, /AI-generated draft|cited conversation source|Slack history is not available to the agent/);
   assert.match(inbox, /approval-inbox-row/);
   assert.match(inbox, /approval-message-thread/);
   assert.match(inbox, /Current campaign/);
+  assert.match(inbox, /playbook:\$\{draft\.appId\}:\$\{draft\.contactId\}:\$\{draft\.playbookId\}/);
+  assert.match(inbox, /reply:\$\{draft\.prospectId \|\| draft\.email\}:\$\{draft\.campaignId \|\| draft\.campaignName\}/);
+  assert.match(inbox, /One card per contact and campaign/);
+  assert.match(inbox, /playbook-sent-/);
+  assert.match(inbox, /providerMessageId \? `provider:/);
+  assert.match(inbox, /currentDraft = grouped\.find/);
+  assert.match(inbox, /No draft awaiting approval/);
   assert.match(inbox, /Contact.*EpsiFlow/s);
   assert.match(inbox, /aria-expanded=\{selectedKey === item\.key\}/);
   assert.match(controls, /label="Regenerate"/);
@@ -1024,6 +1033,8 @@ test("presents approvals as an in-page messenger with campaign history and guard
   assert.match(data, /from\("campaign_steps"\)/);
   assert.match(data, /from\("outreach_sends"\)/);
   assert.match(data, /from\("client_email_messages"\)/);
+  assert.match(data, /provider_message_id/);
+  assert.match(data, /playbook_id/);
   assert.match(styles, /\.approval-inbox \{ display: grid; grid-template-columns:/);
   assert.match(styles, /@media \(max-width: 900px\)[\s\S]*\.approval-inbox\.has-selection \.approval-inbox-list \{ display: none; \}/);
   assert.match(migration, /Only unsent replies can be regenerated/);

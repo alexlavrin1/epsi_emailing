@@ -155,9 +155,9 @@ export type ReplyRow = {
 export type ApprovalData = {
   ready: boolean;
   clientDraftsReady: boolean;
-  replies: Array<{ id: string; status: string; body: string; lastError: string | null; createdAt: string; contact: string; email: string; company: string; subject: string; campaignName: string; automationName: string | null; automationRunId: string | null; conversation: ApprovalConversationMessage[] }>;
+  replies: Array<{ id: string; status: string; body: string; lastError: string | null; createdAt: string; sentAt: string | null; providerMessageId: string | null; contact: string; email: string; company: string; prospectId: string; campaignId: string; subject: string; campaignName: string; automationName: string | null; automationRunId: string | null; conversation: ApprovalConversationMessage[] }>;
   retries: Array<{ id: string; channel: string; attempts: number; error: string; updatedAt: string; customer: string }>;
-  clientDrafts: Array<{ id: string; channel: "email" | "slack"; recipient: string; subject: string | null; body: string; status: string; deliveryStatus: string; deliveryFailureCode: string | null; deliveredAt: string | null; createdAt: string; playbookVersion: number; generationMode: string; agentStatus: string; agentClaimedAt: string | null; agentFailureCode: string | null; agentRegenerationCount: number; appId: string; appName: string; contactId: string; contactName: string; contactEmail: string; playbookName: string; conversation: ApprovalConversationMessage[] }>;
+  clientDrafts: Array<{ id: string; channel: "email" | "slack"; recipient: string; subject: string | null; body: string; status: string; deliveryStatus: string; deliveryFailureCode: string | null; providerMessageId: string | null; deliveredAt: string | null; createdAt: string; playbookId: string; playbookVersion: number; generationMode: string; agentStatus: string; agentClaimedAt: string | null; agentFailureCode: string | null; agentRegenerationCount: number; appId: string; appName: string; contactId: string; contactName: string; contactEmail: string; playbookName: string; conversation: ApprovalConversationMessage[] }>;
 };
 
 export type ApprovalConversationMessage = {
@@ -166,6 +166,7 @@ export type ApprovalConversationMessage = {
   subject: string;
   body: string;
   occurredAt: string;
+  providerMessageId?: string | null;
 };
 
 export type AutomationWorkflow = {
@@ -717,9 +718,9 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
   const automationReady = !automationReadiness.error && automationReadiness.data === true;
   const [readiness, replies, retries, clientDrafts] = await Promise.all([
     supabase.rpc("dashboard_reply_controls_ready"),
-    supabase.from("operator_email_replies").select("id,body,status,last_error,created_at,automation_run_id,source_reply:prospect_replies(id,subject,campaign_id,prospect_id,prospect:prospects(id,first_name,last_name,email,company))").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
+    supabase.from("operator_email_replies").select("id,body,status,last_error,created_at,sent_at,provider_message_id,automation_run_id,source_reply:prospect_replies(id,subject,campaign_id,prospect_id,prospect:prospects(id,first_name,last_name,email,company))").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
     supabase.from("payment_recovery_messages").select("id,channel,attempt_count,last_error,updated_at,recovery_case:payment_recovery_cases(customer:crm_customers(name,email,organization_id))").eq("status", "failed").order("updated_at", { ascending: false }).limit(100),
-    supabase.from("client_playbook_drafts").select("id,channel,recipient_label,subject,body,status,delivery_status,delivery_failure_code,delivered_at,created_at,playbook_version,generation_mode,agent_status,agent_claimed_at,agent_failure_code,agent_regeneration_count,client_app_id,app:client_apps(name),contact:client_contacts(id,name,email),playbook:client_playbooks(name)").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
+    supabase.from("client_playbook_drafts").select("id,channel,recipient_label,subject,body,status,delivery_status,delivery_failure_code,provider_message_id,delivered_at,created_at,playbook_id,playbook_version,generation_mode,agent_status,agent_claimed_at,agent_failure_code,agent_regeneration_count,client_app_id,app:client_apps(name),contact:client_contacts(id,name,email),playbook:client_playbooks(name)").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
   ]);
   const ready = !readiness.error && readiness.data === true && !replies.error;
   const automationSources = automationReady
@@ -740,7 +741,7 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
     return contact?.id ? [contact.id] : [];
   }))];
   const [clientMessages, conversationReplies, conversationSends, campaignSteps, campaigns] = await Promise.all([
-    clientContactIds.length ? supabase.from("client_email_messages").select("id,client_contact_id,subject,body,direction,occurred_at").eq("organization_id", organizationId).in("client_contact_id", clientContactIds).order("occurred_at", { ascending: true }).limit(1000) : Promise.resolve({ data: [], error: null }),
+    clientContactIds.length ? supabase.from("client_email_messages").select("id,client_contact_id,provider_message_id,subject,body,direction,occurred_at").eq("organization_id", organizationId).in("client_contact_id", clientContactIds).order("occurred_at", { ascending: true }).limit(1000) : Promise.resolve({ data: [], error: null }),
     prospectIds.length && campaignIds.length ? supabase.from("prospect_replies").select("id,prospect_id,campaign_id,subject,body,received_at,created_at").in("prospect_id", prospectIds).in("campaign_id", campaignIds).order("received_at", { ascending: true }).limit(1000) : Promise.resolve({ data: [], error: null }),
     prospectIds.length && campaignIds.length ? supabase.from("outreach_sends").select("id,prospect_id,campaign_id,step_number,sent_at").in("prospect_id", prospectIds).in("campaign_id", campaignIds).not("sent_at", "is", null).order("sent_at", { ascending: true }).limit(1000) : Promise.resolve({ data: [], error: null }),
     campaignIds.length ? supabase.from("campaign_steps").select("campaign_id,step_number,subject_template,body_template").in("campaign_id", campaignIds).order("step_number", { ascending: true }).limit(500) : Promise.resolve({ data: [], error: null }),
@@ -751,7 +752,7 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
   const clientConversationByContact = new Map<string, ApprovalConversationMessage[]>();
   for (const message of clientMessages.data ?? []) {
     const list = clientConversationByContact.get(message.client_contact_id) ?? [];
-    list.push({ id: message.id, direction: message.direction as "inbound" | "outbound", subject: message.subject || "No subject", body: message.body || "Message body unavailable", occurredAt: message.occurred_at });
+    list.push({ id: message.id, direction: message.direction as "inbound" | "outbound", subject: message.subject || "No subject", body: message.body || "Message body unavailable", occurredAt: message.occurred_at, providerMessageId: message.provider_message_id });
     clientConversationByContact.set(message.client_contact_id, list);
   }
   const campaignById = new Map((campaigns.data ?? []).map(campaign => [campaign.id, campaign]));
@@ -775,7 +776,7 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
         return { id: `outbound-${send.id}`, direction: "outbound" as const, subject: step ? renderApprovalTemplate(pickApprovalSubject(step.subject_template, source?.prospect_id || ""), values) : "Campaign email", body: step ? renderApprovalTemplate(step.body_template, values) : "Sent campaign email", occurredAt: send.sent_at as string };
       });
       const inbound = (conversationReplies.data ?? []).filter(reply => reply.prospect_id === source?.prospect_id && reply.campaign_id === source?.campaign_id).map(reply => ({ id: `inbound-${reply.id}`, direction: "inbound" as const, subject: reply.subject || "No subject", body: reply.body || "Message body unavailable", occurredAt: reply.received_at || reply.created_at }));
-      return { id: item.id, status: item.status, body: item.body, lastError: item.last_error, createdAt: item.created_at, contact: displayProspect(prospect), email: prospect?.email || "Unknown email", company: prospect?.company || "Prospect", subject: source?.subject || "No subject", campaignName: campaign?.name || automationNames.get(item.id) || "Single reply", automationName: automationNames.get(item.id) || null, automationRunId: item.automation_run_id || null, conversation: [...outbound, ...inbound].sort((a,b) => a.occurredAt.localeCompare(b.occurredAt)) };
+      return { id: item.id, status: item.status, body: item.body, lastError: item.last_error, createdAt: item.created_at, sentAt: item.sent_at || null, providerMessageId: item.provider_message_id || null, contact: displayProspect(prospect), email: prospect?.email || "Unknown email", company: prospect?.company || "Prospect", prospectId: source?.prospect_id || "", campaignId: source?.campaign_id || "", subject: source?.subject || "No subject", campaignName: campaign?.name || automationNames.get(item.id) || "Single reply", automationName: automationNames.get(item.id) || null, automationRunId: item.automation_run_id || null, conversation: [...outbound, ...inbound].sort((a,b) => a.occurredAt.localeCompare(b.occurredAt)) };
     }),
     retries: retryRows.map(message => {
       const recovery = one(message.recovery_case as Related<{ customer: Related<CustomerIdentity> }>);
@@ -785,8 +786,8 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
       const contact = one(item.contact as Related<{ id: string; name: string; email: string }>);
       return {
       id: item.id, channel: item.channel as "email" | "slack", recipient: item.recipient_label,
-      subject: item.subject, body: item.body, status: item.status, deliveryStatus: item.delivery_status, deliveryFailureCode: item.delivery_failure_code, deliveredAt: item.delivered_at, createdAt: item.created_at,
-      playbookVersion: item.playbook_version, generationMode: item.generation_mode,
+      subject: item.subject, body: item.body, status: item.status, deliveryStatus: item.delivery_status, deliveryFailureCode: item.delivery_failure_code, providerMessageId: item.provider_message_id || null, deliveredAt: item.delivered_at, createdAt: item.created_at,
+      playbookId: item.playbook_id, playbookVersion: item.playbook_version, generationMode: item.generation_mode,
       agentStatus: item.agent_status, agentClaimedAt: item.agent_claimed_at, agentFailureCode: item.agent_failure_code, agentRegenerationCount: item.agent_regeneration_count || 0,
       appId: item.client_app_id,
       appName: one(item.app as Related<{ name: string }>)?.name || "Client",
