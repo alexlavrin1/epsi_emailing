@@ -155,9 +155,17 @@ export type ReplyRow = {
 export type ApprovalData = {
   ready: boolean;
   clientDraftsReady: boolean;
-  replies: Array<{ id: string; status: string; body: string; lastError: string | null; createdAt: string; contact: string; email: string; subject: string; automationName: string | null }>;
+  replies: Array<{ id: string; status: string; body: string; lastError: string | null; createdAt: string; contact: string; email: string; company: string; subject: string; campaignName: string; automationName: string | null; automationRunId: string | null; conversation: ApprovalConversationMessage[] }>;
   retries: Array<{ id: string; channel: string; attempts: number; error: string; updatedAt: string; customer: string }>;
-  clientDrafts: Array<{ id: string; channel: "email" | "slack"; recipient: string; subject: string | null; body: string; status: string; deliveryStatus: string; deliveryFailureCode: string | null; deliveredAt: string | null; createdAt: string; playbookVersion: number; generationMode: string; contextMessageCount: number; agentStatus: string; agentClaimedAt: string | null; agentModel: string | null; agentWarnings: string[]; agentFailureCode: string | null; agentRegenerationCount: number; sources: Array<{ id: string; subject: string; direction: string; occurredAt: string }>; appId: string; appName: string; contactName: string; playbookName: string }>;
+  clientDrafts: Array<{ id: string; channel: "email" | "slack"; recipient: string; subject: string | null; body: string; status: string; deliveryStatus: string; deliveryFailureCode: string | null; deliveredAt: string | null; createdAt: string; playbookVersion: number; generationMode: string; agentStatus: string; agentClaimedAt: string | null; agentFailureCode: string | null; agentRegenerationCount: number; appId: string; appName: string; contactId: string; contactName: string; contactEmail: string; playbookName: string; conversation: ApprovalConversationMessage[] }>;
+};
+
+export type ApprovalConversationMessage = {
+  id: string;
+  direction: "inbound" | "outbound";
+  subject: string;
+  body: string;
+  occurredAt: string;
 };
 
 export type AutomationWorkflow = {
@@ -261,6 +269,22 @@ function displayProspect(prospect: ProspectIdentity | null) {
 
 function displayCustomer(customer: CustomerIdentity | null) {
   return customer?.name || customer?.email || "Unknown client";
+}
+
+function renderApprovalTemplate(template: string, values: Record<string, string>) {
+  return template.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => values[key] ?? "");
+}
+
+function pickApprovalSubject(template: string, seed: string) {
+  try {
+    const variants = JSON.parse(template);
+    if (!Array.isArray(variants) || !variants.length) return template;
+    let hash = 0;
+    for (let index = 0; index < seed.length; index += 1) hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+    return String(variants[hash % variants.length] ?? template);
+  } catch {
+    return template;
+  }
 }
 
 function latestDate(values: Array<string | null | undefined>) {
@@ -693,9 +717,9 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
   const automationReady = !automationReadiness.error && automationReadiness.data === true;
   const [readiness, replies, retries, clientDrafts] = await Promise.all([
     supabase.rpc("dashboard_reply_controls_ready"),
-    supabase.from("operator_email_replies").select("id,body,status,last_error,created_at,source_reply:prospect_replies(subject,prospect:prospects(first_name,last_name,email))").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
+    supabase.from("operator_email_replies").select("id,body,status,last_error,created_at,automation_run_id,source_reply:prospect_replies(id,subject,campaign_id,prospect_id,prospect:prospects(id,first_name,last_name,email,company))").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
     supabase.from("payment_recovery_messages").select("id,channel,attempt_count,last_error,updated_at,recovery_case:payment_recovery_cases(customer:crm_customers(name,email,organization_id))").eq("status", "failed").order("updated_at", { ascending: false }).limit(100),
-    supabase.from("client_playbook_drafts").select("id,channel,recipient_label,subject,body,status,delivery_status,delivery_failure_code,delivered_at,created_at,playbook_version,generation_mode,context_message_count,agent_status,agent_claimed_at,agent_model,agent_context_warnings,agent_failure_code,agent_regeneration_count,client_app_id,app:client_apps(name),contact:client_contacts(name),playbook:client_playbooks(name),sources:client_playbook_draft_sources(ordinal,message:client_email_messages(id,subject,direction,occurred_at))").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
+    supabase.from("client_playbook_drafts").select("id,channel,recipient_label,subject,body,status,delivery_status,delivery_failure_code,delivered_at,created_at,playbook_version,generation_mode,agent_status,agent_claimed_at,agent_failure_code,agent_regeneration_count,client_app_id,app:client_apps(name),contact:client_contacts(id,name,email),playbook:client_playbooks(name)").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
   ]);
   const ready = !readiness.error && readiness.data === true && !replies.error;
   const automationSources = automationReady
@@ -706,6 +730,32 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
     const workflow = one(run?.workflow ?? null);
     return [item.id, workflow?.name || null] as const;
   }));
+  const replyRows = replies.data ?? [];
+  const clientDraftRows = clientDrafts.data ?? [];
+  const replySources = replyRows.map(item => one(item.source_reply as Related<{ id: string; subject: string | null; campaign_id: string | null; prospect_id: string | null; prospect: Related<ProspectIdentity & { id: string }> }>));
+  const prospectIds = [...new Set(replySources.flatMap(source => source?.prospect_id ? [source.prospect_id] : []))];
+  const campaignIds = [...new Set(replySources.flatMap(source => source?.campaign_id ? [source.campaign_id] : []))];
+  const clientContactIds = [...new Set(clientDraftRows.flatMap(item => {
+    const contact = one(item.contact as Related<{ id: string }>);
+    return contact?.id ? [contact.id] : [];
+  }))];
+  const [clientMessages, conversationReplies, conversationSends, campaignSteps, campaigns] = await Promise.all([
+    clientContactIds.length ? supabase.from("client_email_messages").select("id,client_contact_id,subject,body,direction,occurred_at").eq("organization_id", organizationId).in("client_contact_id", clientContactIds).order("occurred_at", { ascending: true }).limit(1000) : Promise.resolve({ data: [], error: null }),
+    prospectIds.length && campaignIds.length ? supabase.from("prospect_replies").select("id,prospect_id,campaign_id,subject,body,received_at,created_at").in("prospect_id", prospectIds).in("campaign_id", campaignIds).order("received_at", { ascending: true }).limit(1000) : Promise.resolve({ data: [], error: null }),
+    prospectIds.length && campaignIds.length ? supabase.from("outreach_sends").select("id,prospect_id,campaign_id,step_number,sent_at").in("prospect_id", prospectIds).in("campaign_id", campaignIds).not("sent_at", "is", null).order("sent_at", { ascending: true }).limit(1000) : Promise.resolve({ data: [], error: null }),
+    campaignIds.length ? supabase.from("campaign_steps").select("campaign_id,step_number,subject_template,body_template").in("campaign_id", campaignIds).order("step_number", { ascending: true }).limit(500) : Promise.resolve({ data: [], error: null }),
+    campaignIds.length ? supabase.from("campaigns").select("id,name,mailbox:mailboxes(display_name,signature)").eq("organization_id", organizationId).in("id", campaignIds).limit(100) : Promise.resolve({ data: [], error: null }),
+  ]);
+  logQueryError("approval client conversation", clientMessages.error);
+  logQueryError("approval reply conversation", conversationReplies.error || conversationSends.error || campaignSteps.error || campaigns.error);
+  const clientConversationByContact = new Map<string, ApprovalConversationMessage[]>();
+  for (const message of clientMessages.data ?? []) {
+    const list = clientConversationByContact.get(message.client_contact_id) ?? [];
+    list.push({ id: message.id, direction: message.direction as "inbound" | "outbound", subject: message.subject || "No subject", body: message.body || "Message body unavailable", occurredAt: message.occurred_at });
+    clientConversationByContact.set(message.client_contact_id, list);
+  }
+  const campaignById = new Map((campaigns.data ?? []).map(campaign => [campaign.id, campaign]));
+  const stepByCampaign = new Map((campaignSteps.data ?? []).map(step => [`${step.campaign_id}:${step.step_number}`, step]));
   const retryRows = (retries.data ?? []).filter(message => {
     const recovery = one(message.recovery_case as Related<{ customer: Related<CustomerIdentity & { organization_id: string }> }>);
     const customer = one(recovery?.customer ?? null);
@@ -714,26 +764,38 @@ export async function getApprovalData(supabase: SupabaseClient, organizationId: 
   return {
     ready,
     clientDraftsReady: !clientDrafts.error,
-    replies: (replies.data ?? []).map(item => {
-      const source = one(item.source_reply as Related<{ subject: string | null; prospect: Related<ProspectIdentity> }>);
+    replies: replyRows.map(item => {
+      const source = one(item.source_reply as Related<{ id: string; subject: string | null; campaign_id: string | null; prospect_id: string | null; prospect: Related<ProspectIdentity & { id: string }> }>);
       const prospect = one(source?.prospect ?? null);
-      return { id: item.id, status: item.status, body: item.body, lastError: item.last_error, createdAt: item.created_at, contact: displayProspect(prospect), email: prospect?.email || "Unknown email", subject: source?.subject || "No subject", automationName: automationNames.get(item.id) || null };
+      const campaign = source?.campaign_id ? campaignById.get(source.campaign_id) : null;
+      const mailbox = one(campaign?.mailbox as Related<{ display_name: string | null; signature: string | null }>);
+      const values = { firstName: prospect?.first_name || prospect?.email?.split("@")[0] || "", lastName: prospect?.last_name || "", company: prospect?.company || "", companyName: prospect?.company || "", email: prospect?.email || "", senderName: mailbox?.display_name?.split(" ")[0] || "EpsiFlow", signature: mailbox?.signature || "" };
+      const outbound = (conversationSends.data ?? []).filter(send => send.prospect_id === source?.prospect_id && send.campaign_id === source?.campaign_id && send.sent_at).map(send => {
+        const step = stepByCampaign.get(`${send.campaign_id}:${send.step_number}`);
+        return { id: `outbound-${send.id}`, direction: "outbound" as const, subject: step ? renderApprovalTemplate(pickApprovalSubject(step.subject_template, source?.prospect_id || ""), values) : "Campaign email", body: step ? renderApprovalTemplate(step.body_template, values) : "Sent campaign email", occurredAt: send.sent_at as string };
+      });
+      const inbound = (conversationReplies.data ?? []).filter(reply => reply.prospect_id === source?.prospect_id && reply.campaign_id === source?.campaign_id).map(reply => ({ id: `inbound-${reply.id}`, direction: "inbound" as const, subject: reply.subject || "No subject", body: reply.body || "Message body unavailable", occurredAt: reply.received_at || reply.created_at }));
+      return { id: item.id, status: item.status, body: item.body, lastError: item.last_error, createdAt: item.created_at, contact: displayProspect(prospect), email: prospect?.email || "Unknown email", company: prospect?.company || "Prospect", subject: source?.subject || "No subject", campaignName: campaign?.name || automationNames.get(item.id) || "Single reply", automationName: automationNames.get(item.id) || null, automationRunId: item.automation_run_id || null, conversation: [...outbound, ...inbound].sort((a,b) => a.occurredAt.localeCompare(b.occurredAt)) };
     }),
     retries: retryRows.map(message => {
       const recovery = one(message.recovery_case as Related<{ customer: Related<CustomerIdentity> }>);
       return { id: message.id, channel: message.channel, attempts: message.attempt_count, error: message.last_error || "Unknown delivery error", updatedAt: message.updated_at, customer: displayCustomer(one(recovery?.customer ?? null)) };
     }),
-    clientDrafts: (clientDrafts.data ?? []).map(item => ({
+    clientDrafts: clientDraftRows.map(item => {
+      const contact = one(item.contact as Related<{ id: string; name: string; email: string }>);
+      return {
       id: item.id, channel: item.channel as "email" | "slack", recipient: item.recipient_label,
       subject: item.subject, body: item.body, status: item.status, deliveryStatus: item.delivery_status, deliveryFailureCode: item.delivery_failure_code, deliveredAt: item.delivered_at, createdAt: item.created_at,
-      playbookVersion: item.playbook_version, generationMode: item.generation_mode, contextMessageCount: item.context_message_count,
-      agentStatus: item.agent_status, agentClaimedAt: item.agent_claimed_at, agentModel: item.agent_model, agentWarnings: item.agent_context_warnings || [], agentFailureCode: item.agent_failure_code, agentRegenerationCount: item.agent_regeneration_count || 0,
-      sources: ((item.sources || []) as Array<{ ordinal: number; message: Related<{ id: string; subject: string | null; direction: string; occurred_at: string }> }>).sort((a,b) => a.ordinal-b.ordinal).flatMap(source => { const message=one(source.message); return message ? [{ id:message.id, subject:message.subject || "No subject", direction:message.direction, occurredAt:message.occurred_at }] : []; }),
+      playbookVersion: item.playbook_version, generationMode: item.generation_mode,
+      agentStatus: item.agent_status, agentClaimedAt: item.agent_claimed_at, agentFailureCode: item.agent_failure_code, agentRegenerationCount: item.agent_regeneration_count || 0,
       appId: item.client_app_id,
       appName: one(item.app as Related<{ name: string }>)?.name || "Client",
-      contactName: one(item.contact as Related<{ name: string }>)?.name || "Contact",
+      contactId: contact?.id || "",
+      contactName: contact?.name || "Contact",
+      contactEmail: contact?.email || item.recipient_label,
       playbookName: one(item.playbook as Related<{ name: string }>)?.name || "Client playbook",
-    })),
+      conversation: contact?.id ? clientConversationByContact.get(contact.id) ?? [] : [],
+    };}),
   };
 }
 

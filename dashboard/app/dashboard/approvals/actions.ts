@@ -53,6 +53,19 @@ export async function updateReplyDraft(_state: ApprovalActionState, formData: Fo
   return { ok: true, message: "Draft updated. Review the final text before approving it." };
 }
 
+export async function regenerateReplyDraft(_state: ApprovalActionState, formData: FormData): Promise<ApprovalActionState> {
+  const { membership } = await requireMembership();
+  if (!membership) return { ok: false, message: "An active organization membership is required." };
+  const replyId = String(formData.get("reply_id") || "");
+  if (!uuidPattern.test(replyId)) return { ok: false, message: "Invalid reply draft." };
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { ok: false, message: "Unable to regenerate this reply." };
+  const { error } = await supabase.rpc("dashboard_regenerate_operator_email_reply", { target_reply_id: replyId });
+  if (error) return { ok: false, message: /schema cache|Could not find|does not exist/i.test(error.message) ? "Reply regeneration requires migration 049." : "Unable to queue reply regeneration." };
+  revalidatePath("/dashboard/approvals"); revalidatePath("/dashboard/automations"); revalidatePath("/dashboard/audit");
+  return { ok: true, message: "Regeneration queued. The replacement will appear after the next automation cycle and will still require approval." };
+}
+
 export async function disposeReply(_state: ApprovalActionState, formData: FormData): Promise<ApprovalActionState> {
   const { membership } = await requireMembership();
   if (!membership) return { ok: false, message: "An active organization membership is required." };

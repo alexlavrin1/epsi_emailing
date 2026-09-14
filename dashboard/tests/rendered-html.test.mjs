@@ -957,12 +957,13 @@ test("prepares scheduled client-success drafts idempotently without delivery", a
 });
 
 test("grounds context-aware client drafts in cited stored messages", async () => {
-  const [migration, agent, aiGateway, context, approvals, data, cronHandler, deployment, config, exportRoute, verifier] = await Promise.all([
+  const [migration, agent, aiGateway, context, approvals, approvalInbox, data, cronHandler, deployment, config, exportRoute, verifier] = await Promise.all([
     readFile(new URL("../database/migrations/033_context_aware_client_drafting_agent.sql", root), "utf8"),
     readFile(new URL("../src/client-success/agent.js", root), "utf8"),
     readFile(new URL("../src/integrations/ai-gateway/client.js", root), "utf8"),
     readFile(new URL("../src/client-success/context.js", root), "utf8"),
     readFile(new URL("app/dashboard/approvals/page.tsx", root), "utf8"),
+    readFile(new URL("app/components/approval-inbox.tsx", root), "utf8"),
     readFile(new URL("lib/dashboard-data.ts", root), "utf8"),
     readFile(new URL("../api/cron/client-success.js", root), "utf8"),
     readFile(new URL("../vercel.json", root), "utf8"),
@@ -993,12 +994,43 @@ test("grounds context-aware client drafts in cited stored messages", async () =>
   assert.match(config, /CLIENT_SUCCESS_AGENT_ENABLED \|\| 'false'/);
   assert.match(config, /AI_GATEWAY_CLIENT_SUCCESS_MODEL \|\| 'openai\/gpt-5\.6-luna'/);
   assert.match(config, /AI_GATEWAY_REASONING_EFFORT \|\| 'medium'/);
-  assert.match(approvals, /AI-generated draft/);
-  assert.match(approvals, /cited conversation source/);
-  assert.match(data, /client_playbook_draft_sources/);
+  assert.doesNotMatch(approvals + approvalInbox, /AI-generated draft|cited conversation source|Slack history is not available to the agent/);
+  assert.match(approvalInbox, /approval-message-thread/);
+  assert.match(data, /from\("client_email_messages"\)/);
   assert.match(exportRoute, /clientPlaybookDraftSources/);
   assert.match(exportRoute, /schemaVersion: 6/);
   assert.match(verifier, /clientPlaybookDraftSources/);
+});
+
+test("presents approvals as an in-page messenger with campaign history and guarded reply regeneration", async () => {
+  const [page, inbox, controls, actions, data, styles, migration] = await Promise.all([
+    readFile(new URL("app/dashboard/approvals/page.tsx", root), "utf8"),
+    readFile(new URL("app/components/approval-inbox.tsx", root), "utf8"),
+    readFile(new URL("app/components/approval-controls.tsx", root), "utf8"),
+    readFile(new URL("app/dashboard/approvals/actions.ts", root), "utf8"),
+    readFile(new URL("lib/dashboard-data.ts", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+    readFile(new URL("../supabase/migrations/20260914113903_approval_messenger_reply_regeneration.sql", root), "utf8"),
+  ]);
+  assert.match(page, /<ApprovalInbox clientDrafts=\{clientDrafts\} replies=\{replyDrafts\}/);
+  assert.doesNotMatch(page + inbox, /AI-generated draft|cited conversation source|Slack history is not available to the agent/);
+  assert.match(inbox, /approval-inbox-row/);
+  assert.match(inbox, /approval-message-thread/);
+  assert.match(inbox, /Current campaign/);
+  assert.match(inbox, /Contact.*EpsiFlow/s);
+  assert.match(inbox, /aria-expanded=\{selectedKey === item\.key\}/);
+  assert.match(controls, /label="Regenerate"/);
+  assert.match(actions, /dashboard_regenerate_operator_email_reply/);
+  assert.match(data, /from\("campaign_steps"\)/);
+  assert.match(data, /from\("outreach_sends"\)/);
+  assert.match(data, /from\("client_email_messages"\)/);
+  assert.match(styles, /\.approval-inbox \{ display: grid; grid-template-columns:/);
+  assert.match(styles, /@media \(max-width: 900px\)[\s\S]*\.approval-inbox\.has-selection \.approval-inbox-list \{ display: none; \}/);
+  assert.match(migration, /Only unsent replies can be regenerated/);
+  assert.match(migration, /dashboard_is_org_member/);
+  assert.match(migration, /UPDATE operator_email_replies SET body = trim\(reply_body\)/);
+  assert.match(migration, /email\.reply\.regeneration_queued/);
+  assert.doesNotMatch(migration, /sendTransactionalEmail|sendDirectMessage|chat\.postMessage/);
 });
 
 test("installs four editable EpsiFlow playbooks with visible AI instructions", async () => {
@@ -1125,12 +1157,12 @@ test("forwards Vercel runtime AI credentials and installs the failed-draft retry
 });
 
 test("regenerates an open AI draft with audited operator feedback and no delivery", async () => {
-  const [migration, agent, actions, controls, page, exportRoute] = await Promise.all([
+  const [migration, agent, actions, controls, inbox, exportRoute] = await Promise.all([
     readFile(new URL("../database/migrations/039_ai_draft_feedback_regeneration.sql", root), "utf8"),
     readFile(new URL("../src/client-success/agent.js", root), "utf8"),
     readFile(new URL("app/dashboard/approvals/actions.ts", root), "utf8"),
     readFile(new URL("app/components/approval-controls.tsx", root), "utf8"),
-    readFile(new URL("app/dashboard/approvals/page.tsx", root), "utf8"),
+    readFile(new URL("app/components/approval-inbox.tsx", root), "utf8"),
     readFile(new URL("app/api/data-export/route.ts", root), "utf8"),
   ]);
   assert.match(migration, /agent_regeneration_feedback TEXT/);
@@ -1146,18 +1178,18 @@ test("regenerates an open AI draft with audited operator feedback and no deliver
   assert.match(controls, /Regenerate with AI/);
   assert.match(controls, /maxLength=\{4000\}/);
   assert.match(controls, /Generating/);
-  assert.match(page, /agentRegenerationCount/);
+  assert.match(inbox, /agentRegenerationCount/);
   assert.match(exportRoute, /agent_regeneration_feedback/);
 });
 
 test("runs feedback regeneration immediately for exactly one authenticated client draft", async () => {
-  const [migration, endpoint, trigger, actions, controls, page, config, gateway, vercel] = await Promise.all([
+  const [migration, endpoint, trigger, actions, controls, inbox, config, gateway, vercel] = await Promise.all([
     readFile(new URL("../database/migrations/040_immediate_client_agent_generation.sql", root), "utf8"),
     readFile(new URL("../api/client-playbook-generate.js", root), "utf8"),
     readFile(new URL("lib/client-playbook-generation.ts", root), "utf8"),
     readFile(new URL("app/dashboard/approvals/actions.ts", root), "utf8"),
     readFile(new URL("app/components/approval-controls.tsx", root), "utf8"),
-    readFile(new URL("app/dashboard/approvals/page.tsx", root), "utf8"),
+    readFile(new URL("app/components/approval-inbox.tsx", root), "utf8"),
     readFile(new URL("../src/config.js", root), "utf8"),
     readFile(new URL("../src/integrations/ai-gateway/client.js", root), "utf8"),
     readFile(new URL("../vercel.json", root), "utf8"),
@@ -1174,7 +1206,7 @@ test("runs feedback regeneration immediately for exactly one authenticated clien
   assert.match(actions, /await triggerClientPlaybookGeneration/);
   assert.match(controls, /client_app_id/);
   assert.match(controls, /pendingLabel="Generating…"/);
-  assert.match(page, /draft\.agentStatus === "pending" && !draft\.agentClaimedAt/);
+  assert.match(inbox, /draft\.agentStatus === "pending" && !draft\.agentClaimedAt/);
   assert.match(config, /apiKey: process\.env\.AI_GATEWAY_API_KEY/);
   assert.match(gateway, /dependencies\.apiKey \|\| config\.aiGateway\.apiKey \|\| dependencies\.authToken/);
   assert.match(vercel, /api\/client-playbook-generate\.js/);
@@ -1205,9 +1237,9 @@ test("recovers unclaimed pending drafts and reports immediate generation failure
 });
 
 test("edits the displayed client playbook draft inline before approval", async () => {
-  const [controls, page, actions, styles] = await Promise.all([
+  const [controls, inbox, actions, styles] = await Promise.all([
     readFile(new URL("app/components/approval-controls.tsx", root), "utf8"),
-    readFile(new URL("app/dashboard/approvals/page.tsx", root), "utf8"),
+    readFile(new URL("app/components/approval-inbox.tsx", root), "utf8"),
     readFile(new URL("app/dashboard/approvals/actions.ts", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
   ]);
@@ -1219,7 +1251,7 @@ test("edits the displayed client playbook draft inline before approval", async (
   assert.match(controls, /disabled=\{dirty\}/);
   const clientControl = controls.match(/export function ClientPlaybookDraftControl[\s\S]+/)?.[0] || "";
   assert.doesNotMatch(clientControl, /<summary>Edit draft<\/summary>/);
-  assert.match(page, /editable \? <ClientPlaybookDraftControl/);
+  assert.match(inbox, /editable\) return <>/);
   assert.match(actions, /dashboard_update_client_playbook_draft/);
   assert.match(styles, /\.client-inline-draft-editor textarea \{ min-height: 220px/);
 });

@@ -20,6 +20,10 @@
     "map:slack": "node scripts/map_crm_customer_slack.js",
     "check:slack": "node scripts/check_slack.js",
     "test:email": "node scripts/send_test_email.js",
+    "db:migrations": "supabase migration list",
+    "db:migration:new": "supabase migration new",
+    "db:push:dry": "supabase db push --linked --dry-run",
+    "db:push": "supabase db push --linked",
     "test": "node --test test/*.test.js"
   },
   "keywords": [],
@@ -37,9 +41,12 @@
     "stripe": "^22.5.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.0.1",
+    "supabase": "^2.117.0"
   },
   "overrides": {
-    "mailparser": { "html-to-text": "10.0.1" }
+    "mailparser": {
+      "html-to-text": "10.0.1"
+    }
   }
 }
